@@ -159,4 +159,10 @@ rgb565_enc_jpeg_fu(u8 *out, unsigned long *size_out, u8 *in, int width, int heig
     return _enc_jpeg_fu(out, size_out, in, width, height, channels, JCS_RGB565);
 }
 
+int
+gray_enc_jpeg_fu(u8 *out, unsigned long *size_out, u8 *in, int width, int height)
+{
+    return _enc_jpeg_fu(out, size_out, in, width, height, 1, JCS_GRAYSCALE);
+}
+
 #endif

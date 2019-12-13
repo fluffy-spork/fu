@@ -90,7 +90,7 @@ bool is_opaque_color(const color *c)
 // https://en.wikipedia.org/wiki/Color_difference
 double diff_color(const color *c0, const color *c1)
 {
-    float *flut = f32_srgb2linear;
+    float *flut = srgb2linear_f32_fu;
     float Re = flut[c0->red] - flut[c1->red];
     float Ge = flut[c0->green] - flut[c1->green];
     float Be = flut[c0->blue] - flut[c1->blue];
@@ -300,19 +300,6 @@ quantize_image(const image *in, image *out, int colors_per_channel)
     for (int i = 0; i < max; i++) {
         out->data[i] = (in->data[i] / m) * m;
     }
-}
-
-void get_surface_pixel(SDL_Surface *surface, int x, int y, color *c)
-{
-    assert(x >= 0);
-    assert(y >= 0);
-    assert(x < surface->w);
-    assert(y < surface->h);
-    assert(surface->format->BitsPerPixel == 32);
-
-    u32 *pixels = (u32 *)surface->pixels;
-    u32 pixel = pixels[y*surface->w + x];
-    SDL_GetRGBA(pixel, surface->format, &c->red, &c->green, &c->blue, &c->alpha);
 }
 
 int get_yuyv_pixel(u8 *yuyv, int stride, int x, int y, color *pixel)
@@ -527,7 +514,7 @@ void
 color_to_lab_color(color *rgb, lab_color *lab)
 {
     // TODO(jason): should srgb conversion be done here
-    float *flut = f32_srgb2linear;
+    float *flut = srgb2linear_f32_fu;
     float R = flut[rgb->red];
     float G = flut[rgb->green];
     float B = flut[rgb->blue];
@@ -772,7 +759,7 @@ float
 diff_ratio_color(const color *c1, const color *c2)
 {
     // the flut could possibly be modified to limit/quantize colors
-    float *flut = f32_srgb2linear;
+    float *flut = srgb2linear_f32_fu;
     float r1 = flut[c1->red];
     float g1 = flut[c1->green];
     float b1 = flut[c1->blue];
@@ -1339,7 +1326,7 @@ typedef struct chromaticity
 void
 color_to_chromaticity(const color *srgb, chromaticity *chr)
 {
-    float *flut = f32_srgb2linear;
+    float *flut = srgb2linear_f32_fu;
     float R = flut[srgb->red];
     float G = flut[srgb->green];
     float B = flut[srgb->blue];
@@ -2105,34 +2092,16 @@ checkerboard_yv12(image *img, int size)
 }
 
 void
-checkerboard_image(image *img, int size)
+checkerboard_image(image *img, int size, const color *on, const color *off)
 {
-    u32 pixel, yfg, ybg;
-
-    u32 black = 0xff000000;
-    u32 white = 0xffffffff;
-
-    u32 *data = (u32 *)img->data;
-    for (int y = 0; y < img->height; y++) {
-        if (y % size == 0) {
-            if (yfg == black) {
-                yfg = white;
-                ybg = black;
-            } else {
-                yfg = black;
-                ybg = white;
-            }
+    const color *c = on;
+    for (int y = 0; y < img->height; y += size) {
+        for (int x = 0; x < img->width; x += size) {
+            fill_rect(img, x, y, size, size, c);
+            c = c == on ? off : on;
         }
 
-        pixel = yfg;
-        for (int x = 0; x < img->width; x++) {
-            if (x % size == 0) {
-                pixel = (pixel == yfg) ? ybg : yfg;
-            }
-
-            //debugf("%x %x %x", yfg, ybg, pixel);
-            data[y*img->width + x] = pixel;
-        }
+        c = c == on ? off : on;
     }
 }
 
