@@ -1,6 +1,12 @@
 #ifndef FU_H
 #define FU_H
 
+#include <errno.h>
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <time.h>
+
 /* not sure why this isn't NDEBUG */
 #ifdef RELEASE
 #define DEBUG_FU 0
@@ -46,6 +52,7 @@ typedef int64_t s64;
 typedef float f32;
 typedef double f64;
 
+typedef uint32_t b32;
 
 /* timespec stuff is included for crude performance timing */
 
@@ -92,7 +99,7 @@ elapsed_debug(struct timespec *last, struct timespec *elapsed, char *label)
     *last = now;
 }
 
-bool
+b32
 gt_timespec(struct timespec *a, struct timespec *b)
 {
     return a->tv_sec > b->tv_sec || (a->tv_sec == b->tv_sec && a->tv_nsec > b->tv_nsec);
