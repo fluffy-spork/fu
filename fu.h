@@ -1,5 +1,4 @@
-#ifndef FU_H
-#define FU_H
+#pragma once
 
 #ifndef SKIP_DEFAULT_INCLUDES_FU
 #include <assert.h>
@@ -17,29 +16,31 @@
 #define DEBUG_FU 1
 #endif
 
+// make these macros functions
+
 #define debugf(fmt, ...) \
     do { if (DEBUG_FU) fprintf(stderr, "D %s:%d: " fmt "\n", __FILE__, \
             __LINE__, __VA_ARGS__); } while (0)
 
-#define debug(fmt) \
-    do { if (DEBUG_FU) fprintf(stderr, "D %s:%d: " fmt "\n", __FILE__, \
-            __LINE__); } while (0)
+#define debug(msg) \
+    do { if (DEBUG_FU) fprintf(stderr, "D %s:%d:%s\n", __FILE__, \
+            __LINE__, msg); } while (0)
 
 #define errorf(fmt, ...) \
         do { fprintf(stderr, "E %s:%d: " fmt "\n", __FILE__, \
                             __LINE__, __VA_ARGS__); } while (0)
 
-#define error(fmt, ...) \
-        do { fprintf(stderr, "E %s:%d: " fmt "\n", __FILE__, \
-                            __LINE__); } while (0)
+#define error(msg) \
+        do { fprintf(stderr, "E %s:%d:%s\n",  __FILE__, \
+                            __LINE__, msg); } while (0)
 
 #define infof(fmt, ...) \
         do { fprintf(stderr, "I %s:%d: " fmt "\n", __FILE__, \
                             __LINE__, __VA_ARGS__); } while (0)
 
-#define info(fmt) \
-        do { fprintf(stderr, "I %s:%d: " fmt "\n", __FILE__, \
-                            __LINE__); } while (0)
+#define info(msg) \
+        do { fprintf(stderr, "I %s:%d:%s\n", __FILE__, \
+                            __LINE__, msg); } while (0)
 
 
 typedef uint8_t u8;
@@ -69,7 +70,7 @@ debug_timespec(const struct timespec *ts, const char *label)
 
 // return c = a - b
 void
-sub_timespec(struct timespec *a, struct timespec *b, struct timespec *c) {
+sub_timespec(const struct timespec *a, const struct timespec *b, struct timespec *c) {
     c->tv_sec = a->tv_sec - b->tv_sec;
     if (a->tv_nsec < b->tv_nsec) {
         c->tv_sec--;
@@ -115,4 +116,20 @@ errno_return(const char *msg)
     return -errno;
 }
 
-#endif
+int
+errno_error(int result, const char *msg)
+{
+    if (result == -1) {
+        errorf("%s: %s", msg, strerror(errno));
+        return 1;
+    }
+
+    return 0;
+}
+
+void
+exit_errno(int result, const char *msg)
+{
+    if (result == -1) exit(errno_return(msg));
+}
+
