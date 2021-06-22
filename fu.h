@@ -3,6 +3,7 @@
 #ifndef SKIP_DEFAULT_INCLUDES_FU
 #include <assert.h>
 #include <errno.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
