@@ -10,40 +10,6 @@
 #include <time.h>
 #endif
 
-/* not sure why this isn't NDEBUG */
-#ifdef RELEASE
-#define DEBUG_FU 0
-#else
-#define DEBUG_FU 1
-#endif
-
-// make these macros functions
-
-#define debugf(fmt, ...) \
-    do { if (DEBUG_FU) fprintf(stderr, "D %s:%d: " fmt "\n", __FILE__, \
-            __LINE__, __VA_ARGS__); } while (0)
-
-#define debug(msg) \
-    do { if (DEBUG_FU) fprintf(stderr, "D %s:%d:%s\n", __FILE__, \
-            __LINE__, msg); } while (0)
-
-#define errorf(fmt, ...) \
-        do { fprintf(stderr, "E %s:%d: " fmt "\n", __FILE__, \
-                            __LINE__, __VA_ARGS__); } while (0)
-
-#define error(msg) \
-        do { fprintf(stderr, "E %s:%d:%s\n",  __FILE__, \
-                            __LINE__, msg); } while (0)
-
-#define infof(fmt, ...) \
-        do { fprintf(stderr, "I %s:%d: " fmt "\n", __FILE__, \
-                            __LINE__, __VA_ARGS__); } while (0)
-
-#define info(msg) \
-        do { fprintf(stderr, "I %s:%d:%s\n", __FILE__, \
-                            __LINE__, msg); } while (0)
-
-
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -57,7 +23,16 @@ typedef int64_t s64;
 typedef float f32;
 typedef double f64;
 
-typedef uint32_t b32;
+#ifdef NDEBUG
+#define debugf(ignore)((void) 0)
+#define debug(ignore)((void) 0)
+#else
+#define debugf(fmt, ...) \
+    do { fprintf(stderr, "D   %s:%s:%d " fmt "\n", __FILE__, __func__, __LINE__, __VA_ARGS__); } while (0)
+
+#define debug(msg) \
+    do { fprintf(stderr, "D   %s:%s:%d %s\n", __FILE__, __func__, __LINE__, msg); } while (0)
+#endif
 
 /* timespec stuff is included for crude performance timing */
 
@@ -71,7 +46,8 @@ debug_timespec(const struct timespec *ts, const char *label)
 
 // return c = a - b
 void
-sub_timespec(const struct timespec *a, const struct timespec *b, struct timespec *c) {
+sub_timespec(const struct timespec *a, const struct timespec *b, struct timespec *c)
+{
     c->tv_sec = a->tv_sec - b->tv_sec;
     if (a->tv_nsec < b->tv_nsec) {
         c->tv_sec--;
@@ -82,7 +58,8 @@ sub_timespec(const struct timespec *a, const struct timespec *b, struct timespec
 }
 
 void
-incr_ns_timespec(struct timespec *ts, long ns) {
+incr_ns_timespec(struct timespec *ts, long ns)
+{
     ts->tv_nsec += ns;
     if (ts->tv_nsec >= 1000000000) {
         ts->tv_nsec -= 1000000000;
@@ -91,7 +68,7 @@ incr_ns_timespec(struct timespec *ts, long ns) {
 }
 
 void
-elapsed_debug(struct timespec *last, struct timespec *elapsed, char *label)
+elapsed_debug(struct timespec *last, struct timespec *elapsed, const char *label)
 {
     struct timespec now;
     clock_gettime(CLOCK_MONOTONIC, &now);
@@ -104,33 +81,22 @@ elapsed_debug(struct timespec *last, struct timespec *elapsed, char *label)
     *last = now;
 }
 
-b32
+/*
+bool
 gt_timespec(struct timespec *a, struct timespec *b)
 {
     return a->tv_sec > b->tv_sec || (a->tv_sec == b->tv_sec && a->tv_nsec > b->tv_nsec);
 }
+*/
 
-int
-errno_return(const char *msg)
+size_t
+copy_cstr(char * dest, size_t size_dest, const char * src, size_t size_src)
 {
-    errorf("%s: %s", msg, strerror(errno));
-    return -errno;
-}
+    size_t size = size_dest < size_src + 1 ? size_dest - 1 : size_src;
 
-int
-errno_error(int result, const char *msg)
-{
-    if (result == -1) {
-        errorf("%s: %s", msg, strerror(errno));
-        return 1;
-    }
+    memcpy(dest, src, size);
+    dest[size] = '\0';
 
-    return 0;
-}
-
-void
-exit_errno(int result, const char *msg)
-{
-    if (result == -1) exit(errno_return(msg));
+    return size;
 }
 
