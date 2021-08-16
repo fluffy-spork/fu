@@ -23,6 +23,24 @@ typedef int64_t s64;
 typedef float f32;
 typedef double f64;
 
+typedef enum {
+    U8_DATA_TYPE,
+    U16_DATA_TYPE,
+    U32_DATA_TYPE,
+    U64_DATA_TYPE,
+    S8_DATA_TYPE,
+    S16_DATA_TYPE,
+    S32_DATA_TYPE,
+    S64_DATA_TYPE,
+    F32_DATA_TYPE,
+    F64_DATA_TYPE,
+    CSTR_256_DATA_TYPE,
+    CSTR_1K_DATA_TYPE,
+    CSTR_4K_DATA_TYPE,
+    CSTR_64K_DATA_TYPE,
+    BLOB_DATA_TYPE
+} data_type_t;
+
 #ifdef NDEBUG
 #define debugf(ignore)((void) 0)
 #define debug(ignore)((void) 0)
