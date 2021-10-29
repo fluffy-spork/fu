@@ -5,7 +5,7 @@
 // delay formatting until written
 // explicitly write logs to output, for example all logs for a request after the response is sent
 
-#define MAX_ENTRIES_LOG 64
+#define MAX_ENTRIES_LOG 128
 #define MAX_MSG_LOG 1024
 #define MAX_LABEL_LOG 64
 
@@ -31,6 +31,13 @@ typedef struct {
     size_t size;
     log_entry_t entries[MAX_ENTRIES_LOG];
 } log_t;
+
+// NOTE(jason): the default log that is created so any library can use it.
+// It's the main application log.  Could be named better.  Probably should be
+// "applog" for the pointer and the other anonymous.
+log_t applog = {};
+// log is a C standard function for logarithm
+log_t * plog = &applog;
 
 void
 erase_log(log_t * log)
@@ -90,22 +97,28 @@ _log_errno(log_t * log, const char * label, const char * file, const char * func
     _log(log, s, strlen(s), label, errno, file, function, line);
 }
 
+#define log_s64(log, value, label) \
+    _log_s64(log, value, label, __FILE__, __func__, __LINE__);
+
 void
-log_s64(log_t * log, const s64 value, const char * label)
+_log_s64(log_t * log, const s64 value, const char * label, const char * file, const char * function, s64 line)
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
     int size = snprintf(s, 256, "%ld", value);
-    _log(log, s, size, label, 0, NULL, NULL, 0);
+    _log(log, s, size, label, 0, file, function, line);
 }
 
+#define log_u64(log, value, label) \
+    _log_u64(log, value, label, __FILE__, __func__, __LINE__);
+
 void
-log_u64(log_t * log, const u64 value, const char * label)
+_log_u64(log_t * log, const u64 value, const char * label, const char * file, const char * function, s64 line)
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
     int size = snprintf(s, 256, "%lu", value);
-    _log(log, s, size, label, 0, NULL, NULL, 0);
+    _log(log, s, size, label, 0, file, function, line);
 }
 
 // log an elapsed time since the provided start time and now
@@ -137,15 +150,17 @@ write_log(log_t * log, int fd)
 
     char msg[max_msg];
 
+    size_t imax = min_size(log->size, MAX_ENTRIES_LOG);
+
     // TODO(jason): change this to write everything into a single buffer and write once
-    for (size_t i = 0; i < log->size; i++) {
+    for (size_t i = 0; i < imax; i++) {
         log_entry_t * entry = &log->entries[i];
         size_t size;
         if (entry->label[0]) {
-            size = snprintf(msg, max_msg, "%.3d %lld.%.9ld %s:%s:%zd %s: %s\n",
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%zd %s: %s\n",
                     entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->label, entry->msg);
         } else {
-            size = snprintf(msg, max_msg, "%.3d %lld.%.9ld %s:%s:%zd %s\n",
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%zd %s\n",
                     entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->msg);
         }
         ssize_t written = write(fd, msg, size);

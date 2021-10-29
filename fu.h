@@ -41,8 +41,9 @@ typedef enum {
     BLOB_DATA_TYPE
 } data_type_t;
 
+// XXX: this doesn't work.  many problems with unused parameters
 #ifdef NDEBUG
-#define debugf(ignore)((void) 0)
+#define debugf(ignore, ...)((void) 0)
 #define debug(ignore)((void) 0)
 #else
 #define debugf(fmt, ...) \
@@ -116,5 +117,41 @@ copy_cstr(char * dest, size_t size_dest, const char * src, size_t size_src)
     dest[size] = '\0';
 
     return size;
+}
+
+size_t
+min_size(size_t a, size_t b)
+{
+    return a < b ? a : b;
+}
+
+size_t
+max_size(size_t a, size_t b)
+{
+    return a > b ? a : b;
+}
+
+s16
+min_s16(s16 a, s16 b)
+{
+    return a < b ? a : b;
+}
+
+s16
+max_s16(s16 a, s16 b)
+{
+    return a > b ? a : b;
+}
+
+s64
+min_s64(s64 a, s64 b)
+{
+    return a < b ? a : b;
+}
+
+s64
+max_s64(s64 a, s64 b)
+{
+    return a > b ? a : b;
 }
 

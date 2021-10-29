@@ -1,7 +1,15 @@
-#ifndef IMAGE_FU_H
-#define IMAGE_FU_H
+#pragma once
+
+#include <limits.h>
+#include <math.h>
+
+//#include "asteroids_font.h"
+#include "math_fu.h"
+#include "srgb2linear_fu.h"
 
 // TODO(jason): this has ended up with too many accidental dependencies
+// ^^^ not sure what this meant???  Maybe referring to the headers that had to
+// be included.
 
 typedef struct {
     int width;
@@ -10,71 +18,84 @@ typedef struct {
     int stride;
     int n_pixels;
     u8 *data;
-} image;
+} image_t;
 
 typedef struct {
     u8 red;
     u8 green;
     u8 blue;
     u8 alpha;
-} color;
+} color_t;
 
-const color WHITE = {
+const color_t WHITE = {
     .red = 255,
     .green = 255,
     .blue = 255,
     .alpha = 255
 };
 
-const color BLACK = {
+const color_t BLACK = {
     .red = 0,
     .green = 0,
     .blue = 0,
     .alpha = 255
 };
 
-const color RED = {
+const color_t GRAY = {
+    .red = 128,
+    .green = 128,
+    .blue = 128,
+    .alpha = 255
+};
+
+const color_t RED = {
     .red = 255,
     .green = 0,
     .blue = 0,
     .alpha = 255
 };
 
-const color ORANGE = {
+const color_t ORANGE = {
     .red = 255,
     .green = 128,
     .blue = 0,
     .alpha = 255
 };
 
-const color GREEN = {
+const color_t GREEN = {
     .red = 0,
     .green = 255,
     .blue = 0,
     .alpha = 255
 };
 
-const color BLUE = {
+const color_t BLUE = {
     .red = 0,
     .green = 0,
     .blue = 255,
     .alpha = 128
 };
 
-const color YELLOW = {
+const color_t YELLOW = {
     .red = 255,
     .green = 255,
     .blue = 0,
     .alpha = 255
 };
 
-void debug_color(const char *label, const color *c)
+size_t
+write_image(int fd, image_t * img)
+{
+    return write(fd, img->data, img->n_pixels * img->channels);
+}
+
+void debug_color(const char *label, const color_t *c)
 {
     debugf("%s: rgba %d, %d, %d, %d", label, c->red, c->green, c->blue, c->alpha);
 }
 
 // compares the rgb channels, ignores alpha
-bool equal_color(const color *c1, const color *c2)
+bool equal_color(const color_t *c1, const color_t *c2)
 {
     return c1->red == c2->red
         && c1->green == c2->green
@@ -82,13 +103,13 @@ bool equal_color(const color *c1, const color *c2)
         //&& c1->alpha == c2->alpha;
 }
 
-bool is_opaque_color(const color *c)
+bool is_opaque_color(const color_t *c)
 {
     return c->alpha == 255;
 }
 
 // https://en.wikipedia.org/wiki/Color_difference
-double diff_color(const color *c0, const color *c1)
+double diff_color(const color_t *c0, const color_t *c1)
 {
     float *flut = srgb2linear_f32_fu;
     float Re = flut[c0->red] - flut[c1->red];
@@ -113,7 +134,7 @@ double diff_rgb(const int r, const int g, const int b, const int r1, const int g
 }
 
 void
-threshold_image(const image *in, image *out, int threshold, u8 under, u8 over)
+threshold_image(const image_t *in, image_t *out, int threshold, u8 under, u8 over)
 {
     assert(in->n_pixels == out->n_pixels);
     assert(in->channels == out->channels);
@@ -125,7 +146,7 @@ threshold_image(const image *in, image *out, int threshold, u8 under, u8 over)
 }
 
 int
-percent_diff_image(const image *a, const image *b, image *c, int threshold)
+percent_diff_image(const image_t *a, const image_t *b, image_t *c, int threshold)
 {
     assert(a->n_pixels == b->n_pixels);
     assert(a->channels == b->channels);
@@ -152,7 +173,7 @@ percent_diff_image(const image *a, const image *b, image *c, int threshold)
 }
 
 int
-sub_image(image *a, image *b, image *c, int threshold)
+sub_image(image_t *a, image_t *b, image_t *c, int threshold)
 {
     assert(a->n_pixels == b->n_pixels);
     assert(b->n_pixels == c->n_pixels);
@@ -226,7 +247,7 @@ test_insertion_sort_u8()
 }
 
 void
-median_channel(image *in, image *out, const int r, const int channel)
+median_channel(image_t *in, image_t *out, const int r, const int channel)
 {
     assert(in->n_pixels == out->n_pixels);
     assert(in->channels == out->channels);
@@ -263,7 +284,7 @@ median_channel(image *in, image *out, const int r, const int channel)
 }
 
 void
-median_image(image *in, image *out, int radius)
+median_image(image_t *in, image_t *out, int radius)
 {
     assert(in != out);
 
@@ -287,7 +308,7 @@ median_image(image *in, image *out, int radius)
 }
 
 void
-quantize_image(const image *in, image *out, int colors_per_channel)
+quantize_image(const image_t *in, image_t *out, int colors_per_channel)
 {
     assert(colors_per_channel > 0);
     assert(colors_per_channel <= 256);
@@ -302,7 +323,7 @@ quantize_image(const image *in, image *out, int colors_per_channel)
     }
 }
 
-int get_yuyv_pixel(u8 *yuyv, int stride, int x, int y, color *pixel)
+int get_yuyv_pixel(u8 *yuyv, int stride, int x, int y, color_t *pixel)
 {
     int i = y*stride + x*2;
 
@@ -334,7 +355,19 @@ double distance(double x0, double y0, double x1, double y1)
     return sqrt(dx*dx + dy*dy);
 }
 
-int get_pixel(const image *img, int x, int y, color *pixel)
+u8
+get_gray(const image_t * img, int x, int y)
+{
+    return img->data[y*img->stride + x];
+}
+
+u8
+set_gray(const image_t * img, int x, int y, u8 value)
+{
+    return img->data[y*img->stride + x] = value;
+}
+
+int get_pixel(const image_t *img, int x, int y, color_t *pixel)
 {
     assert(img->channels == 4);
 
@@ -347,7 +380,7 @@ int get_pixel(const image *img, int x, int y, color *pixel)
     return 0;
 }
 
-void get_pixel_at(const image *img, int p, color *pixel)
+void get_pixel_at(const image_t *img, int p, color_t *pixel)
 {
     int i = p*img->channels;
 
@@ -358,7 +391,7 @@ void get_pixel_at(const image *img, int p, color *pixel)
 }
 
 void
-set_pixel_at(image *img, int p, color *pixel)
+set_pixel_at(image_t *img, int p, color_t *pixel)
 {
     int i = p*img->channels;
 
@@ -369,12 +402,12 @@ set_pixel_at(image *img, int p, color *pixel)
 }
 
 void
-set_pixel(image *img, int x, int y, const color *fg)
+set_pixel(image_t *img, int x, int y, const color_t *fg)
 {
-    assert(x < img->width);
     assert(x >= 0);
-    assert(y < img->height);
+    assert(x < img->width);
     assert(y >= 0);
+    assert(y < img->height);
 
     int i = y*img->width*img->channels + x*img->channels;
     u8 *data = img->data;
@@ -389,9 +422,10 @@ set_pixel(image *img, int x, int y, const color *fg)
     }
 }
 
-image * new_image(int width, int height, int channels)
+image_t *
+new_image(int width, int height, int channels)
 {
-    image *img = malloc(sizeof(*img));
+    image_t *img = malloc(sizeof(*img));
     img->n_pixels = height*width;
     img->height = height;
     img->width = width;
@@ -403,8 +437,22 @@ image * new_image(int width, int height, int channels)
     return img;
 }
 
-image *
-like_image(const image *in)
+// Wrap an image struct around an existing data array.  Your job to manage
+// freeing data appropriately.
+// could there be a static_image macro that creates a static array and wraps it 
+void
+wrap_image(image_t * img, u8 * data, int width, int height, int channels)
+{
+    img->data = data;
+    img->n_pixels = height*width;
+    img->height = height;
+    img->width = width;
+    img->channels = channels;
+    img->stride = img->width*channels;
+}
+
+image_t *
+like_image(const image_t *in)
 {
     return new_image(in->width, in->height, in->channels);
 }
@@ -415,10 +463,10 @@ like_image(const image *in)
 // brighter.  I assume maybe it's a gamma issue or something, but I want to
 // replace it all with floats anyway so putting it off until later.  Currently
 // just convert gray to rgba when copying to final image.
-image *
+image_t *
 new_yv12_image(int width, int height)
 {
-    image *img = malloc(sizeof(*img));
+    image_t *img = malloc(sizeof(*img));
     img->n_pixels = width*height;
     img->height = height;
     img->width = width;
@@ -431,7 +479,7 @@ new_yv12_image(int width, int height)
     return img;
 }
 
-void free_image(image *img)
+void free_image(image_t *img)
 {
     if (img) {
         free(img->data);
@@ -441,21 +489,21 @@ void free_image(image *img)
 
 /* are the pixel coordinates inside the image bounds */
 bool
-pixel_in_image(image *img, int x, int y)
+pixel_in_image(image_t *img, int x, int y)
 {
     return x >= 0 && x < img->width && y >= 0 && y < img->height;
 }
 
 
 void
-info_image(const image *in, const char *label)
+info_image(const image_t *in, const char *label)
 {
     debugf("%s: %dx%dx%d", label, in->width, in->height, in->channels);
 }
 
-void clear_image(image *img)
+void clear_image(image_t *img, int value)
 {
-    memset(img->data, 0, img->n_pixels*img->channels);
+    memset(img->data, value, img->n_pixels*img->channels);
 }
 
 typedef struct lab_color
@@ -463,9 +511,9 @@ typedef struct lab_color
     s8 L; // 0 to 100
     s8 a; // -127 to 127
     s8 b; // -127 to 127
-} lab_color;
+} lab_color_t;
 
-void debug_lab_color(const char *label, const lab_color *lab)
+void debug_lab_color(const char *label, const lab_color_t *lab)
 {
     debugf("%s: lab %d, %d, %d", label, lab->L, lab->a, lab->b);
 }
@@ -478,16 +526,16 @@ typedef struct lab_image
     u32 stride;
     u32 n_pixels;
     s8 data[]; // see lab_color
-} lab_image;
+} lab_image_t;
 
-lab_image *
+lab_image_t *
 new_lab_image(u16 width, u16 height)
 {
     assert(width > 0);
     assert(height > 0);
 
     u32 n_pixels = width * height;
-    lab_image *img = malloc(sizeof(*img) + n_pixels*3*sizeof(s8));
+    lab_image_t *img = malloc(sizeof(*img) + n_pixels*3*sizeof(s8));
     img->n_pixels = n_pixels;
     img->height = height;
     img->width = width;
@@ -498,7 +546,7 @@ new_lab_image(u16 width, u16 height)
 }
 
 void
-set_pixel_lab_image(lab_image *img, u16 x, u16 y, const lab_color *lab)
+set_pixel_lab_image(lab_image_t *img, u16 x, u16 y, const lab_color_t *lab)
 {
     assert(x < img->width);
     assert(y < img->height);
@@ -511,7 +559,7 @@ set_pixel_lab_image(lab_image *img, u16 x, u16 y, const lab_color *lab)
 }
 
 void
-color_to_lab_color(color *rgb, lab_color *lab)
+color_to_lab_color(color_t *rgb, lab_color_t *lab)
 {
     // TODO(jason): should srgb conversion be done here
     float *flut = srgb2linear_f32_fu;
@@ -553,13 +601,13 @@ color_to_lab_color(color *rgb, lab_color *lab)
 }
 
 int
-image_to_lab_image(const image *img, lab_image *lab_img)
+image_to_lab_image(const image_t *img, lab_image_t *lab_img)
 {
     assert(img->width == lab_img->width);
     assert(img->height == lab_img->height);
 
-    color rgba;
-    lab_color lab;
+    color_t rgba;
+    lab_color_t lab;
     for (u16 y = 0; y < img->height; y++) {
         for (u16 x = 0; x < img->width; x++) {
             get_pixel(img, x, y, &rgba);
@@ -576,9 +624,9 @@ image_to_lab_image(const image *img, lab_image *lab_img)
 int
 test_color_to_lab_color()
 {
-    color rgb;
+    color_t rgb;
     rgb.alpha = 255;
-    lab_color lab;
+    lab_color_t lab;
 
     rgb.red = 255;
     rgb.green = 0;
@@ -639,7 +687,7 @@ test_color_to_lab_color()
 
 
 void
-debug_image(image *img, size_t max)
+debug_image(image_t *img, size_t max)
 {
     for (size_t y = 0; y < max; y++) {
         for (size_t x = 0; x < max; x++) {
@@ -649,7 +697,7 @@ debug_image(image *img, size_t max)
     }
 }
 
-void copy_image(image *src, image *dest)
+void copy_image(const image_t *src, image_t *dest)
 {
     assert(src != dest);
     assert(src->n_pixels == dest->n_pixels);
@@ -659,7 +707,7 @@ void copy_image(image *src, image *dest)
 }
 
 void
-copy_rect_image(int width, int height, const image *src, int x1, int y1, image *dest, int x2, int y2)
+copy_rect_image(int width, int height, const image_t *src, int x1, int y1, image_t *dest, int x2, int y2)
 {
     //assert(src->channels == 1);
     assert(src->channels == dest->channels);
@@ -691,14 +739,14 @@ copy_rect_image(int width, int height, const image *src, int x1, int y1, image *
 }
 
 void
-paste_image(image *src, image *dest, int x, int y)
+paste_image(image_t *src, image_t *dest, int x, int y)
 {
     copy_rect_image(src->width, src->height, src, 0, 0, dest, x, y);
 }
 
 // copy a region of interest from larger image
 void
-roi_image(image *roi, const image *img, int x, int y)
+roi_image(image_t *roi, const image_t *img, int x, int y)
 {
     x = clamp(x, 0, img->width - 1);
     y = clamp(y, 0, img->height - 1);
@@ -708,7 +756,7 @@ roi_image(image *roi, const image *img, int x, int y)
 
 // flut is size 256
 void
-flut_image(image *img, float *flut)
+flut_image(image_t *img, float *flut)
 {
     size_t imax = img->n_pixels * img->channels;
     for (size_t i = 0; i < imax; i++) {
@@ -718,7 +766,7 @@ flut_image(image *img, float *flut)
 }
 
 void
-lut_image(const image *in, image *out, const u8 *lut)
+lut_image(const image_t *in, image_t *out, const u8 *lut)
 {
     //assert(in->channels == 4);
     assert(in->channels == out->channels);
@@ -731,7 +779,7 @@ lut_image(const image *in, image *out, const u8 *lut)
 }
 
 void
-lut_channel_image(const image *in, image *out, const u8 *lut, int channel)
+lut_channel_image(const image_t *in, image_t *out, const u8 *lut, int channel)
 {
     assert(channel < in->channels);
     assert(in->channels == out->channels);
@@ -744,9 +792,17 @@ lut_channel_image(const image *in, image *out, const u8 *lut, int channel)
     }
 }
 
+void
+lut_gray_image(const image_t * in, image_t * out, const u8 * lut)
+{
+    assert(in->channels == 1);
+
+    lut_channel_image(in, out, lut, 0);
+}
+
 // add a constant value to every pixel component clamped to 0, 255
 void
-add_image(image *img, const u8 value)
+add_image(image_t *img, const u8 value)
 {
     // alpha is typically 255 and so converts to 255
     size_t imax = img->n_pixels * img->channels;
@@ -756,7 +812,7 @@ add_image(image *img, const u8 value)
 }
 
 float 
-diff_ratio_color(const color *c1, const color *c2)
+diff_ratio_color(const color_t *c1, const color_t *c2)
 {
     // the flut could possibly be modified to limit/quantize colors
     float *flut = srgb2linear_f32_fu;
@@ -800,7 +856,7 @@ diff_ratio_color(const color *c1, const color *c2)
 
 // sum of absolute differences in rgb
 int
-sad_color(const color *c1, const color *c2)
+sad_color(const color_t *c1, const color_t *c2)
 {
     // TODO(jason): right now full mapping vision region srgb2linear
     /*
@@ -814,7 +870,7 @@ sad_color(const color *c1, const color *c2)
 }
 
 u64
-sad_image(image *img1, image *img2)
+sad_image(image_t *img1, image_t *img2)
 {
     assert(img1->width == img2->width);
     assert(img1->height == img2->height);
@@ -837,7 +893,7 @@ debug_array(int a[], int n, char *label)
     }
 
     for (int i = 0; i < n; i++) {
-        printf("%d ", a[i]);
+        printf("%d:%d ", i, a[i]);
     }
     printf("\n");
 }
@@ -856,7 +912,7 @@ debug_u8_array(u8 a[], int n, char *label)
 }
 
 void
-lut(u8 *in, u8 *out, size_t n, u8 *lut)
+lut_u8(u8 *in, u8 *out, size_t n, u8 *lut)
 {
     for (size_t i = 0; i < n; i++) {
         out[i] = lut[in[i]];
@@ -903,7 +959,7 @@ histogram_equalization_lut(const u8 *in, size_t n, int channels, int ch, u8 *lut
 }
 
 void
-histogram_equalization_image(const image *in, image *out)
+histogram_equalization_image(const image_t *in, image_t *out)
 {
     assert(in->channels == 4 || in->channels == 1);
 
@@ -960,7 +1016,7 @@ test_histogram_equalization_image()
 
     u8 he_lut[256];
     histogram_equalization_lut(in_test, size_test, 1, 0, he_lut);
-    lut(in_test, out_test, size_test, he_lut);
+    lut_u8(in_test, out_test, size_test, he_lut);
 
     int errors = 0;
     for (size_t i = 0; i < size_test; i++) {
@@ -974,7 +1030,7 @@ test_histogram_equalization_image()
 }
 
 int
-normalize_image(const image *in, image *out)
+normalize_image(const image_t *in, image_t *out)
 {
     assert(in->channels == 4);
     assert(in->n_pixels == out->n_pixels);
@@ -988,7 +1044,7 @@ normalize_image(const image *in, image *out)
     u8 *luma = malloc(in->n_pixels*sizeof(u8));
     if (!luma) return ENOMEM;
 
-    color pixel;
+    color_t pixel;
     for (size_t i = 0; i < n; i++)
     {
         get_pixel_at(in, i, &pixel);
@@ -1019,7 +1075,7 @@ normalize_image(const image *in, image *out)
 }
 
 int
-lerp_image(const image *in, image *out)
+lerp_image(const image_t *in, image_t *out)
 {
     assert(in->channels == 1);
     assert(in->channels == out->channels);
@@ -1042,7 +1098,7 @@ lerp_image(const image *in, image *out)
 }
 
 void
-and_binary_image(const image *a, const image *b, image *c)
+and_binary_image(const image_t *a, const image_t *b, image_t *c)
 {
     assert(a->channels == 1);
     assert(a->channels == b->channels);
@@ -1056,7 +1112,7 @@ and_binary_image(const image *a, const image *b, image *c)
 }
 
 void
-or_binary_image(const image *a, const image *b, image *c)
+or_binary_image(const image_t *a, const image_t *b, image_t *c)
 {
     assert(a->channels == 1);
     assert(a->channels == b->channels);
@@ -1103,8 +1159,10 @@ index_of_max_array(const int a[], const int n)
     int imax = 0;
     for (int i = 0; i < n; i++) {
         int v = a[i];
-        // attempt assume later equal values should override max and index?
-        if (v >= vmax) {
+        // later equal values won't override existing max and index?  Maybe
+        // should have a parameter for how ties should be broken.  This will
+        // bias towards darker colors for histograms.
+        if (v > vmax) {
             vmax = v;
             imax = i;
         }
@@ -1144,7 +1202,10 @@ otsu_histogram_threshold(int hist[], int n)
 
     u64 sumB = 0;
     u64 wB = 0;
-    double max;
+    // XXX(jason): due to compiler error about uninitialized usage setting this
+    // to 0.0, but not sure what it should be.  probably need to just delete
+    // this function anyway.
+    double max = 0.0;
 
     int level = 0;
 
@@ -1250,10 +1311,10 @@ rgb_to_rg_chromaticity(u8 R, u8 G, u8 B)
     //median_index_image with rg_chromaticity
 }
 
-color
+color_t
 rg_chromaticity_to_color(rg_chromaticity *rg)
 {
-    color rgb;
+    color_t rgb;
     //rgb.green = rg->G;
     if (rg->G) {
         rgb.red = (rg->G*rg->r)/255;
@@ -1284,7 +1345,7 @@ typedef struct
 } hsv_fu;
 
 void
-color_to_hsi(const color *srgb, float *h, float *s, float *i)
+color_to_hsi(const color_t *srgb, float *h, float *s, float *i)
 {
     float r = srgb->red/255.f;
     float g = srgb->green/255.f;
@@ -1324,7 +1385,7 @@ typedef struct chromaticity
 
 // color is assumed sRGB
 void
-color_to_chromaticity(const color *srgb, chromaticity *chr)
+color_to_chromaticity(const color_t *srgb, chromaticity *chr)
 {
     float *flut = srgb2linear_f32_fu;
     float R = flut[srgb->red];
@@ -1349,7 +1410,7 @@ color_to_chromaticity(const color *srgb, chromaticity *chr)
 }
 
 void
-color_to_ratio(const color *srgb, chromaticity *chr)
+color_to_ratio(const color_t *srgb, chromaticity *chr)
 {
     float R = srgb->red/255.f;
     float G = srgb->green/255.f;
@@ -1379,7 +1440,7 @@ debug_chromaticity(int i, const chromaticity *chroma)
 }
 
 void
-histogram_image(const image *img, size_t channel, int hist[], size_t size_hist)
+histogram_image(const image_t *img, size_t channel, int hist[], size_t size_hist)
 {
     memset(hist, 0, sizeof(int)*size_hist);
 
@@ -1387,6 +1448,32 @@ histogram_image(const image *img, size_t channel, int hist[], size_t size_hist)
     for (size_t i = channel; i < imax; i += img->channels) {
         hist[img->data[i] % size_hist]++;
     }
+}
+
+// find the minimum index with the summed values at least target_sum 
+size_t
+min_sum_index_histogram(const int * hist, size_t size_hist, s64 target_sum)
+{
+    s64 sum = 0;
+
+    for (size_t i = 0; i < size_hist; i++) {
+        sum += hist[i];
+        if (sum >= target_sum) return i;
+    }
+
+    return 255;
+}
+
+// count how many values are non-zero
+u64
+count_histogram_image(int hist[], size_t size_hist, size_t offset)
+{
+    u64 count = 0;
+    for (size_t i = offset; i < size_hist; i++) {
+        if (hist[i]) count++;
+    }
+
+    return count;
 }
 
 int
@@ -1411,7 +1498,7 @@ mean_histogram(int a[], int n)
 
 // index_bg is an index to ignore (background) when finding max
 int
-max_index_image(const image *in, int index_bg)
+max_index_image(const image_t *in, int index_bg)
 {
     int hist[256];
     //copy_rect_image(box->width, box->height, in, x*x_stride, y*y_stride, box, 0, 0);
@@ -1442,7 +1529,7 @@ median_index_image(const image *in, const color *palette, const int n_palette)
     //regardless of if chromaticity is used, the Y still needs to be normalized per color
 
     chromaticity chroma;
-    color pixel;
+    color_t pixel;
     for (int y = 0; y < in->height; y++) {
         for (int x = 0; x < in->width; x++) {
             get_pixel(in, x, y, &pixel);
@@ -1491,7 +1578,7 @@ median_index_image(const image *in, const color *palette, const int n_palette)
 */
 
 void
-index_image(const image *in, image *out, color *palette, int n_palette)
+index_image(const image_t *in, image_t *out, color_t *palette, int n_palette)
 {
     assert(in != out);
     assert(in->channels == 4);
@@ -1504,7 +1591,7 @@ index_image(const image *in, image *out, color *palette, int n_palette)
 
     int i_max = in->n_pixels;
 
-    color pixel;
+    color_t pixel;
     for (int i = 0; i < i_max; i++) {
         get_pixel_at(in, i, &pixel);
 
@@ -1555,7 +1642,7 @@ index_image(const image *in, image *out, color *palette, int n_palette)
 }
 
 void
-smooth_index_image(image *img)
+smooth_index_image(image_t *img)
 {
     assert(img->channels == 1);
 
@@ -1574,7 +1661,7 @@ smooth_index_image(image *img)
 }
 
 int
-mix_images(image *old, image *new, const int weight)
+mix_images(image_t *old, image_t *new, const int weight)
 {
     assert(old->n_pixels == new->n_pixels);
     assert(old->channels == new->channels);
@@ -1592,7 +1679,7 @@ mix_images(image *old, image *new, const int weight)
 }
 
 void
-set_all_pixels(image *img, const u8 r, const u8 g, const u8 b, const u8 a)
+set_all_pixels(image_t *img, const u8 r, const u8 g, const u8 b, const u8 a)
 {
     assert(img->channels == 4);
 
@@ -1604,7 +1691,7 @@ set_all_pixels(image *img, const u8 r, const u8 g, const u8 b, const u8 a)
     }
 }
 
-void fill_rect(image *img, int x, int y, int width, int height, const color *fg)
+void fill_rect(image_t *img, int x, int y, int width, int height, const color_t *fg)
 {
     x = clamp(x, 0, img->width - 1);
     y = clamp(y, 0, img->height - 1);
@@ -1619,12 +1706,12 @@ void fill_rect(image *img, int x, int y, int width, int height, const color *fg)
     }
 }
 
-void fill_square_center(image *img, int x, int y, int size, const color *fg)
+void fill_square_center(image_t *img, int x, int y, int size, const color_t *fg)
 {
     fill_rect(img, x - size/2, y - size/2, size, size, fg);
 }
 
-void draw_line_low(image *img, int x0, int y0, int x1, int y1, const color *fg)
+void draw_line_low(image_t *img, int x0, int y0, int x1, int y1, const color_t *fg)
 {
     int dx = x1 - x0;
     int dy = y1 - y0;
@@ -1646,7 +1733,7 @@ void draw_line_low(image *img, int x0, int y0, int x1, int y1, const color *fg)
     }
 }
 
-void draw_line_high(image *img, int x0, int y0, int x1, int y1, const color *fg)
+void draw_line_high(image_t *img, int x0, int y0, int x1, int y1, const color_t *fg)
 {
     int dx = x1 - x0;
     int dy = y1 - y0;
@@ -1669,7 +1756,7 @@ void draw_line_high(image *img, int x0, int y0, int x1, int y1, const color *fg)
 }
 
 // https://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm
-void draw_line(image *img, int x0, int y0, int x1, int y1, const color *fg)
+void draw_line(image_t *img, int x0, int y0, int x1, int y1, const color_t *fg)
 {
     if (abs(y1 - y0) < abs(x1 - x0)) {
         if (x0 > x1) {
@@ -1686,7 +1773,7 @@ void draw_line(image *img, int x0, int y0, int x1, int y1, const color *fg)
     }
 }
 
-void draw_rect(image *img, int x, int y, int width, int height, const color *fg)
+void draw_rect(image_t *img, int x, int y, int width, int height, const color_t *fg)
 {
     int x2 = clamp(x + width - 1, 0, img->width - 1);
     int y2 = clamp(y + height - 1, 0, img->height - 1);
@@ -1698,7 +1785,7 @@ void draw_rect(image *img, int x, int y, int width, int height, const color *fg)
     set_pixel(img, x2, y2, fg);
 }
 
-void draw_square_center(image *img, int x, int y, int size, const color *fg)
+void draw_square_center(image_t *img, int x, int y, int size, const color_t *fg)
 {
     x = x - size/2;
     y = y - size/2;
@@ -1731,7 +1818,11 @@ void draw_square_center(image *img, int x, int y, int size, const color *fg)
  * returns the height of the line plus padding where the next line should be
  * drawn.
  */
-int draw_text(image *img, int x, int y, int size, const color *fg, const char *text)
+/*
+ * XXX(jason): problem compiling asteroids_font.h giving "missing braces around
+ * initializer" error.  Unclear of fix.  possibly move this function to
+ * asteroids_font and somehow fix the problem.
+int draw_text(image_t *img, int x, int y, int size, const color_t *fg, const char *text)
 {
     const int max_points = 8;
     const int max_height = 12;
@@ -1780,18 +1871,20 @@ int draw_text(image *img, int x, int y, int size, const color *fg, const char *t
 
     return (max_height + 4) * size;
 }
+*/
 
 /*
  * draw a line of text with a black shadow (offset x and y by 1)
  */
+/*  XXX: see draw_text
 int // y offset for next line
-draw_shadow_text(image *img, int x, int y, int size, const color *fg, const char *text)
+draw_shadow_text(image_t *img, int x, int y, int size, const color_t *fg, const char *text)
 {
     draw_text(img, x + 1, y + 1, size, &BLACK, text);
     return draw_text(img, x, y, size, fg, text);
 }
 
-int draw_debugf(image *img, int y, const char *fmt, ...)
+int draw_debugf(image_t *img, int y, const char *fmt, ...)
 {
     char buf[1024];
     va_list args;
@@ -1802,12 +1895,13 @@ int draw_debugf(image *img, int y, const char *fmt, ...)
     return draw_shadow_text(img, 2, y, 1, &GREEN, buf);
 }
 
-int draw_int(image *img, int x, int y, int size, const color *fg, int n)
+int draw_int(image_t *img, int x, int y, int size, const color_t *fg, int n)
 {
     char text[16];
     snprintf(text, 16, "%d", n);
     return draw_text(img, x, y, size, fg, text);
 }
+*/
 
 // convert a luminance (Y of YUV) to rgba by copying the value into rgb and
 // setting a to 0xFF
@@ -1823,7 +1917,7 @@ y2rgba(u8 *y, u8 *rgba, int n_pixels)
 }
 
 void
-gray2rgba_image(image *gray, image *rgba)
+gray2rgba_image(image_t *gray, image_t *rgba)
 {
     y2rgba(gray->data, rgba->data, gray->n_pixels);
 }
@@ -1833,20 +1927,20 @@ gray2rgba_image(image *gray, image *rgba)
  * https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0029740
  */
 void
-rgba2gray_image(image *rgba, image *gray)
+rgba2gray_image(image_t *rgba, image_t *gray)
 {
     assert(rgba->channels == 4);
     assert(gray->channels == 1);
 
     for (int i = 0; i < rgba->n_pixels; i++) {
-        color pixel;
+        color_t pixel;
         get_pixel_at(rgba, i, &pixel);
         gray->data[i] = (pixel.red + pixel.green + pixel.blue)/3;
     }
 }
 
 void
-index2rgba_image(const image *index, image *rgba, color *palette, size_t n)
+index2rgba_image(const image_t *index, image_t *rgba, color_t *palette, size_t n)
 {
     assert(index->channels == 1);
     assert(rgba->channels == 4);
@@ -1857,10 +1951,10 @@ index2rgba_image(const image *index, image *rgba, color *palette, size_t n)
     for (size_t i = 0, j = 0; i < n_pixels; i++) {
         u8 v = index->data[i];
         if (v >= n) {
-            errorf("palette index out of bounds: %u", v);
+            log_u64(plog, v, "palette index out of bounds");
             return;
         }
-        color *c = &palette[v];
+        color_t *c = &palette[v];
         rgba->data[j++] = c->blue;
         rgba->data[j++] = c->green;
         rgba->data[j++] = c->red;
@@ -2033,7 +2127,7 @@ rgba2ybr(const u8 *rgba, u8 *ybr, const size_t n_pixels)
 }
 
 void
-set_channel_image(image *img, int channel, u8 value)
+set_channel_image(image_t *img, int channel, u8 value)
 {
     assert(channel < img->channels);
 
@@ -2060,9 +2154,11 @@ ybr2rgba(const u8 *ybr, u8 *rgba, const size_t n_pixels)
 }
 
 void
-checkerboard_yv12(image *img, int size)
+checkerboard_yv12(image_t *img, int size)
 {
-    u8 pixel, yfg, ybg;
+    u8 pixel = 0;
+    u8 yfg = 0;
+    u8 ybg = 0;
 
     u8 black = 0x00;
     u8 white = 0xff;
@@ -2092,9 +2188,9 @@ checkerboard_yv12(image *img, int size)
 }
 
 void
-checkerboard_image(image *img, int size, const color *on, const color *off)
+checkerboard_image(image_t *img, int size, const color_t *on, const color_t *off)
 {
-    const color *c = on;
+    const color_t *c = on;
     for (int y = 0; y < img->height; y += size) {
         for (int x = 0; x < img->width; x += size) {
             fill_rect(img, x, y, size, size, c);
@@ -2107,7 +2203,7 @@ checkerboard_image(image *img, int size, const color *on, const color *off)
 
 // value is -1 to 1
 void
-draw_hbar(image *img, const int x, const int y, const int w, const int h, const color *fg, double value)
+draw_hbar(image_t *img, const int x, const int y, const int w, const int h, const color_t *fg, double value)
 {
     double percentage = (value + 1.0)/2.0;
 
@@ -2118,7 +2214,7 @@ draw_hbar(image *img, const int x, const int y, const int w, const int h, const 
 }
 
 int
-max_decimate_image(const image *in, image *out)
+max_decimate_image(const image_t *in, image_t *out)
 {
     assert(in->channels == 1);
     assert(in->channels == out->channels);
@@ -2128,13 +2224,14 @@ max_decimate_image(const image *in, image *out)
     assert(x_stride > 0);
     assert(y_stride > 0);
 
-    image *box = new_image(x_stride, y_stride, 1);
+    image_t *box = new_image(x_stride, y_stride, 1);
 
     int hist[256];
     for (int y = 0; y < out->height; y++) {
         for (int x = 0; x < out->width; x++) {
             copy_rect_image(box->width, box->height, in, x*x_stride, y*y_stride, box, 0, 0);
             histogram_image(box, 0, hist, 256);
+            //debug_array(hist, 256, "box");
             out->data[y*out->width + x] = index_of_max_array(hist, 256);
         }
     }
@@ -2144,21 +2241,37 @@ max_decimate_image(const image *in, image *out)
     return 0;
 }
 
+// foreground dilation use value == 255 or whatever gray level.
+// for erode use value == 0
 int
-dilate_image(const image *in, image *out, u8 value)
+dilate_image(const image_t *in, image_t *out, const u8 value)
 {
     assert(in->channels == 1);
     assert(in->channels == out->channels);
 
-    const int size = 3;
+    //const int size = 3;
     const int inset = 1;
 
-    image *map = like_image(in);
+    image_t * map = like_image(in);
 
     for (int y = inset; y < in->height - inset; y++) {
         for (int x = inset; x < in->width - inset; x++) {
-            if (in->data[y*in->width + x] == value) {
-                fill_square_center(map, x, y, size, &WHITE);
+            int i = y*in->width + x;
+            if (in->data[i] != value
+                    && (
+                        in->data[i - in->width] == value
+                        || in->data[i - in->width - 1] == value
+                        || in->data[i - in->width + 1] == value
+                        || in->data[i + in->width] == value
+                        || in->data[i + in->width - 1] == value
+                        || in->data[i + in->width + 1] == value
+                        || in->data[i - 1] == value
+                        || in->data[i + 1] == value
+                       )
+               )
+            {
+                set_pixel(map, x, y, &WHITE);
+                //fill_square_center(map, x, y, size, &WHITE);
             }
         }
     }
@@ -2166,9 +2279,7 @@ dilate_image(const image *in, image *out, u8 value)
     for (int y = 0; y < map->height; y++) {
         for (int x = 0; x < map->width; x++) {
             int i = y*map->width + x;
-            if (map->data[i] == 255) {
-                out->data[i] = value;
-            }
+            out->data[i] = map->data[i] == 255 ? value : in->data[i];
         }
     }
 
@@ -2189,7 +2300,7 @@ avg_array_u8(u8 *array, size_t n, size_t stride, size_t offset)
 }
 
 int
-avg_decimate_image(image *in, image *out)
+avg_decimate_image(image_t *in, image_t *out)
 {
     assert(in->channels == out->channels);
 
@@ -2198,14 +2309,14 @@ avg_decimate_image(image *in, image *out)
     assert(x_stride > 0);
     assert(y_stride > 0);
 
-    image *box = new_image(x_stride, y_stride, in->channels);
+    image_t *box = new_image(x_stride, y_stride, in->channels);
 
     for (int y = 0; y < out->height; y++) {
         for (int x = 0; x < out->width; x++) {
             copy_rect_image(box->width, box->height, in, x*x_stride, y*y_stride, box, 0, 0);
 
             // TODO(jason): don't be order dependent, BGRA
-            color avg;
+            color_t avg;
             avg.blue = avg_array_u8(box->data, box->n_pixels, 4, 0);
             avg.green = avg_array_u8(box->data, box->n_pixels, 4, 1);
             avg.red = avg_array_u8(box->data, box->n_pixels, 4, 2);
@@ -2218,7 +2329,7 @@ avg_decimate_image(image *in, image *out)
     // debug
     for (int y = 0; y < out->height; y++) {
         for (int x = 0; x < out->width; x++) {
-            color c;
+            color_t c;
             get_pixel(out, x, y, &c);
             fill_rect(in, x*x_stride, y*y_stride, box->width, box->height, &c);
         }
@@ -2230,7 +2341,7 @@ avg_decimate_image(image *in, image *out)
 }
 
 void
-vertical_chart_image(image *img, const int *hist, const size_t n, const int x, const int y, const color *fg)
+vertical_chart_image(image_t *img, const int *hist, const size_t n, const int x, const int y, const color_t *fg)
 {
     int h = 64;
 
@@ -2252,7 +2363,7 @@ vertical_chart_image(image *img, const int *hist, const size_t n, const int x, c
 
 // http://www.tannerhelland.com/4743/simple-algorithm-correcting-lens-distortion/
 void
-undistort_image(image *out, const image *in, float strength, float zoom)
+undistort_image(image_t *out, const image_t *in, float strength, float zoom)
 {
     struct timespec elapsed = {};
     struct timespec time = {};
@@ -2287,7 +2398,7 @@ undistort_image(image *out, const image *in, float strength, float zoom)
             x_in = half_width + theta * x_in * zoom;
             y_in = half_height + theta * y_in * zoom;
 
-            color pixel;
+            color_t pixel;
             if (x_in >= 0.f && x_in < w && y_in >= 0.f && y_in < h) {
                 get_pixel(in, floorf(x_in), floorf(y_in), &pixel);
             } else {
@@ -2351,7 +2462,7 @@ conv2d_u8_image(u8 *out, u8 *in, size_t width, size_t height, int *kernel, size_
 }
 
 void
-box_blur_image(image *in, image *out, int radius)
+box_blur_image(image_t *in, image_t *out, int radius)
 {
     assert(radius <= 7);
 
@@ -2367,9 +2478,9 @@ box_blur_image(image *in, image *out, int radius)
 }
 
 void
-unsharp_image(image *in, image *out, int radius)
+unsharp_image(image_t *in, image_t *out)
 {
-    assert(radius <= 7);
+    //assert(radius <= 7);
 
     int kernel[] = {
         1, 4, 6, 4, 1,
@@ -2385,7 +2496,7 @@ unsharp_image(image *in, image *out, int radius)
 
 
 void
-edge_detect_image(image *in, image *out)
+edge_detect_image(image_t *in, image_t *out)
 {
     int kernel[] = {
         -1, -1, -1,
@@ -2399,7 +2510,7 @@ edge_detect_image(image *in, image *out)
 }
 
 void
-sharpen_image(image *in, image *out)
+sharpen_image(image_t *in, image_t *out)
 {
     int kernel[] = {
         0, -1, 0,
@@ -2412,4 +2523,52 @@ sharpen_image(image *in, image *out)
     conv2d_u8_image(out->data, in->data, in->width, in->height, kernel, size_kernel);
 }
 
-#endif
+// max of 255 labels
+void
+label_connected_components_image(const image_t * img, image_t * labels)
+{
+    assert(img->channels == 1);
+    assert(labels->channels == 1);
+    assert(img->width == labels->width);
+    assert(img->height == labels->height);
+
+    u8 lut[256] = {};
+
+    const u8 max_label = 255;
+    u8 next_label = 1;
+
+    u8 min_u8(u8 a, u8 b) { return a < b ? a : b; }
+
+    // ignoring the first line which should end up all black
+    for (int y = 1; y < labels->height; y++) {
+        for (int x = 1; x < labels->width; x++) {
+            if (get_gray(img, x, y) != 0) {
+                u8 left = get_gray(labels, x - 1, y); // left
+                u8 top = get_gray(labels, x, y - 1);
+
+                u8 label = 0;
+
+                if (left == 0 && top == 0) { // new label
+                    assert(next_label != max_label);
+
+                    label = next_label;
+                    next_label++;
+
+                    lut[label] = label;
+                } else if (left != 0 && top != 0) {
+                    label = min_u8(min_u8(min_u8(left, top), lut[left]), lut[top]);
+
+                    lut[left] = label;
+                    lut[top] = label;
+                } else { // one of top or left is foreground
+                    label = left != 0 ? left : top;
+                }
+
+                set_gray(labels, x, y, label);
+            }
+        }
+    }
+
+    lut_channel_image(labels, labels, lut, 0);
+}
+
