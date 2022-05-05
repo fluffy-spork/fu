@@ -41,7 +41,11 @@ typedef enum {
     BLOB_DATA_TYPE
 } data_type_t;
 
-// XXX: this doesn't work.  many problems with unused parameters
+// mark a variable as unused to since warnings are set to errors
+#define UNUSED(var) (void)var
+
+#define array_size_fu(array) sizeof(array)/sizeof(array[0])
+
 #ifdef NDEBUG
 #define debugf(ignore, ...)((void) 0)
 #define debug(ignore)((void) 0)
@@ -52,6 +56,12 @@ typedef enum {
 #define debug(msg) \
     do { fprintf(stderr, "D   %s:%s:%d %s\n", __FILE__, __func__, __LINE__, msg); } while (0)
 #endif
+
+bool
+dev_mode()
+{
+    return getenv("FU_DEV") != NULL;
+}
 
 /* timespec stuff is included for crude performance timing */
 

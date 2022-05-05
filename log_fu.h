@@ -5,7 +5,32 @@
 // delay formatting until written
 // explicitly write logs to output, for example all logs for a request after the response is sent
 
-#define MAX_ENTRIES_LOG 128
+#define error_log(msg, label, error) \
+    _log(plog, msg, strlen(msg), label, strlen(label), error, __FILE__, __func__, __LINE__);
+
+#define info_log(msg) \
+    _log(plog, msg, strlen(msg), NULL, 0, 0, __FILE__, __func__, __LINE__);
+
+#define log_var_cstr(cstr) \
+    _log(plog, cstr, strlen(cstr), #cstr, strlen(#cstr), 0, __FILE__, __func__, __LINE__);
+
+#define log_errno(label) \
+    _log_errno(plog, label, strlen(label), __FILE__, __func__, __LINE__);
+
+#define log_s64(value, label) \
+    _log_s64(plog, value, label, strlen(label), __FILE__, __func__, __LINE__);
+
+#define log_u64(value, label) \
+    _log_u64(plog, value, label, strlen(label), __FILE__, __func__, __LINE__);
+
+#define timestamp_log(ts) \
+    _timestamp_log(plog, ts);
+
+// log an elapsed time since the provided start time and now
+#define elapsed_log(start, label) \
+    _elapsed_log(plog, start, label, strlen(label), __FILE__, __func__, __LINE__);
+
+#define MAX_ENTRIES_LOG 64
 #define MAX_MSG_LOG 1024
 #define MAX_LABEL_LOG 64
 
@@ -32,13 +57,12 @@ typedef struct {
     log_entry_t entries[MAX_ENTRIES_LOG];
 } log_t;
 
-// NOTE(jason): the default log that is created so any library can use it.
-// It's the main application log.  Could be named better.  Probably should be
-// "applog" for the pointer and the other anonymous.
-log_t applog = {};
+// NOTE(jason): this is just for the initialization
+//log_t _the_one_true_log = {};
 // log is a C standard function for logarithm
-log_t * plog = &applog;
+log_t * plog = &(log_t){};
 
+// TODO(jason): maybe make this for default plog?
 void
 erase_log(log_t * log)
 {
@@ -48,25 +72,27 @@ erase_log(log_t * log)
 // get a timestamp using the same clock as the log.  Useful when logging
 // elapsed times
 void
-timestamp_log(log_t * log, struct timespec * ts)
+_timestamp_log(log_t * log, struct timespec * ts)
 {
     (void)log; // ignore for now, but possibly store clock_id in log_t
     clock_gettime(CLOCK_REALTIME, ts);
 }
 
+// TODO(jason): do I need a size for label?  why didn't I do that in the first
+// place
 // file and function aren't copied as it's assumed they're using the macros
 void
-_log(log_t * log, const void * msg, size_t size_msg, const char * label, s32 error, const char * file, const char * function, s64 line)
+_log(log_t * log, const void * msg, size_t size_msg, const char * label, size_t size_label, s32 error, const char * file, const char * function, s64 line)
 {
     if (log->size < MAX_ENTRIES_LOG) {
         log_entry_t * entry = &log->entries[log->size];
 
-        timestamp_log(log, &entry->timestamp);
+        _timestamp_log(log, &entry->timestamp);
 
         copy_cstr(entry->msg, MAX_MSG_LOG, msg, size_msg);
 
         if (label) {
-            copy_cstr(entry->label, MAX_LABEL_LOG, label, strlen(label));
+            copy_cstr(entry->label, MAX_LABEL_LOG, label, size_label);
         }
 
         entry->error = error;
@@ -79,57 +105,44 @@ _log(log_t * log, const void * msg, size_t size_msg, const char * label, s32 err
     log->size++;
 }
 
-#define error_log(log, msg, label, error) \
-    _log(log, msg, strlen(msg), label, error, __FILE__, __func__, __LINE__);
-
-#define info_log(log, msg, label) \
-    _log(log, msg, strlen(msg), label, 0, __FILE__, __func__, __LINE__);
-
-#define log_errno(log, label) \
-    _log_errno(log, label, __FILE__, __func__, __LINE__);
-
 void
-_log_errno(log_t * log, const char * label, const char * file, const char * function, s64 line)
+_log_errno(log_t * log, const char * label, size_t size_label, const char * file, const char * function, s64 line)
 {
     char s[256];
     strerror_r(errno, s, 256);
 
-    _log(log, s, strlen(s), label, errno, file, function, line);
+    _log(log, s, strlen(s), label, size_label, errno, file, function, line);
 }
 
 #define log_s64(log, value, label) \
     _log_s64(log, value, label, __FILE__, __func__, __LINE__);
 
 void
-_log_s64(log_t * log, const s64 value, const char * label, const char * file, const char * function, s64 line)
+_log_s64(log_t * log, const s64 value, const char * label, size_t size_label, const char * file, const char * function, s64 line)
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
     int size = snprintf(s, 256, "%ld", value);
-    _log(log, s, size, label, 0, file, function, line);
+    _log(log, s, size, label, size_label, 0, file, function, line);
 }
 
 #define log_u64(log, value, label) \
     _log_u64(log, value, label, __FILE__, __func__, __LINE__);
 
 void
-_log_u64(log_t * log, const u64 value, const char * label, const char * file, const char * function, s64 line)
+_log_u64(log_t * log, const u64 value, const char * label, size_t size_label, const char * file, const char * function, s64 line)
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
     int size = snprintf(s, 256, "%lu", value);
-    _log(log, s, size, label, 0, file, function, line);
+    _log(log, s, size, label, size_label, 0, file, function, line);
 }
 
-// log an elapsed time since the provided start time and now
-#define elapsed_log(log, start, label) \
-    _elapsed_log(log, start, label, __FILE__, __func__, __LINE__);
-
 void
-_elapsed_log(log_t * log, const struct timespec start, const char * label, const char * file, const char * function, s64 line)
+_elapsed_log(log_t * log, const struct timespec start, const char * label, size_t size_label, const char * file, const char * function, s64 line)
 {
     struct timespec now;
-    timestamp_log(log, &now);
+    _timestamp_log(log, &now);
 
     struct timespec elapsed;
 
@@ -138,7 +151,7 @@ _elapsed_log(log_t * log, const struct timespec start, const char * label, const
     char msg[2048];
     size_t size = snprintf(msg, 2048, "elapsed %lld.%09ld", (long long)elapsed.tv_sec, elapsed.tv_nsec);
 
-    _log(log, msg, size, label, 0, file, function, line);
+    _log(log, msg, size, label, size_label, 0, file, function, line);
 }
 
 // TODO(jason): I'm a bit skeptical about the resolution of the timestamps and
