@@ -12,9 +12,9 @@
 #include <ctype.h>
 
 #define log_blob(value, label) \
-    _log(plog, value->data, value->size, label, strlen(label), 0, __FILE__, __func__, __LINE__);
+    _log(plog, value->data, value->size, label, strlen(label), 0, __FILE__, __func__, __LINE__)
 
-#define log_var_blob(var) log_blob(var, #var);
+#define log_var_blob(var) log_blob(var, #var)
 
 
 typedef struct {
@@ -30,6 +30,9 @@ typedef struct {
 #define tmp_blob() local_blob(4096)
 
 #define wrap_blob(cstr) _init_local_blob(&(blob_t){ .data = (u8 *)cstr }, strlen(cstr), -1)
+#define B(cstr) wrap_blob(cstr)
+
+#define cstr_blob(blob) _cstr_blob(blob, alloca(blob->size + 1), blob->size + 1)
 
 blob_t *
 _init_local_blob(blob_t * b, size_t capacity, ssize_t size)
@@ -44,8 +47,6 @@ _init_local_blob(blob_t * b, size_t capacity, ssize_t size)
 blob_t *
 blob(size_t capacity)
 {
-    assert(capacity > 0);
-
     blob_t * b;
 
     size_t n = sizeof(*b) + sizeof(*b->data) * capacity;
@@ -99,6 +100,8 @@ free_blob(blob_t * blob)
 void
 erase_blob(blob_t * blob)
 {
+    assert(blob != NULL);
+
     memset(blob->data, 0, blob->size);
     blob->size = 0;
 }
@@ -106,15 +109,25 @@ erase_blob(blob_t * blob)
 void
 reset_blob(blob_t * blob)
 {
+    assert(blob != NULL);
+
     blob->size = 0;
 }
 
+// TODO(jason): should this just return false if the blob is NULL?  added
+// valid_blob to check if a blob has a value
 bool
 empty_blob(const blob_t * b)
 {
     assert(b != NULL);
 
     return b->size == 0;
+}
+
+bool
+valid_blob(const blob_t * b)
+{
+    return b != NULL && b->size > 0;
 }
 
 bool
@@ -214,6 +227,18 @@ read_blob(const blob_t * b, void *buf, size_t count)
     ((u8 *)buf)[b->size] = '\0';
 
     return b->size;
+}
+
+char *
+_cstr_blob(const blob_t * blob, char * cstr, size_t size_cstr)
+{
+    assert(blob != NULL);
+
+    ssize_t result = read_blob(blob, cstr, size_cstr);
+    // NOTE(jason): this shouldn't ever return an error
+    assert(result != -1);
+
+    return cstr;
 }
 
 // write into the blob as much of the fd that fits
@@ -334,19 +359,50 @@ skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
     return -1;
 }
 
+// XXX(jason): untested
+// incorrectly reads full src instead of stopping at max number of digits
+// doesn't skip commas.  should stop at a period?
+s64
+s64_blob(const blob_t * src, ssize_t offset)
+{
+    skip_whitespace_blob(src, &offset);
+
+    s64 total = 0;
+    bool neg = false;
+    if (src->data[offset] == '-') {
+        neg = true;
+        offset++;
+    }
+
+    for (size_t i = offset; i < src->size; i++) {
+        u8 c = src->data[i];
+
+        if (c >= '0' && c <= '9') {
+            total = total * 10 + (c - '0');
+        }
+        else {
+            break;
+        }
+    }
+
+    return neg
+        ? total * -1
+        : total;
+}
+
 u64
 u64_blob(const blob_t * src, ssize_t offset)
 {
     skip_whitespace_blob(src, &offset);
 
     u64 total = 0;
-
-    for (ssize_t i = offset; i < (ssize_t)src->size; i++) {
+    for (size_t i = offset; i < src->size; i++) {
         u8 c = src->data[i];
 
         if (c >= '0' && c <= '9') {
             total = total * 10 + (c - '0');
-        } else {
+        }
+        else {
             break;
         }
     }
@@ -418,6 +474,7 @@ add_cstr_blob(blob_t * b, const char * cstr)
 XXX: probably should not do things that would require this.  should add longer
 values at a time instead of char at a time.
 this is also the same as write_blob(b, &c, 1)
+this might also be a for a utf-8 int which might be more useful? add_codepoint?
 void
 add_u8_blob(blob_t * b, u8 c)
 {
@@ -527,4 +584,110 @@ escape_blob(blob_t * b, const blob_t * value, const u8 c, const blob_t * replace
 
     return written;
 }
+
+// NOTE(jason): using hex for short values like 64-bit is better than base64
+// since it's simpler and the overhead isn't worth it.
+ssize_t
+write_hex_blob(blob_t * b, void * src, ssize_t n_src)
+{
+    u8 * data = src;
+
+    ssize_t n_hex = 2*n_src;
+    char * hex = alloca(n_hex);
+
+    u8 char_to_hex(u8 c) {
+        //assert(c < 16);
+        return (c > 9) ? (c - 10) + 'a' : c + '0';
+    }
+
+    for (ssize_t i = 0, j = 0; i < n_src; i++, j += 2) {
+        u8 c = data[i];
+        hex[j] = char_to_hex((c & 0xf0) >> 4);
+        hex[j + 1] = char_to_hex(c & 0x0f);
+    }
+
+    return write_blob(b, hex, n_hex);
+}
+
+#define read_hex_blob_blob(src, dest) read_hex_blob(src, dest->data, dest->size);
+
+ssize_t
+read_hex_blob(blob_t * b, void * buf, size_t count)
+{
+    u8 * hex = b->data;
+    u8 * data = buf;
+
+    u8 hex_to_digit(u8 h) {
+        //assert((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f'));
+        return (h >= '0' && h <= '9') ? h - '0' : 10 + h - 'a';
+    }
+
+    for (size_t i = 0, j = 0; i < count; i++, j += 2) {
+        u8 upper = hex_to_digit(hex[j]) << 4;
+        u8 lower = hex_to_digit(hex[j + 1]);
+        data[i] = upper | lower;
+    }
+
+    return 2*count;
+}
+
+ssize_t
+add_random_blob(blob_t * b, ssize_t n_random)
+{
+    assert(n_random <= 256);
+
+    u8 * r = alloca(n_random);
+    if (getrandom(r, n_random, 0) != n_random) {
+        return -1;
+    }
+
+    return write_hex_blob(b, r, n_random);
+}
+
+// TODO(jason): would be good if var_name didn't have to be passed around when
+// defining enum table
+
+#define ENUM_BLOB(var_name, table) \
+    typedef enum { \
+        table(var_name, EXTRACT_AS_ENUM_BLOB) \
+        n_##var_name \
+    } var_name##_t; \
+    struct { \
+        table(var_name, EXTRACT_AS_VAR_BLOB) \
+        size_t n_list; blob_t * list[n_##var_name]; \
+    } var_name; \
+    void init_##var_name() { \
+        table(var_name, EXTRACT_AS_INIT_BLOB) \
+        var_name.n_list = n_##var_name; \
+    } \
+    var_name##_t enum_##var_name(blob_t * value, var_name##_t default_id) { return enum_blob(var_name.list, var_name.n_list, value, default_id); } \
+    const blob_t * blob_##var_name(var_name##_t  id) { assert(id < var_name.n_list); return var_name.list[id]; } \
+
+#define EXTRACT_AS_ENUM_BLOB(name, value, var_name) name##_##var_name,
+#define EXTRACT_AS_VAR_BLOB(name, value, var_name) blob_t * name;
+#define EXTRACT_AS_INIT_BLOB(name, value, var_name) \
+    var_name.name = const_blob(value); \
+    var_name.list[name##_##var_name] = var_name.name; \
+
+int
+enum_blob(blob_t ** enum_blob, size_t n, blob_t * value, int default_id)
+{
+    // NOTE(jason): enum init method likely needs to be called
+    assert(n > 0);
+
+    for (size_t i = 0; i < n; i++) {
+        //log_var_blob(enum_blob[i]);
+        if (equal_blob(enum_blob[i], value)) {
+            return i;
+        }
+    }
+
+    return default_id;
+}
+
+#define log_enum_blob(var, e, label) \
+    log_u64(e, label); \
+    log_blob(var.list[e], label);
+
+#define for_each_enum_blob(var) for (size_t i = 0; i < var.n_list; i++)
 

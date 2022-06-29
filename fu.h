@@ -8,6 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
+#include <sys/random.h>
 #endif
 
 typedef uint8_t u8;
@@ -43,6 +44,10 @@ typedef enum {
 
 // mark a variable as unused to since warnings are set to errors
 #define UNUSED(var) (void)var
+
+// crash on a rare error situation that shouldn't ever happen and if does
+// everything is probably fucked
+#define RARE_FAIL(exp) assert(exp)
 
 #define array_size_fu(array) sizeof(array)/sizeof(array[0])
 
@@ -163,5 +168,22 @@ s64
 max_s64(s64 a, s64 b)
 {
     return a > b ? a : b;
+}
+
+u64
+random_u64_fu()
+{
+    u64 num;
+    ssize_t result = getrandom(&num, sizeof(num), 0);
+    return (result == sizeof(num)) ? num : 0;
+}
+
+s64
+random_s64_fu()
+{
+    s64 num;
+    ssize_t result = getrandom(&num, sizeof(num), 0);
+    num = llabs(num);
+    return (result == sizeof(num)) ? num : 0;
 }
 

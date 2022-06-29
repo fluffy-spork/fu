@@ -23,6 +23,9 @@
 #define log_u64(value, label) \
     _log_u64(plog, value, label, strlen(label), __FILE__, __func__, __LINE__);
 
+#define log_var_u64(var) log_u64(var, #var)
+#define log_var_s64(var) log_s64(var, #var)
+
 #define timestamp_log(ts) \
     _timestamp_log(plog, ts);
 
@@ -114,9 +117,6 @@ _log_errno(log_t * log, const char * label, size_t size_label, const char * file
     _log(log, s, strlen(s), label, size_label, errno, file, function, line);
 }
 
-#define log_s64(log, value, label) \
-    _log_s64(log, value, label, __FILE__, __func__, __LINE__);
-
 void
 _log_s64(log_t * log, const s64 value, const char * label, size_t size_label, const char * file, const char * function, s64 line)
 {
@@ -125,9 +125,6 @@ _log_s64(log_t * log, const s64 value, const char * label, size_t size_label, co
     int size = snprintf(s, 256, "%ld", value);
     _log(log, s, size, label, size_label, 0, file, function, line);
 }
-
-#define log_u64(log, value, label) \
-    _log_u64(log, value, label, __FILE__, __func__, __LINE__);
 
 void
 _log_u64(log_t * log, const u64 value, const char * label, size_t size_label, const char * file, const char * function, s64 line)

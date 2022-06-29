@@ -1,7 +1,44 @@
 #pragma once
 
-// NOTE(jason): not doing single character method names so there's "anchor()"
-// instead of "a()" for making a link.  Similar for paragraph
+// NOTE(jason): not doing single character method names so there's "para()"
+// instead of "p()" for making a paragraph.  Using "link" instead of "anchor"
+// since it's more meaningful
+
+// NOTE(jason): checks for a variable named "html" in the current context
+#define assert_html() assert(html != NULL);
+
+// TODO(jason): could these be defined as a macro at the definition?
+// html_gen(img) that defines the macro then the function?  I would prefer to
+// just be able to access the macro name within the macro, but doesn't seem
+// possible
+#define page_begin(...) page_begin_html(html, __VA_ARGS__);
+#define page_end() page_end_html(html);
+#define h1(...) h1_html(html, __VA_ARGS__);
+#define img(...) img_html(html, __VA_ARGS__);
+#define start_post_form(...) start_post_form_html(html, __VA_ARGS__);
+#define start_get_form(...) start_get_form_html(html, __VA_ARGS__);
+#define end_form() end_form_html(html);
+#define text_input(...) input_html(html, res_html.text_type, __VA_ARGS__);
+#define submit_input(...) input_html(html, res_html.submit_type, __VA_ARGS__);
+#define label(...) label_html(html, __VA_ARGS__);
+#define para(...) para_html(html, __VA_ARGS__);
+#define start_para() start_para_html(html);
+#define end_para() end_para_html(html);
+// NOTE(jason): have to do _tag because "div" is a c std
+#define div_tag(...) div_html(html, __VA_ARGS__);
+#define start_div(...) start_div_html(html, __VA_ARGS__);
+#define end_div() end_div_html(html);
+#define link(...) link_html(html, __VA_ARGS__);
+#define table_start() table_start_html(html);
+#define table_end() table_end_html(html);
+#define tr_start() tr_start_html(html);
+#define tr_end() tr_end_html(html);
+#define td(content) td_html(html, content);
+#define td_start() td_start_html(html);
+#define td_end() td_end_html(html);
+#define th(content) th_html(html, content);
+#define th_start() th_start_html(html);
+#define th_end() th_end_html(html);
 
 // NOTE(jason): these are mainly for internal use
 struct {
@@ -11,6 +48,8 @@ struct {
     blob_t * double_quote_ref;
     blob_t * less_than_ref;
 
+    blob_t * doctype;
+
     blob_t * begin_head;
     blob_t * end_head;
 
@@ -19,6 +58,8 @@ struct {
 
     blob_t * begin_page;
     blob_t * end_page;
+
+    blob_t * id;
 
     blob_t * start_tag;
     blob_t * end_tag;
@@ -52,8 +93,16 @@ struct {
     blob_t * submit_type;
     blob_t * name;
     blob_t * value;
+    blob_t * autocomplete;
+    blob_t * off;
+    blob_t * on;
 
     blob_t * label;
+
+    blob_t * table;
+    blob_t * tr;
+    blob_t * td;
+    blob_t * th;
 } res_html;
 
 // TODO(jason): is there a reason this isn't just init_html?
@@ -64,6 +113,8 @@ init_html()
     res_html.double_quote_ref = const_blob("&quot;");
     res_html.less_than_ref = const_blob("&lt;");
 
+    res_html.doctype = const_blob("<!doctype html>");
+
     res_html.begin_head = const_blob("<html><head>");
     res_html.end_head = const_blob("<link rel=\"stylesheet\" href=\"/res/main.css\"></head>");
 
@@ -72,6 +123,8 @@ init_html()
 
     res_html.begin_page = const_blob("<body>");
     res_html.end_page = const_blob("</body></html>");
+
+    res_html.id = const_blob("id");
 
     // XXX: maybe these names should be different
     res_html.start_tag = const_blob("<");
@@ -106,243 +159,348 @@ init_html()
     res_html.type = const_blob("type");
     res_html.text_type = const_blob("text");
     res_html.submit_type = const_blob("submit");
+    res_html.autocomplete = const_blob("autocomplete");
+    res_html.off = const_blob("off");
+    res_html.on = const_blob("on");
 
     res_html.label = const_blob("label");
+
+    res_html.table = const_blob("table");
+    res_html.tr = const_blob("tr");
+    res_html.th = const_blob("th");
+    res_html.td = const_blob("td");
 }
 
 ssize_t
-escape_html(blob_t * t, const blob_t * content)
+escape_html(blob_t * html, const blob_t * content)
 {
-    return escape_blob(t, content, '<', res_html.less_than_ref);
+    assert_html();
+
+    return escape_blob(html, content, '<', res_html.less_than_ref);
 }
 
 ssize_t
-double_quote_escape(blob_t * t, const blob_t * content)
+double_quote_escape_html(blob_t * html, const blob_t * content)
 {
-    return escape_blob(t, content, '\"', res_html.double_quote_ref);
+    assert_html();
+
+    return escape_blob(html, content, '\"', res_html.double_quote_ref);
 }
 
 void
-head(blob_t *t, const blob_t * title)
+head_html(blob_t * html, const blob_t * title)
 {
-    add_blob(t, res_html.begin_head);
-    add_blob(t, res_html.begin_title);
-    add_blob(t, title);
-    add_blob(t, res_html.end_title);
-    add_blob(t, res_html.end_head);
+    assert_html();
+
+    add_blob(html, res_html.begin_head);
+    add_blob(html, res_html.begin_title);
+    add_blob(html, title);
+    add_blob(html, res_html.end_title);
+    add_blob(html, res_html.end_head);
 }
 
 void
-page_begin(blob_t *t, const blob_t * title)
+page_begin_html(blob_t * html, const blob_t * title)
 {
-    head(t, title);
+    assert_html();
 
-    add_blob(t, res_html.begin_page);
+    add_blob(html, res_html.doctype);
+
+    head_html(html, title);
+
+    add_blob(html, res_html.begin_page);
 }
 
 void
-page_end(blob_t *t)
+page_end_html(blob_t * html)
 {
-    add_blob(t, res_html.end_page);
+    assert_html();
+
+    add_blob(html, res_html.end_page);
 }
 
 void
-start_element(blob_t * t, const blob_t * name)
+start_element_html(blob_t * html, const blob_t * name)
 {
-    add_blob(t, res_html.start_tag);
-    add_blob(t, name);
-    add_blob(t, res_html.close_tag);
+    assert_html();
+
+    add_blob(html, res_html.start_tag);
+    add_blob(html, name);
+    add_blob(html, res_html.close_tag);
 }
 
 void
-end_element(blob_t * t, const blob_t * name)
+end_element_html(blob_t * html, const blob_t * name)
 {
-    add_blob(t, res_html.end_tag);
-    add_blob(t, name);
-    add_blob(t, res_html.close_tag);
+    assert_html();
+
+    add_blob(html, res_html.end_tag);
+    add_blob(html, name);
+    add_blob(html, res_html.close_tag);
 }
 
 void
-element(blob_t * t, const blob_t * name, const blob_t * content)
+element_html(blob_t * html, const blob_t * name, const blob_t * content)
 {
-    assert(t != NULL);
+    assert_html();
+
     assert(name != NULL);
     assert(content != NULL);
 
-    start_element(t, name);
-    escape_html(t, content);
-    end_element(t, name);
+    start_element_html(html, name);
+    escape_html(html, content);
+    end_element_html(html, name);
 }
 
 void
-open_tag(blob_t *t, const blob_t *name)
+open_tag_html(blob_t * html, const blob_t *name)
 {
-    add_blob(t, res_html.start_tag);
-    add_blob(t, name);
+    assert_html();
+
+    add_blob(html, res_html.start_tag);
+    add_blob(html, name);
 }
 
 void
-close_tag(blob_t *t)
+close_tag_html(blob_t * html)
 {
-    add_blob(t, res_html.close_tag);
+    assert_html();
+
+    add_blob(html, res_html.close_tag);
 }
 
 void
-end_tag(blob_t * t, const blob_t *name)
+end_tag_html(blob_t * html, const blob_t *name)
 {
-    add_blob(t, res_html.end_tag);
-    add_blob(t, name);
-    add_blob(t, res_html.close_tag);
+    assert_html();
+
+    add_blob(html, res_html.end_tag);
+    add_blob(html, name);
+    add_blob(html, res_html.close_tag);
 }
 
 // XXX: should be a way to validate an attribute name is valid, but doesn't
 // need to happen all the time.  maybe just add helper functions like src_attr()
 void
-attr(blob_t *t, const blob_t * name, const blob_t * value)
+attr_html(blob_t * html, const blob_t * name, const blob_t * value)
 {
-    add_blob(t, res_html.space);
-    add_blob(t, name);
-    add_blob(t, res_html.open_attr_value);
+    assert_html();
+
+    add_blob(html, res_html.space);
+    add_blob(html, name);
+    add_blob(html, res_html.open_attr_value);
 
     //&quot;
-    double_quote_escape(t, value);
+    double_quote_escape_html(html, value);
 
-    add_blob(t, res_html.close_attr_value);
+    add_blob(html, res_html.close_attr_value);
 }
 
 void
-empty_attr(blob_t *t, const blob_t * name)
+empty_attr_html(blob_t * html, const blob_t * name)
 {
-    add_blob(t, res_html.space);
-    add_blob(t, name);
+    assert_html();
+
+    add_blob(html, res_html.space);
+    add_blob(html, name);
 }
 
 void
-src_attr(blob_t *t, const blob_t * src)
+src_attr_html(blob_t * html, const blob_t * src)
 {
-    attr(t, res_html.src, src);
+    assert_html();
+
+    attr_html(html, res_html.src, src);
 }
 
 void
-h1(blob_t *t, const blob_t * content)
+h1_html(blob_t * html, const blob_t * content)
 {
-    element(t, res_html.h1, content);
+    assert_html();
+
+    element_html(html, res_html.h1, content);
 }
 
 void
-img(blob_t * t, const blob_t * src, const blob_t * alt)
+img_html(blob_t * html, const blob_t * src, const blob_t * alt)
 {
+    assert_html();
     assert(src != NULL);
 
-    open_tag(t, res_html.img);
-    attr(t, res_html.src, src);
-    if (alt) attr(t, res_html.alt, alt);
-    close_tag(t);
+    open_tag_html(html, res_html.img);
+    attr_html(html, res_html.src, src);
+    if (alt) attr_html(html, res_html.alt, alt);
+    close_tag_html(html);
 }
 
 void
-anchor(blob_t * t, const blob_t * url, const blob_t * content)
+link_html(blob_t * html, const blob_t * url, const blob_t * content)
 {
+    assert_html();
     assert(url != NULL);
 
-    open_tag(t, res_html.anchor);
-    attr(t, res_html.href, url);
-    close_tag(t);
+    open_tag_html(html, res_html.anchor);
+    attr_html(html, res_html.href, url);
+    close_tag_html(html);
 
     if (content != NULL) {
-        escape_html(t, content);
+        escape_html(html, content);
     }
 
-    end_tag(t, res_html.anchor);
+    end_tag_html(html, res_html.anchor);
 }
 
 void
-div_html(blob_t * t, const blob_t * content)
+div_html(blob_t * html, const blob_t * content)
 {
-    element(t, res_html.div, content);
+    assert_html();
+
+    element_html(html, res_html.div, content);
 }
 
 void
-start_div_html(blob_t * t)
+start_div_html(blob_t * html, blob_t * id)
 {
-    start_element(t, res_html.div);
+    assert_html();
+
+    open_tag_html(html, res_html.div);
+    attr_html(html, res_html.id, id);
+    close_tag_html(html);
 }
 
 void
-end_div_html(blob_t * t)
+end_div_html(blob_t * html)
 {
-    end_element(t, res_html.div);
+    assert_html();
+
+    end_element_html(html, res_html.div);
 }
 
 void
-para(blob_t * t, const blob_t * content)
+para_html(blob_t * html, const blob_t * content)
 {
-    element(t, res_html.para, content);
+    element_html(html, res_html.para, content);
 }
 
 void
-start_para(blob_t * t)
+start_para_html(blob_t * html)
 {
-    start_element(t, res_html.para);
+    start_element_html(html, res_html.para);
 }
 
 void
-end_para(blob_t * t)
+end_para_html(blob_t * html)
 {
-    end_element(t, res_html.para);
+    end_element_html(html, res_html.para);
 }
 
 void
-_start_form(blob_t * t, const blob_t * action, const blob_t * method)
+_start_form_html(blob_t * html, const blob_t * action, const blob_t * method)
 {
+    assert_html();
     assert(action != NULL);
 
-    open_tag(t, res_html.form);
-    attr(t, res_html.method, method);
-    attr(t, res_html.action, action);
+    open_tag_html(html, res_html.form);
+    attr_html(html, res_html.method, method);
+    attr_html(html, res_html.action, action);
 
-    close_tag(t);
+    close_tag_html(html);
 }
 
 void
-start_post_form(blob_t * t, const blob_t * action)
+start_post_form_html(blob_t * html, const blob_t * action)
 {
-    _start_form(t, action, res_html.post_method);
+    assert_html();
+
+    _start_form_html(html, action, res_html.post_method);
 }
 
 void
-start_get_form(blob_t * t, const blob_t * action)
+start_get_form_html(blob_t * html, const blob_t * action)
 {
-    _start_form(t, action, res_html.get_method);
+    _start_form_html(html, action, res_html.get_method);
 }
 
 void
-end_form(blob_t * t)
+end_form_html(blob_t * html)
 {
-    end_element(t, res_html.form);
+    end_element_html(html, res_html.form);
 }
 
 void
-label(blob_t * t, blob_t * content)
+label_html(blob_t * html, blob_t * content)
 {
-    element(t, res_html.label, content);
+    element_html(html, res_html.label, content);
 }
 
 void
-text_input(blob_t * t, const blob_t * name)
+input_html(blob_t * html, const blob_t * type, const blob_t * name, const blob_t * value)
 {
-    open_tag(t, res_html.input);
-    attr(t, res_html.type, res_html.text_type);
-    attr(t, res_html.name, name);
-    close_tag(t);
+    open_tag_html(html, res_html.input);
+    attr_html(html, res_html.type, type);
+    attr_html(html, res_html.name, name);
+    //attr_html(html, res_html.autocomplete, res_html.off);
+    if (valid_blob(value)) attr_html(html, res_html.value, value);
+    close_tag_html(html);
 }
 
 void
-submit_input(blob_t * t, const blob_t * value)
+table_start_html(blob_t * html)
 {
-    open_tag(t, res_html.input);
-    attr(t, res_html.type, res_html.submit_type);
-    attr(t, res_html.value, value);
-    close_tag(t);
+    start_element_html(html, res_html.table);
+}
+
+void
+table_end_html(blob_t * html)
+{
+    end_element_html(html, res_html.table);
+}
+
+void
+tr_start_html(blob_t * html)
+{
+    start_element_html(html, res_html.tr);
+}
+
+void
+tr_end_html(blob_t * html)
+{
+    end_element_html(html, res_html.tr);
+}
+
+void
+td_html(blob_t * html, blob_t * content)
+{
+    element_html(html, res_html.td, content);
+}
+
+void
+td_start_html(blob_t * html)
+{
+    start_element_html(html, res_html.td);
+}
+
+void
+td_end_html(blob_t * html)
+{
+    end_element_html(html, res_html.td);
+}
+
+void
+th_html(blob_t * html, blob_t * content)
+{
+    element_html(html, res_html.th, content);
+}
+
+void
+th_start_html(blob_t * html)
+{
+    start_element_html(html, res_html.th);
+}
+
+void
+th_end_html(blob_t * html)
+{
+    end_element_html(html, res_html.th);
 }
 
