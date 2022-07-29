@@ -1,11 +1,14 @@
 #pragma once
 
+#define MAX_REQUEST_BODY 4096
+#define MAX_RESPONSE_BODY 8192
+
 // TODO(jason): possibly should call this http_server (seems to long), httpd
 // (daemon?), or something.  doesn't really matter and "web" is short.
 // should possibly combine with http client methods
 
 // TODO(jason): this should probably be a config in the db
-#define COOKIE_EXPIRES_WEB 86400
+#define COOKIE_EXPIRES_WEB (86400 * 365)
 
 #define METHOD(var, E) \
     E(none, "NONE", var) \
@@ -29,11 +32,7 @@ ENUM_BLOB(method, METHOD)
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
-struct {
-    stmt_db_t * session_query;
-} stmts_web;
-
-#define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size) }
+#define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
 #define log_param(p) \
     log_var_field(p->field); \
     log_var_blob(p->value); \
@@ -66,7 +65,7 @@ typedef struct {
     s64 session_id;
     blob_t * session_cookie;
     s64 user_id;
-    blob_t * user_alias;
+    blob_t * user_name;
 
     // maybe anonymize/mask the ip (hash?)  mainly not for having the actual ip
     // I would think
@@ -164,6 +163,7 @@ _endpoint(endpoint_id_t id, blob_t * path, blob_t * name, blob_t * title, reques
         param_t * p = &params[i];
         p->field = fields[i];
         p->value = blob(fields[i]->max_size);
+        p->error = blob(256);
 
         //log_field(p->field);
     }
@@ -192,6 +192,13 @@ init_endpoints()
     ENDPOINT_TABLE(EXTRACT_AS_INIT_ENDPOINT)
 
     endpoints.n_list = N_ENDPOINTS;
+}
+
+endpoint_t *
+endpoint_by_id(endpoint_id_t id)
+{
+    assert(id < endpoints.n_list);
+    return endpoints.list[id];
 }
 
 void
@@ -231,7 +238,7 @@ const blob_t * res_dir_web;
     E(set_cookie,"set-cookie", var) \
     E(location,"location", var) \
     E(name_session_cookie,"z", var) \
-    E(session_cookie_attributes,"; max-age=15552000; HttpOnly", var) \
+    E(session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=strict", var) \
     E(method_not_implemented,"method not implemented", var) \
     E(bad_request,"bad request", var) \
     E(not_found,"not found", var) \
@@ -262,6 +269,8 @@ hex_char(u8 c)
 ssize_t
 percent_decode_blob(blob_t * dest, const blob_t * src)
 {
+    if (src->size == 0) return 0;
+
     // while there are more characters to scan and no error
     ssize_t offset = 0;
     while ((scan_blob(dest, src, '%', &offset)) != -1) {
@@ -285,7 +294,26 @@ percent_decode_blob(blob_t * dest, const blob_t * src)
     }
 
     // end of src.  what to do????
-    return -1;
+    return 0;
+}
+
+// NOTE(jason): I think this is correct, but the spec blows
+ssize_t
+percent_encode_blob(blob_t * dest, const blob_t * src)
+{
+    if (src->size == 0) return 0;
+
+    for (ssize_t i = 0; i < (ssize_t)src->size; i++) {
+        u8 c = src->data[i];
+        if (isalnum(c) || c == '*' || c == '-' || c == '.' || c == '_') {
+            write_blob(dest, &c, 1);
+        } else {
+            write_blob(dest, "%", 1);
+            write_hex_blob(dest, &c, 1);
+        }
+    }
+
+    return 0;
 }
 
 int
@@ -299,8 +327,7 @@ urlencode_params(blob_t * out, param_t * params, size_t n_params)
         if (i > 0) write_blob(out, "&", 1);
         add_blob(out, params[i].field->name);
         write_blob(out, "=", 1);
-        // urlencode
-        add_blob(out, params[i].value);
+        percent_encode_blob(out, params[i].value);
     }
 
     return 0;
@@ -309,12 +336,16 @@ urlencode_params(blob_t * out, param_t * params, size_t n_params)
 // XXX(jason): not possible to tell if a parameter has an empty value, but
 // I'm not sure if it matters.  easy enough to add a value even if it's
 // ignored
+// TODO(jason): should this trim the values of whitespace?  seems generally
+// desirable, but not sure if it would cause developer confusion
 int
 urldecode_params(const blob_t * input, param_t * params, size_t n_params)
 {
     assert(input != NULL);
 
     if (empty_blob(input)) return 0;
+
+    //log_var_blob(input);
 
     assert(params != NULL);
     assert(n_params > 0);
@@ -343,6 +374,7 @@ urldecode_params(const blob_t * input, param_t * params, size_t n_params)
                 // XXX(jason); what should be done if value is too small?
                 replace_blob(urlencoded, '+', ' ');
                 percent_decode_blob(param.value, urlencoded);
+                //log_var_blob(param.value);
                 count++;
             }
         }
@@ -358,6 +390,7 @@ clear_params(param_t * params, size_t n_params)
 {
     for (size_t i = 0; i < n_params; i++) {
         reset_blob(params[i].value);
+        reset_blob(params[i].error);
     }
 }
 
@@ -427,7 +460,7 @@ reuse_request(request_t * req)
 
     req->session_id = 0;
     req->user_id = 0;
-    erase_blob(req->user_alias);
+    erase_blob(req->user_name);
 
     req->status = 0;
 
@@ -453,15 +486,15 @@ new_request()
     req->query = blob(512);
 
     req->request_head = blob(1024);
-    req->request_body = blob(4*1024);
+    req->request_body = blob(MAX_REQUEST_BODY);
 
     req->session_cookie = blob(256);
     // TODO(jason): how big should this actually be?  should be fairly short
     // and limited so page layout can be consistent
-    req->user_alias = blob(32);
+    req->user_name = blob(32);
 
     req->head = blob(1024);
-    req->body = blob(4*1024);
+    req->body = blob(MAX_RESPONSE_BODY);
 
     reuse_request(req);
 
@@ -553,27 +586,40 @@ require_request_body_web(request_t * req)
 }
 
 int
-query_params(request_t * req, param_t * params, size_t n_params)
+query_params(request_t * req, endpoint_t * ep)
 {
-    log_var_blob(req->query);
+    param_t * params = ep->params;
+    size_t n_params = ep->n_params;;
 
-    clear_params(params, n_params);
+    //log_var_blob(req->query);
 
     return urldecode_params(req->query, params, n_params);
 }
 
 int
-post_params(request_t * req, param_t * params, size_t n_params)
+post_params(request_t * req, endpoint_t * ep)
 {
+    param_t * params = ep->params;
+    size_t n_params = ep->n_params;;
+
     assert(req->method == post_method);
 
     require_request_body_web(req);
 
     assert(req->request_content_type == urlencoded_content_type);
 
-    clear_params(params, n_params);
-
     return urldecode_params(req->request_body, params, n_params);
+}
+
+int
+request_params(request_t * req, endpoint_t * ep)
+{
+    if (post_request(req)) {
+        return post_params(req, ep);
+    }
+    else {
+        return query_params(req, ep);
+    }
 }
 
 /*
@@ -773,13 +819,20 @@ route_endpoint(request_t * req)
         endpoint_t * ep = endpoints.list[i];
         if (match_route_endpoint(ep, req)) {
             //log_endpoint(ep);
-            return ep->handler(ep, req);
+            int result = ep->handler(ep, req);
+            // TODO(jason): make sure parameters are cleared so don't get used
+            // by a later request.  this doesn't seem very good.  maybe
+            // endpoint should be on the request and clear params in
+            // reuse_request
+            clear_params(ep->params, ep->n_params);
+            return result;
         }
     }
 
     return 0;
 }
 
+// find the param within the endpoint fields with the field_id
 param_t *
 param_endpoint(endpoint_t * ep, field_id_t field_id)
 {
@@ -791,6 +844,33 @@ param_endpoint(endpoint_t * ep, field_id_t field_id)
     }
 
     return NULL;
+}
+
+// Sets the param value if it's empty
+s64
+default_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
+{
+    // TODO(jason): this could be better
+    param_t * p = param_endpoint(ep, field_id);
+    assert(p != NULL);
+    if (empty_blob(p->value) || (p->value->size == 1 && p->value->data[0] == '0')) {
+        add_s64_blob(p->value, value);
+    }
+
+    return s64_blob(p->value, 0);
+}
+
+// Sets the param value if it's empty
+int
+default_param_endpoint(endpoint_t * ep, field_id_t field_id, blob_t * value)
+{
+    param_t * p = param_endpoint(ep, field_id);
+    assert(p != NULL);
+    if (empty_blob(p->value)) {
+        add_blob(p->value, value);
+    }
+
+    return 0;
 }
 
 // TODO(jason): re-evaluate if this flow is correct.  possibly make all sqlite errors an assert/abort?
@@ -805,21 +885,21 @@ require_session_web(request_t * req)
 
     if (valid_blob(req->session_cookie)) {
         sqlite3_stmt * stmt;
-        if (prepare_db(db, &stmt, wrap_blob("select session_id, s.user_id, u.alias from session s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()")) == 0) {
-            text_bind_db(stmt, 1, req->session_cookie);
 
-            if (sqlite3_step(stmt) == SQLITE_ROW) {
-                req->session_id = s64_db(stmt, 0);
-                req->user_id = s64_db(stmt, 1);
-                if (req->user_id) blob_db(stmt, 2, req->user_alias);
+        assert_prepare_db(db, &stmt, "select session_id, u.user_id, u.name from session s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()");
+        text_bind_db(stmt, 1, req->session_cookie);
 
-                log_var_s64(req->session_id);
-                log_var_s64(req->user_id);
-                log_var_blob(req->user_alias);
-            }
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            req->session_id = s64_db(stmt, 0);
+            req->user_id = s64_db(stmt, 1);
+            if (req->user_id) blob_db(stmt, 2, req->user_name);
+
+            log_var_s64(req->session_id);
+            log_var_s64(req->user_id);
+            log_var_blob(req->user_name);
         }
 
-        sqlite3_finalize(stmt);
+        finalize_db(stmt);
 
         // update last access time?  I don't think it matters and there should
         // just be a max time session expiration
@@ -828,40 +908,33 @@ require_session_web(request_t * req)
     }
 
     s64 new_id = random_s64_fu();
-    if (!new_id) {
-        log_errno("random_s64_fu");
-        return -1;
-    }
 
     blob_t * cookie = local_blob(32);
     add_random_blob(cookie, 16);
 
     log_var_blob(cookie);
     sqlite3_stmt * stmt;
-    if (prepare_db(db, &stmt, wrap_blob("insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)")) == 0) {
-        sqlite3_bind_int64(stmt, 1, new_id);
-        sqlite3_bind_int64(stmt, 2, COOKIE_EXPIRES_WEB);
-        text_bind_db(stmt, 3, cookie);
-
-        if (sqlite3_step(stmt) == SQLITE_DONE) {
-            req->session_id = new_id;
-
-            blob_t * c = tmp_blob();
-
-            add_blob(c, res_web.name_session_cookie);
-            write_blob(c, "=", 1);
-            add_blob(c, cookie);
-            //write_hex_blob(c, &new_id, sizeof(new_id));
-            add_blob(c, res_web.session_cookie_attributes);
-            header(req->head, res_web.set_cookie, c);
-        }
-
-        sqlite3_finalize(stmt);
-
-        return 0;
+    assert_prepare_db(db, &stmt, "insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)");
+    s64_bind_db(stmt, 1, new_id);
+    s64_bind_db(stmt, 2, COOKIE_EXPIRES_WEB);
+    text_bind_db(stmt, 3, cookie);
+    sqlite3_step(stmt);
+    if (finalize_db(stmt)) {
+        return -1;
     }
 
-    return -1;
+    req->session_id = new_id;
+
+    blob_t * c = tmp_blob();
+
+    add_blob(c, res_web.name_session_cookie);
+    write_blob(c, "=", 1);
+    add_blob(c, cookie);
+    //write_hex_blob(c, &new_id, sizeof(new_id));
+    add_blob(c, res_web.session_cookie_attributes);
+    header(req->head, res_web.set_cookie, c);
+
+    return 0;
 }
 
 int
@@ -869,7 +942,7 @@ require_user_web(request_t * req, endpoint_t * auth)
 {
     if (require_session_web(req)) return -1;
 
-    log_var_s64(req->user_id);
+    //log_var_s64(req->user_id);
 
     if (req->user_id) return 0;
 
@@ -878,31 +951,20 @@ require_user_web(request_t * req, endpoint_t * auth)
     // alternatively, have a standard fail macro that returns a 500 generic
     // error (fail whale)
     sqlite3_stmt * stmt;
-    assert_prepare_db(db, &stmt, "update session set redirect_url = ?, modified = unixepoch() where session_id = ?");
+    assert_prepare_db(db, &stmt, "update session set redirect_url = ?, modified = unixepoch() where session_id = ? returning redirect_url");
     text_bind_db(stmt, 1, req->uri);
     s64_bind_db(stmt, 2, req->session_id);
-    sqlite3_step(stmt);
-
-    if (sqlite3_finalize(stmt)) {
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
         internal_server_error_response(req);
     }
     else {
         redirect_endpoint(req, auth, NULL);
     }
 
+    finalize_db(stmt);
+
     return 1;
 }
-
-/*
-time_t start_time_s;
-
-void
-res_url(blob_t * b, blob_t * name)
-{
-    vadd_blob(b, res_web.res_path, name, res_web.res_path_suffix);
-    add_s64_blob(b, (s64)start_time_s);
-}
-*/
 
 // return a file from the AppDir/res directory with cache-control header set
 // for static assets.  the url should include some sort of cache breaker query
@@ -1045,6 +1107,11 @@ respond:
     // no response default to 404
     if (req->status == 0) {
         not_found_response(req);
+    }
+
+    if (req->body->error) {
+        error_log("response probably too big", "http", req->body->error);
+        internal_server_error_response(req);
     }
 
     // TODO(jason): handler should've set the status line by this point

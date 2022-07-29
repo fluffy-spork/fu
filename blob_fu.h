@@ -26,6 +26,15 @@ typedef struct {
     u8 * data;
 } blob_t;
 
+// NOTE(jason): if local_blob or wrap_blob and related are used within a block
+// it's important not to set it's pointer to an outer scope variable or it will
+// overwrite, confusingly.  This will not do what you want, but will compile
+// and possibly appear to work if there is only 1 in the function scope.
+//
+// blob_t * b;
+// if (true) {
+//     b = wrap_blob("foo");
+// }
 #define local_blob(size) _init_local_blob(&(blob_t){ .data = alloca(size) }, size, 0)
 #define tmp_blob() local_blob(4096)
 
@@ -104,6 +113,7 @@ erase_blob(blob_t * blob)
 
     memset(blob->data, 0, blob->size);
     blob->size = 0;
+    blob->error = 0;
 }
 
 void
@@ -112,6 +122,7 @@ reset_blob(blob_t * blob)
     assert(blob != NULL);
 
     blob->size = 0;
+    blob->error = 0;
 }
 
 // TODO(jason): should this just return false if the blob is NULL?  added
@@ -149,6 +160,17 @@ case_equal_blob(const blob_t * b1, const blob_t * b2)
     }
 
     return true;
+}
+
+// inplace convert the blob to lower case
+int
+lower_blob(blob_t * b)
+{
+    for (size_t i = 0; i < b->size; i++) {
+        b->data[i] = tolower(b->data[i]);
+    }
+
+    return 0;
 }
 
 size_t
@@ -331,6 +353,10 @@ scan_blob_blob(blob_t * dest, const blob_t * src, blob_t * delim, ssize_t * poff
         write_blob(dest, &src->data[offset], size);
         *poffset = offset + size + delim->size;
         return size;
+    } else if (size == 0) {
+        // NOTE(jason): delim at first char
+        *poffset = offset + delim->size;
+        return 0;
     } else {
         return -1;
     }
@@ -361,7 +387,7 @@ skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
 
 // XXX(jason): untested
 // incorrectly reads full src instead of stopping at max number of digits
-// doesn't skip commas.  should stop at a period?
+// doesn't skip commas.  should stop at a period
 s64
 s64_blob(const blob_t * src, ssize_t offset)
 {
@@ -511,6 +537,16 @@ add_u64_blob(blob_t * b, u64 n)
     write_blob(b, s, size);
 }
 
+void
+add_u16_zero_pad_blob(blob_t * b, u64 n)
+{
+    // TODO(jason): replace with something that doesn't use stdio
+    // and direct
+    char s[256];
+    int size = snprintf(s, 256, "%06lu", n);
+    write_blob(b, s, size);
+}
+
 bool
 ends_with_char_blob(blob_t * b, char c)
 {
@@ -642,6 +678,27 @@ add_random_blob(blob_t * b, ssize_t n_random)
     }
 
     return write_hex_blob(b, r, n_random);
+}
+
+blob_t *
+random_blob(ssize_t n_random)
+{
+    blob_t * b = blob(n_random*2);
+    add_random_blob(b, n_random);
+    return b;
+}
+
+// fills the remaining capacity with random a-z
+int
+fill_random_alpha_blob(blob_t * b)
+{
+    for (size_t i = b->size; i < b->capacity; i++) {
+        b->data[i] = random_alpha_fu();
+    }
+
+    b->size = b->capacity;
+
+    return 0;
 }
 
 // TODO(jason): would be good if var_name didn't have to be passed around when

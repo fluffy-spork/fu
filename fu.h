@@ -47,6 +47,7 @@ typedef enum {
 
 // crash on a rare error situation that shouldn't ever happen and if does
 // everything is probably fucked
+// needs to not use assert so exp is always run.
 #define RARE_FAIL(exp) assert(exp)
 
 #define array_size_fu(array) sizeof(array)/sizeof(array[0])
@@ -175,7 +176,8 @@ random_u64_fu()
 {
     u64 num;
     ssize_t result = getrandom(&num, sizeof(num), 0);
-    return (result == sizeof(num)) ? num : 0;
+    RARE_FAIL(result  == sizeof(num));
+    return num;
 }
 
 s64
@@ -184,6 +186,26 @@ random_s64_fu()
     s64 num;
     ssize_t result = getrandom(&num, sizeof(num), 0);
     num = llabs(num);
-    return (result == sizeof(num)) ? num : 0;
+    RARE_FAIL(result  == sizeof(num));
+    return num;
+}
+
+u16
+random_u16_fu()
+{
+    u16 num;
+    ssize_t result = getrandom(&num, sizeof(num), 0);
+    RARE_FAIL(result  == sizeof(num));
+    return num;
+}
+
+// random alaph character (a-z)
+u8
+random_alpha_fu()
+{
+    u8 num;
+    ssize_t result = getrandom(&num, sizeof(num), 0);
+    RARE_FAIL(result  == sizeof(num));
+    return 'a' + num % 26;
 }
 
