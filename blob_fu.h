@@ -15,6 +15,7 @@
     _log(plog, value->data, value->size, label, strlen(label), 0, __FILE__, __func__, __LINE__)
 
 #define log_var_blob(var) log_blob(var, #var)
+#define debug_blob(var) debugf("%s: %s", #var, cstr_blob(var))
 
 
 typedef struct {
@@ -263,27 +264,6 @@ _cstr_blob(const blob_t * blob, char * cstr, size_t size_cstr)
     return cstr;
 }
 
-// write into the blob as much of the fd that fits
-// TODO(jason): this might should be called "read_fd_blob".  was trying to
-// match behavior to write_blob, but maybe that's a bad idea.  A "read_fd_blob"
-// that reads from the blob and writes into an fd seems more confusing
-ssize_t
-write_fd_blob(blob_t * b, int fd)
-{
-    assert(b != NULL);
-
-    u8 * buf = &b->data[b->size];
-    size_t available = available_blob(b);
-
-    // TODO(jason): it's possible there could be more to read that would fit
-    // than is returned in one read call.  maybe use a do/while
-    ssize_t size = read(fd, buf, available);
-    if (size > 0) b->size += size;
-
-    // size 0 means an EOF was read.
-    return size;
-}
-
 ssize_t
 scan_fd_blob(blob_t * b, int fd, u8 delim, size_t max)
 {
@@ -461,6 +441,13 @@ add_blob(blob_t * dest, const blob_t * src)
     return write_blob(dest, src->data, src->size);
 }
 
+void
+set_blob(blob_t * b, blob_t * value)
+{
+    reset_blob(b);
+    add_blob(b, value);
+}
+
 // NOTE(jason): wrapper so it's easy to not have to know the trailing NULL is
 // required for var args in C.  Also means a NULL can't be included, but that
 // shouldn't really matter.
@@ -525,6 +512,13 @@ add_s64_blob(blob_t * b, s64 n)
     char s[256];
     int size = snprintf(s, 256, "%ld", n);
     write_blob(b, s, size);
+}
+
+void
+set_s64_blob(blob_t * b, s64 n)
+{
+    reset_blob(b);
+    add_s64_blob(b, n);
 }
 
 void
@@ -605,6 +599,8 @@ split_blob(const blob_t * src, u8 c, blob_t * b1, blob_t * b2)
 ssize_t
 escape_blob(blob_t * b, const blob_t * value, const u8 c, const blob_t * replacement)
 {
+    if (!value) return 0;
+
     ssize_t written = 0;
 
     ssize_t offset = 0;
@@ -698,6 +694,13 @@ fill_random_alpha_blob(blob_t * b)
 
     b->size = b->capacity;
 
+    return 0;
+}
+
+int
+fill_random_blob(blob_t * b)
+{
+    add_random_blob(b, available_blob(b)/2);
     return 0;
 }
 

@@ -108,13 +108,15 @@ _log(log_t * log, const void * msg, size_t size_msg, const char * label, size_t 
     log->size++;
 }
 
-void
+// Usage: return log_errno("open");
+int
 _log_errno(log_t * log, const char * label, size_t size_label, const char * file, const char * function, s64 line)
 {
-    char s[256];
-    strerror_r(errno, s, 256);
+    char * s = strerror(errno);
 
     _log(log, s, strlen(s), label, size_label, errno, file, function, line);
+
+    return -1;
 }
 
 void

@@ -2,6 +2,7 @@
 
 #define MAX_REQUEST_BODY 4096
 #define MAX_RESPONSE_BODY 8192
+#define MAX_SIZE_FILE_UPLOAD 10*1024*1024
 
 // TODO(jason): possibly should call this http_server (seems to long), httpd
 // (daemon?), or something.  doesn't really matter and "web" is short.
@@ -22,6 +23,7 @@ ENUM_BLOB(method, METHOD)
     E(none, "none", var) \
     E(binary, "application/octet-stream", var) \
     E(urlencoded, "application/x-www-form-urlencoded", var) \
+    E(multipart_form_data, "multipart/form-data", var) \
     E(text, "text/plain", var) \
     E(html, "text/html", var) \
     E(css, "text/css", var) \
@@ -29,6 +31,7 @@ ENUM_BLOB(method, METHOD)
     E(png, "image/png", var) \
     E(jpeg, "image/jpeg", var) \
     E(gif, "image/gif", var) \
+    E(mp4, "video/mp4", var) \
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
@@ -39,7 +42,8 @@ ENUM_BLOB(content_type, CONTENT_TYPE)
 
 typedef enum {
     NO_STORE_CACHE_CONTROL,
-    STATIC_ASSET_CACHE_CONTROL
+    STATIC_ASSET_CACHE_CONTROL,
+    USER_FILE_CACHE_CONTROL
 } cache_control_t;
 
 // NOTE(jason): the reason strings is pointless.  maybe need to store the code
@@ -47,13 +51,16 @@ typedef enum {
 #define HTTP_STATUS(var, E) \
     E(unknown, "HTTP/1.1 000 N\r\n", var) \
     E(ok, "HTTP/1.1 200 X\r\n", var) \
+    E(created, "HTTP/1.1 201 X\r\n", var) \
     E(not_found, "HTTP/1.1 404 X\r\n", var) \
-    E(redirect, "HTTP/1.1 303 X\r\n", var) \
+    E(redirect, "HTTP/1.1 302 X\r\n", var) \
     E(permanent_redirect, "HTTP/1.1 301 X\r\n", var) \
     E(method_not_implemented, "HTTP/1.1 501 X\r\n", var) \
     E(bad_request, "HTTP/1.1 400 X\r\n", var) \
     E(internal_server_error, "HTTP/1.1 500 X\r\n", var) \
     E(service_unavailable, "HTTP/1.1 503 X\r\n", var) \
+    E(expect_continue, "100 X\r\n", var) \
+    E(payload_too_large, "413 X\r\n", var) \
 
 ENUM_BLOB(http_status, HTTP_STATUS)
 
@@ -77,6 +84,7 @@ typedef struct {
     content_type_t request_content_type;
     u64 request_content_length;
     bool keep_alive;
+    bool expect_continue;
 
     blob_t * request_head;
     blob_t * request_body;
@@ -87,6 +95,7 @@ typedef struct {
     blob_t * query;
 
     content_type_t content_type;
+    s64 content_length;
     cache_control_t cache_control;
 
     http_status_t status;
@@ -216,6 +225,10 @@ log_endpoint(endpoint_t * ep)
 
 // where to load resources
 const blob_t * res_dir_web;
+// where file uploads are stored defaults to "uploads" with "uploads/<randomid>"
+const blob_t * upload_dir_web;
+
+const endpoint_t * login_endpoint_web;
 
 #define RES_WEB(var, E) \
     E(space," ", var) \
@@ -228,8 +241,11 @@ const blob_t * res_dir_web;
     E(ok_health,"ok health", var) \
     E(service_unavailable,"service unavailable", var) \
     E(internal_server_error,"internal server error", var) \
+    E(payload_too_large,"payload too large", var) \
     E(see_other,"see other", var) \
     E(connection,"connection", var) \
+    E(expect,"expect", var) \
+    E(expect_100_continue,"100-continue", var) \
     E(connection_close,"close", var) \
     E(connection_keep_alive,"keep-alive", var) \
     E(content_type,"content-type", var) \
@@ -253,6 +269,7 @@ const blob_t * res_dir_web;
     E(cache_control,"cache-control", var) \
     E(no_store,"no-store", var) \
     E(static_asset_cache_control,"public, max-age=2592000, immutable", var) \
+    E(user_file_cache_control,"private, max-age=2592000, immutable", var) \
     E(res_path,"/res/", var) \
     E(res_path_suffix,"?v=", var) \
 
@@ -317,6 +334,16 @@ percent_encode_blob(blob_t * dest, const blob_t * src)
 }
 
 int
+urlencode_field(blob_t * out, field_t * field, blob_t * value)
+{
+    add_blob(out, field->name);
+    write_blob(out, "=", 1);
+    percent_encode_blob(out, value);
+
+    return 0;
+}
+
+int
 urlencode_params(blob_t * out, param_t * params, size_t n_params)
 {
     if (n_params == 0) return 0;
@@ -325,9 +352,7 @@ urlencode_params(blob_t * out, param_t * params, size_t n_params)
 
     for (size_t i = 0; i < n_params; i++) {
         if (i > 0) write_blob(out, "&", 1);
-        add_blob(out, params[i].field->name);
-        write_blob(out, "=", 1);
-        percent_encode_blob(out, params[i].value);
+        urlencode_field(out, params[i].field, params[i].value);
     }
 
     return 0;
@@ -345,7 +370,7 @@ urldecode_params(const blob_t * input, param_t * params, size_t n_params)
 
     if (empty_blob(input)) return 0;
 
-    //log_var_blob(input);
+    //debug_blob(input);
 
     assert(params != NULL);
     assert(n_params > 0);
@@ -361,6 +386,8 @@ urldecode_params(const blob_t * input, param_t * params, size_t n_params)
         reset_blob(name);
         percent_decode_blob(name, urlencoded);
 
+        //debug_blob(name);
+
         // NOTE(jason): read the value here because the offset has to be moved
         // past it regardless
         reset_blob(urlencoded);
@@ -374,7 +401,7 @@ urldecode_params(const blob_t * input, param_t * params, size_t n_params)
                 // XXX(jason); what should be done if value is too small?
                 replace_blob(urlencoded, '+', ' ');
                 percent_decode_blob(param.value, urlencoded);
-                //log_var_blob(param.value);
+                //debug_blob(param.value);
                 count++;
             }
         }
@@ -398,6 +425,18 @@ void
 init_web(const blob_t * res_dir)
 {
     res_dir_web = res_dir;
+    // TODO(jason): improve.  probably move to an app data dir (app user home
+    // dir) and then this is a subdir of that
+    upload_dir_web = const_blob("uploads/");
+
+    // TODO(jason): make this a config param
+    login_endpoint_web = endpoints.email_login_code;
+
+    if (mkdir_file_fu(upload_dir_web, S_IRWXU)) {
+        if (errno != EEXIST) {
+            exit(EXIT_FAILURE);
+        }
+    }
 
     init_res_web();
 
@@ -408,32 +447,80 @@ init_web(const blob_t * res_dir)
     init_endpoints();
 }
 
-// TODO(jason): update this to use the ENUM_BLOB
 content_type_t
-content_type_for_path(const char * path)
+content_type_for_path(const blob_t * path)
 {
-    char * dot = rindex(path, '.');
-    if (dot) dot++;
+    //debug_blob(path);
+    char * dot = rindex(cstr_blob(path), '.');
+    //char * dot = NULL;
+    if (dot) {
+        char first_char = *(dot + 1);
 
-    // TODO(jason): since limited content types are supported, just assume
-    // based on the first char for now.  will really figure out the types on
-    // resource load at startup
-    switch (*dot) {
-        case 'p':
-            return png_content_type;
-        case 'c':
-            return css_content_type;
-        case 'j':
-            return javascript_content_type;
-        case 'g':
-            return gif_content_type;
-        case 'h':
-            return html_content_type;
-        case 't':
-            return text_content_type;
-        default:
-            return binary_content_type;
+        // TODO(jason): since limited content types are supported, just assume
+        // based on the first char for now.  will really figure out the types on
+        // resource load at startup
+        switch (first_char) {
+            case 'p':
+                return png_content_type;
+            case 'c':
+                return css_content_type;
+            case 'j':
+                return javascript_content_type;
+            case 'g':
+                return gif_content_type;
+            case 'h':
+                return html_content_type;
+            case 't':
+                return text_content_type;
+            default:
+                return binary_content_type;
+        }
     }
+
+    // if there's no extension, attempt to identify based on magic number
+    int fd = open_read_file_fu(path);
+    if (fd == -1) {
+        log_errno("open_read_file_fu");
+        return binary_content_type;
+    }
+
+    blob_t * magic = local_blob(255);
+    if (read_file_fu(fd, magic) == -1) {
+        log_errno("read_file_fu");
+        return binary_content_type;
+    }
+
+    char jpeg_magic[] = { 0xFF, 0xD8, 0xFF, 0x00 };
+    char png_magic[] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00 };
+    char gif_magic[] = { 0x47, 0x49, 0x46, 0x38, 0x00 };
+    char mp4_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D, 0x00 };
+
+//    debug_blob(magic);
+//    debug_blob(B(jpeg_magic));
+//    debug_blob(B(png_magic));
+//    debug_blob(B(gif_magic));
+//    debug_blob(B(mp4_magic));
+//    debug_s64(magic->data[0]);
+//    debug_s64(B(jpeg_magic)->data[0]);
+//    debug_s64(magic->data[1]);
+//    debug_s64(B(jpeg_magic)->data[1]);
+//    debug_s64(magic->data[2]);
+//    debug_s64(B(jpeg_magic)->data[2]);
+
+    if (begins_with_blob(magic, B(jpeg_magic))) {
+        return jpeg_content_type;
+    }
+    else if (begins_with_blob(magic, B(png_magic))) {
+        return png_content_type;
+    }
+    else if (begins_with_blob(magic, B(gif_magic))) {
+        return gif_content_type;
+    }
+    else if (begins_with_blob(magic, B(mp4_magic))) {
+        return mp4_content_type;
+    }
+
+    return binary_content_type;
 }
 
 bool
@@ -453,10 +540,12 @@ reuse_request(request_t * req)
     req->fd = -1;
     req->method = none_method;
     req->content_type = none_content_type;
+    req->content_length = 0;
     req->cache_control = NO_STORE_CACHE_CONTROL;
     req->request_content_type = none_content_type;
     req->request_content_length = 0;
     req->keep_alive = true;
+    req->expect_continue = false;
 
     req->session_id = 0;
     req->user_id = 0;
@@ -543,7 +632,8 @@ require_request_head_web(request_t * req)
             req->request_content_length = u64_blob(value, 0);
         }
         else if (case_equal_blob(res_web.connection, name)) {
-            req->keep_alive = equal_blob(value, res_web.connection_keep_alive);
+            req->keep_alive = equal_blob(value, res_web.connection_keep_alive)
+                || !equal_blob(value, res_web.connection_close);
         }
         else if (case_equal_blob(res_web.cookie, name)) {
             blob_t * name_cookie = tmp_blob();
@@ -559,9 +649,20 @@ require_request_head_web(request_t * req)
                 }
             }
         }
+        else if (case_equal_blob(res_web.expect, name)) {
+            // NOTE(jason): supposedly expect header is only used by curl and
+            // browsers don't
+            req->expect_continue = case_equal_blob(res_web.expect_100_continue, value);
+        }
 
         reset_blob(name);
         reset_blob(value);
+    }
+
+    if (req->expect_continue) {
+        // NOTE(jason): curl supposedly only sends expect when the POST body is
+        // larger and then hangs if the connection isn't closed.
+        req->keep_alive = false;
     }
 
     reset_blob(headers);
@@ -574,12 +675,11 @@ require_request_body_web(request_t * req)
 {
     require_request_head_web(req);
 
-    //log_var_blob(req->request_body);
+    //debug_blob(req->request_body);
 
     if (req->request_content_length > req->request_body->size) {
-        // XXX untested
         info_log("request content length larger than intial read");
-        write_fd_blob(req->request_body, req->fd);
+        read_file_fu(req->fd, req->request_body);
     }
 
     return 0;
@@ -591,7 +691,7 @@ query_params(request_t * req, endpoint_t * ep)
     param_t * params = ep->params;
     size_t n_params = ep->n_params;;
 
-    //log_var_blob(req->query);
+    //debug_blob(req->query);
 
     return urldecode_params(req->query, params, n_params);
 }
@@ -604,10 +704,11 @@ post_params(request_t * req, endpoint_t * ep)
 
     assert(req->method == post_method);
 
-    require_request_body_web(req);
+    require_request_head_web(req);
 
     assert(req->request_content_type == urlencoded_content_type);
 
+    require_request_body_web(req);
     return urldecode_params(req->request_body, params, n_params);
 }
 
@@ -640,11 +741,19 @@ add_response_headers(request_t *req)
 
     if (req->content_type != none_content_type) {
         header(t, res_web.content_type, blob_content_type(req->content_type));
-        u64_header(t, res_web.content_length, (u64)req->body->size);
+        if (req->content_length > 0) {
+            u64_header(t, res_web.content_length, req->content_length);
+        }
+        else {
+            u64_header(t, res_web.content_length, (u64)req->body->size);
+        }
     }
 
     if (req->cache_control == STATIC_ASSET_CACHE_CONTROL) {
         header(t, res_web.cache_control, res_web.static_asset_cache_control);
+    }
+    else if (req->cache_control == USER_FILE_CACHE_CONTROL) {
+        header(t, res_web.cache_control, res_web.user_file_cache_control);
     }
     else {
         header(t, res_web.cache_control, res_web.no_store);
@@ -664,6 +773,17 @@ ok_response(request_t * req, content_type_t type)
 {
     req->content_type = type;
     req->status = ok_http_status;
+
+    return 0;
+}
+
+int
+created_response(request_t * req, content_type_t type, blob_t * location)
+{
+    req->content_type = type;
+    req->status = created_http_status;
+
+    header(req->head, res_web.location, location);
 
     return 0;
 }
@@ -783,7 +903,67 @@ not_found_handler(endpoint_t * ep, request_t * req)
 }
 
 int
-redirect_params_endpoint(request_t * req, endpoint_t * ep, param_t * params, size_t n_params)
+payload_too_large_response(request_t * req)
+{
+    error_response(req, payload_too_large_http_status, res_web.payload_too_large);
+
+    return 0;
+}
+
+int
+file_response(request_t * req, const blob_t * dir, const blob_t * path, s64 user_id)
+{
+    blob_t * file_path = tmp_blob();
+    vadd_blob(file_path, dir, path);
+
+    //debug_blob(file_path);
+
+    int fd = open_read_file_fu(file_path);
+    if (fd == -1) {
+        not_found_response(req);
+        return log_errno("open");
+    }
+
+    //debug_s64(fd);
+
+    struct stat st;
+    if (fstat(fd, &st) == -1) {
+        internal_server_error_response(req);
+        return log_errno("fstat");
+    }
+
+    size_t len = st.st_size;
+
+    //debug_s64(len);
+
+    // TODO(jason): need to look at the actual data for content type
+    ok_response(req, content_type_for_path(file_path));
+    // TODO(jason): not sure if all file responses should be cacheable
+    req->cache_control = user_id  ? USER_FILE_CACHE_CONTROL : STATIC_ASSET_CACHE_CONTROL;
+    req->content_length = len;
+    add_response_headers(req);
+
+    const blob_t * status = blob_http_status(req->status);
+
+    if (write_file_fu(req->fd, status) == -1) {
+        internal_server_error_response(req);
+        return log_errno("write_file_fu status");
+    }
+
+    if (write_file_fu(req->fd, req->head) == -1) {
+        internal_server_error_response(req);
+        return log_errno("write_file_fu head");
+    }
+
+    if (copy_file_fu(req->fd, fd, len) == -1) {
+        return log_errno("copy_file_fu");
+    }
+
+    return len;
+}
+
+int
+redirect_params_endpoint(request_t * req, const endpoint_t * ep, param_t * params, size_t n_params)
 {
     blob_t * url = tmp_blob();
     add_blob(url, ep->path);
@@ -792,10 +972,20 @@ redirect_params_endpoint(request_t * req, endpoint_t * ep, param_t * params, siz
     return redirect_web(req, url);
 }
 
+int
+url_field_endpoint(blob_t * url, endpoint_t * ep, field_t * field, blob_t * value)
+{
+    add_blob(url, ep->path);
+    write_blob(url, "?", 1);
+    urlencode_field(url, field, value);
+
+    return 0;
+}
+
 // NOTE(jason): this is probably fine in most cases as long as it's ok for dest
 // to have extra params and it doesn't matter if they're in the url
 int
-redirect_endpoint(request_t * req, endpoint_t * dest, endpoint_t * src)
+redirect_endpoint(request_t * req, const endpoint_t * dest, endpoint_t * src)
 {
     return src != NULL
         ? redirect_params_endpoint(req, dest, src->params, src->n_params)
@@ -886,7 +1076,11 @@ require_session_web(request_t * req)
     if (valid_blob(req->session_cookie)) {
         sqlite3_stmt * stmt;
 
-        assert_prepare_db(db, &stmt, "select session_id, u.user_id, u.name from session s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()");
+        if (prepare_db(db, &stmt, B("select session_id, u.user_id, u.name from session s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()"))) {
+            internal_server_error_response(req);
+            return -1;
+        }
+
         text_bind_db(stmt, 1, req->session_cookie);
 
         if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -899,7 +1093,10 @@ require_session_web(request_t * req)
             log_var_blob(req->user_name);
         }
 
-        finalize_db(stmt);
+        if (finalize_db(stmt) != SQLITE_OK) {
+            internal_server_error_response(req);
+            return -1;
+        }
 
         // update last access time?  I don't think it matters and there should
         // just be a max time session expiration
@@ -913,13 +1110,18 @@ require_session_web(request_t * req)
     add_random_blob(cookie, 16);
 
     log_var_blob(cookie);
+
     sqlite3_stmt * stmt;
-    assert_prepare_db(db, &stmt, "insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)");
+    if (prepare_db(db, &stmt, B("insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
+        internal_server_error_response(req);
+        return -1;
+    }
     s64_bind_db(stmt, 1, new_id);
     s64_bind_db(stmt, 2, COOKIE_EXPIRES_WEB);
     text_bind_db(stmt, 3, cookie);
     sqlite3_step(stmt);
     if (finalize_db(stmt)) {
+        internal_server_error_response(req);
         return -1;
     }
 
@@ -938,7 +1140,7 @@ require_session_web(request_t * req)
 }
 
 int
-require_user_web(request_t * req, endpoint_t * auth)
+require_user_web(request_t * req, const endpoint_t * auth)
 {
     if (require_session_web(req)) return -1;
 
@@ -946,22 +1148,23 @@ require_user_web(request_t * req, endpoint_t * auth)
 
     if (req->user_id) return 0;
 
-    // TODO(jason): is doing assert here ok since it probably means things are
-    // just fucked if this fails or during dev and the sql is wrong
-    // alternatively, have a standard fail macro that returns a 500 generic
-    // error (fail whale)
     sqlite3_stmt * stmt;
-    assert_prepare_db(db, &stmt, "update session set redirect_url = ?, modified = unixepoch() where session_id = ? returning redirect_url");
+    if (prepare_db(db, &stmt, B("update session set redirect_url = ?, modified = unixepoch() where session_id = ?"))) {
+        internal_server_error_response(req);
+        return -1;
+    }
+
+    log_var_s64(req->session_id);
+
     text_bind_db(stmt, 1, req->uri);
     s64_bind_db(stmt, 2, req->session_id);
-    if (sqlite3_step(stmt) != SQLITE_ROW) {
+    sqlite3_step(stmt);
+    if (finalize_db(stmt)) {
         internal_server_error_response(req);
     }
     else {
         redirect_endpoint(req, auth, NULL);
     }
-
-    finalize_db(stmt);
 
     return 1;
 }
@@ -974,32 +1177,79 @@ res_handler(endpoint_t * ep, request_t * req)
 {
     UNUSED(ep);
 
-    blob_t * file_path = local_blob(1024);
-    vadd_blob(file_path, res_dir_web, req->path);
+    return file_response(req, res_dir_web, req->path, 0);
+}
 
-    char * path = cstr_blob(file_path);
+// TODO(jason): this should probably require a user by default, but would
+// probably have to configure a login url
+int
+files_upload_handler(endpoint_t * ep, request_t * req)
+{
+    UNUSED(ep);
 
-    log_var_cstr(path);
+    if (require_user_web(req, login_endpoint_web)) return -1;
 
-    int fd = open(path, O_RDONLY);
-    if (fd == -1) {
-        log_errno("open path");
+    // TODO(jason): need the content type before checking length.  larger for
+    // videos and smaller for images
+    if (req->request_content_length > MAX_SIZE_FILE_UPLOAD) {
+        payload_too_large_response(req);
         return -1;
     }
 
-    // TODO(jason): read the full file.  all resources should be loaded
-    // into memory
-    const size_t max_data_size = 65536;
-    u8 data[max_data_size];
-    ssize_t size = read(fd, data, max_data_size);
-    if (size != -1) {
-        ok_response(req, content_type_for_path(path));
-        req->cache_control = STATIC_ASSET_CACHE_CONTROL;
+    // should check user permissions before sending 100 continue
+    if (req->expect_continue) {
+        // TODO(jason): what to do if this write fails?
+        if (write_file_fu(req->fd, http_status.expect_continue) == -1) {
+            // NOTE(jason): will this even work if it's failed.  probably not
+            // as the only real failure scenario is the socket won't write.
+            internal_server_error_response(req);
+            return -1;
+        }
+        //check for read available on req->fd
 
-        write_blob(req->body, data, size);
+        //put something in a db table with user who uploaded, size, type, etc
     }
 
-    return 0;
+    blob_t * file_key = local_blob(32);
+    fill_random_blob(file_key);
+
+    blob_t * path = local_blob(255);
+    add_blob(path, upload_dir_web);
+    add_blob(path, file_key);
+
+    // TODO(jason): switch to storing the files with a SHA256 or something
+    // filename to avoid duplicate uploads.
+    // could potentially avoid uploads if the digest header is used with
+    // requests or some other method to avoid even uploading dupes.
+    if (write_prefix_file_fu(path, req->request_body, req->fd, req->request_content_length) == -1) {
+        internal_server_error_response(req);
+        return -1;
+    }
+
+    blob_t * location = tmp_blob();
+    url_field_endpoint(location, endpoints.files, fields.file_key, file_key);
+
+    return created_response(req, binary_content_type, location);
+}
+
+int
+files_handler(endpoint_t * ep, request_t * req)
+{
+    if (require_user_web(req, login_endpoint_web)) return -1;
+
+    if (query_params(req, ep) == -1) {
+        debug("query_params");
+        return -1;
+    }
+
+    param_t * file_key = param_endpoint(ep, file_key_id_field);
+    if (empty_blob(file_key->value)) {
+        debug("empty param");
+        internal_server_error_response(req);
+        return -1;
+    }
+
+    return file_response(req, upload_dir_web, file_key->value, req->user_id);
 }
 
 int
@@ -1017,7 +1267,7 @@ handle_request(request_t *req)
     // NOTE(jason): read in the request line, headers, part of body.  any body
     // will be copied to req->request_body and handlers can read the rest of
     // the body if necessary.
-    ssize_t n = write_fd_blob(input, req->fd);
+    ssize_t n = read_file_fu(req->fd, input);
     if (n == -1) {
         log_errno("read request head");
         return -1;
@@ -1065,9 +1315,9 @@ handle_request(request_t *req)
 
     split_blob(req->uri, '?', req->path, req->query);
 
-    log_blob(req->uri, "request uri");
-    //log_text(req->path, "request path");
-    //log_text(req->query, "request query");
+    log_var_blob(req->uri);
+    //log_var_blob(req->path);
+    //log_var_blob(req->query);
 
     // NOTE(jason): scan to the end of the line which should end in
     // "HTTP/1.XCRLF" which we don't care about.  Doesn't matter as long as it
@@ -1101,11 +1351,17 @@ handle_request(request_t *req)
     // That way no time is wasted parsing headers, etc for a url that doesn't
     // even exist
 
-    route_endpoint(req);
+    if (route_endpoint(req) > 0) {
+        // the handler already wrote the full response
+
+        elapsed_log(start, "request-time");
+
+        return 0;
+    }
 
 respond:
     // no response default to 404
-    if (req->status == 0) {
+    if (!req->status) {
         not_found_response(req);
     }
 
@@ -1119,6 +1375,8 @@ respond:
 
     const blob_t * status = blob_http_status(req->status);
 
+    //log_var_blob(status);
+
     // write headers and body that should be in request_t
     // TODO(jason): maybe this should be done in the caller?
     iov[0].iov_base = status->data;
@@ -1130,6 +1388,10 @@ respond:
     result = writev(req->fd, iov, n_iov);
 
     if (result == -1) log_errno("write response");
+
+    if (!sqlite3_get_autocommit(db)) {
+        debug("sqlite transaction open");
+    }
 
     elapsed_log(start, "request-time");
 

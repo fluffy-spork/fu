@@ -49,6 +49,14 @@ open_db(blob_t * file, db_t ** db)
         return -1;
     }
 
+    // NOTE(jason): somewhat shockingly, there isn't a default timeout.  this
+    // caused a bunch of wasted time trying to figure out a concurrency issue
+    // that was 3 inserts.  mistaking SQLITE_LOCKED for SQLITE_BUSY didn't
+    // help:(  The message is "database is locked" for SQLITE_BUSY which seems
+    // misleading.  1 second easily fixes the problem.
+    // the time is in "milliseconds" not seconds as I initially thought.
+    sqlite3_busy_timeout(*db, 1000);
+
     return 0;
 }
 
@@ -79,6 +87,8 @@ prepare_db(db_t * db, sqlite3_stmt **stmt, const blob_t * sql)
     assert(db != NULL);
     assert(sql != NULL);
 
+    //debug_blob(sql);
+
     if (sqlite3_prepare_v2(db, cstr_blob(sql), -1, stmt, NULL)) {
         log_error_db(db, "sqlite3_prepare_v2");
         return -1;
@@ -87,11 +97,15 @@ prepare_db(db_t * db, sqlite3_stmt **stmt, const blob_t * sql)
     return 0;
 }
 
+//#define finalize_db(stmt) _finalize_db(stmt, __FILE__, __LINE__)
+//_finalize_db(sqlite3_stmt * stmt, const char * file, s64 line)
+
 int
 finalize_db(sqlite3_stmt * stmt)
 {
     int result = sqlite3_finalize(stmt);
     if (result) {
+        //debugf("finalize failed: %ld: %s", line, file);
         log_error_db(db, "sqlite3_finalize");
     }
 
@@ -153,11 +167,53 @@ blob_db(sqlite3_stmt * stmt, int index, blob_t * value)
 }
 
 int
+blob_pragma_db(db_t * db, const blob_t * pragma, blob_t * value)
+{
+    blob_t * sql = tmp_blob();
+
+    add_blob(sql, B("pragma "));
+    add_blob(sql, pragma);
+
+    sqlite3_stmt * stmt;
+    if (prepare_db(db, &stmt, sql)) {
+        return -1;
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        blob_db(stmt, 0, value);
+    }
+
+    return sqlite3_finalize(stmt);
+}
+
+int
+set_blob_pragma_db(db_t * db, const blob_t * pragma, const blob_t * value)
+{
+    blob_t * sql = tmp_blob();
+
+    add_blob(sql, B("pragma "));
+    add_blob(sql, pragma);
+    write_blob(sql, "=", 1);
+    add_blob(sql, value);
+
+    sqlite3_stmt * stmt;
+    if (prepare_db(db, &stmt, sql)) {
+        return -1;
+    }
+
+    if (sqlite3_step(stmt) != SQLITE_DONE) {
+        log_error_db(db, "sqlite3_step");
+    }
+
+    return sqlite3_finalize(stmt);
+}
+
+int
 set_s64_pragma_db(db_t * db, blob_t * pragma, s64 value)
 {
     blob_t * sql = tmp_blob();
 
-    add_blob(sql, wrap_blob("pragma "));
+    add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
     write_blob(sql, "=", 1);
     add_s64_blob(sql, value);
@@ -182,7 +238,7 @@ s64_pragma_db(db_t * db, blob_t * pragma)
 {
     blob_t * sql = tmp_blob();
 
-    add_blob(sql, wrap_blob("pragma "));
+    add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
 
     sqlite3_stmt * stmt;
@@ -204,25 +260,31 @@ s64_pragma_db(db_t * db, blob_t * pragma)
 s32
 application_id_db(db_t * db)
 {
-    return (s32)s64_pragma_db(db, wrap_blob("application_id"));
+    return (s32)s64_pragma_db(db, B("application_id"));
 }
 
 int
 set_application_id_db(db_t * db, s32 id)
 {
-    return set_s64_pragma_db(db, wrap_blob("application_id"), id);
+    return set_s64_pragma_db(db, B("application_id"), id);
 }
 
 s32
 user_version_db(db_t * db)
 {
-    return (s32)s64_pragma_db(db, wrap_blob("user_version"));
+    return (s32)s64_pragma_db(db, B("user_version"));
 }
 
 int
 set_user_version_db(db_t * db, s32 version)
 {
-    return set_s64_pragma_db(db, wrap_blob("user_version"), version);
+    return set_s64_pragma_db(db, B("user_version"), version);
+}
+
+int
+set_wal_mode_db(db_t * db)
+{
+    return set_blob_pragma_db(db, B("journal_mode"), B("wal"));
 }
 
 int

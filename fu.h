@@ -63,6 +63,8 @@ typedef enum {
     do { fprintf(stderr, "D   %s:%s:%d %s\n", __FILE__, __func__, __LINE__, msg); } while (0)
 #endif
 
+#define debug_s64(var) debugf("%s: %ld", #var, (s64)var);
+
 bool
 dev_mode()
 {
@@ -155,6 +157,18 @@ min_s16(s16 a, s16 b)
 
 s16
 max_s16(s16 a, s16 b)
+{
+    return a > b ? a : b;
+}
+
+s32
+min_s32(s32 a, s32 b)
+{
+    return a < b ? a : b;
+}
+
+s32
+max_s32(s32 a, s32 b)
 {
     return a > b ? a : b;
 }

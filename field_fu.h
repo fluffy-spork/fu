@@ -8,9 +8,10 @@
     E(unknown, "unknown", var) \
     E(text, "text", var) \
     E(integer, "integer", var) \
+    E(hidden, "hidden", var) \
+    E(file, "file", var) \
     E(timestamp, "timestamp", var) \
     E(password, "password", var) \
-    E(hidden, "hidden", var) \
 
 ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 
@@ -43,8 +44,8 @@ typedef struct {
     blob_t * name;
     blob_t * label;
     autocomplete_t  autocomplete;
-    s16 min_size;
-    s16 max_size;
+    s32 min_size;
+    s32 max_size;
 } field_t;
 
 typedef struct {
@@ -53,8 +54,8 @@ typedef struct {
     blob_t * error;
 } param_t;
 
-u16
-max_size_field_type(field_type_t type, u16 req_size)
+s32
+max_size_field_type(field_type_t type, s32 req_size)
 {
     // verify req_size isn't above max size
     if (req_size) return req_size;
@@ -68,12 +69,12 @@ max_size_field_type(field_type_t type, u16 req_size)
 }
 
 field_t *
-field(u64 id, blob_t * name, blob_t * label, field_type_t type, s16 req_min_size, s16 req_max_size, autocomplete_t autocomplete)
+field(u64 id, blob_t * name, blob_t * label, field_type_t type, s32 req_min_size, s32 req_max_size, autocomplete_t autocomplete)
 {
     field_t * field = malloc(sizeof(field_t));
     if (field) {
-        s16 max_size = max_size_field_type(type, req_max_size);
-        s16 min_size = max_s16(req_min_size, 0);
+        s32 max_size = max_size_field_type(type, req_max_size);
+        s32 min_size = max_s32(req_min_size, 0);
 
         *field = (field_t){
             .id = id,
@@ -105,26 +106,6 @@ init_fields()
     FIELD_TABLE(EXTRACT_AS_INIT_FIELD)
 
     fields.n_list = N_FIELDS;
-}
-
-int
-sql_type_field(blob_t * sql, field_t * field)
-{
-    if (text_field_type == field->type) {
-        add_blob(sql, B("text"));
-    }
-    else if (integer_field_type == field->type) {
-        add_blob(sql, B("integer"));
-    }
-    else if (timestamp_field_type == field->type) {
-        add_blob(sql, B("integer"));
-    }
-    else {
-        assert(!"uknown field type");
-        return -1;
-    }
-
-    return 0;
 }
 
 #define log_var_field(field) \
