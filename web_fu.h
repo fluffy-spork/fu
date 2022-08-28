@@ -253,6 +253,10 @@ const endpoint_t * login_endpoint_web;
     E(cookie,"cookie", var) \
     E(set_cookie,"set-cookie", var) \
     E(location,"location", var) \
+    E(x_frame_options,"x-frame-options", var) \
+    E(deny_x_frame_options,"DENY", var) \
+    E(content_security_policy,"content-security-policy", var) \
+    E(self_default_content_security_policy,"default-src 'self'", var) \
     E(name_session_cookie,"z", var) \
     E(session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=strict", var) \
     E(method_not_implemented,"method not implemented", var) \
@@ -762,6 +766,11 @@ add_response_headers(request_t *req)
     if (!req->keep_alive) {
         header(t, res_web.connection, res_web.connection_close);
     }
+
+    // NOTE(jason): it's fucking stupid that deny isn't the default and every
+    // request is required to have this.
+    header(t, res_web.x_frame_options, res_web.deny_x_frame_options);
+    header(t, res_web.content_security_policy, res_web.self_default_content_security_policy);
 
     // NOTE(jason): this is the blank line to indicate the headers are over and
     // the body should be next
