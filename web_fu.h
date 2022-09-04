@@ -256,7 +256,7 @@ const endpoint_t * login_endpoint_web;
     E(x_frame_options,"x-frame-options", var) \
     E(deny_x_frame_options,"DENY", var) \
     E(content_security_policy,"content-security-policy", var) \
-    E(self_default_content_security_policy,"default-src 'self'", var) \
+    E(self_default_content_security_policy,"default-src 'self' blob:", var) \
     E(name_session_cookie,"z", var) \
     E(session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=strict", var) \
     E(method_not_implemented,"method not implemented", var) \
