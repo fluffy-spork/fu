@@ -26,12 +26,12 @@ ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 
 ENUM_BLOB(autocomplete, AUTOCOMPLETE_TABLE)
 
-#define EXTRACT_AS_ENUM_FIELD(name, ...) name##_id_field,
+#define EXTRACT_AS_ENUM_FIELD(name, ...) name##_field,
 #define EXTRACT_AS_STRUCT_FIELD(name, ...) field_t * name;
 
 #define EXTRACT_AS_INIT_FIELD(name, label, type, min_size, max_size, autocomplete) \
-    fields.name = field(name##_id_field, const_blob(#name), const_blob(label), type, min_size, max_size, autocomplete); \
-    fields.list[name##_id_field] = fields.name; \
+    fields.name = field(name##_field, const_blob(#name), const_blob(label), type, min_size, max_size, autocomplete); \
+    fields.list[name##_field] = fields.name; \
 
 typedef enum {
     FIELD_TABLE(EXTRACT_AS_ENUM_FIELD)

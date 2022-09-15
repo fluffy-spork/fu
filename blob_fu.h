@@ -186,9 +186,14 @@ void
 trim_tail_blob(blob_t * b)
 {
     size_t new_size = b->size;
-    for (size_t i = b->size -1; i > 0; i--)
+    for (size_t i = b->size - 1; i > 0; i--)
     {
-        if (isspace(b->data[i])) new_size--;
+        if (isspace(b->data[i])) {
+            new_size--;
+        }
+        else {
+            break;
+        }
     }
 
     if (new_size != b->size) b->size = new_size;
@@ -353,6 +358,12 @@ scan_blob(blob_t * dest, const blob_t * src, u8 delim, ssize_t * poffset)
 }
 
 ssize_t
+scan_line_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
+{
+    return scan_blob(dest, src, '\n', poffset);
+}
+
+ssize_t
 skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
 {
     for (ssize_t i = *poffset; i < (ssize_t)b->size; i++) {
@@ -365,7 +376,6 @@ skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
     return -1;
 }
 
-// XXX(jason): untested
 // incorrectly reads full src instead of stopping at max number of digits
 // doesn't skip commas.  should stop at a period
 s64

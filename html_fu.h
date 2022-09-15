@@ -553,7 +553,6 @@ textarea_html(blob_t * html, param_t * param, bool autofocus)
     blob_t * v = param->value;
 
     open_tag_html(html, res_html.textarea);
-    attr_html(html, res_html.id, f->name);
     attr_html(html, res_html.name, f->name);
     attr_html(html, res_html.autocomplete, blob_autocomplete(f->autocomplete));
     if (autofocus) empty_attr_html(html, res_html.autofocus);

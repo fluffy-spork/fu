@@ -306,7 +306,7 @@ exec_s64_db(db_t * db, blob_t * sql, s64 * value)
 }
 
 int
-exec_s64_1p_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1)
+exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1)
 {
     int result;
     sqlite3_stmt * stmt;
@@ -332,7 +332,7 @@ exec_s64_1p_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1)
 // NOTE(jason): all parameters should be text that sqlite will convert or app
 // converts to text first.  at least that's the theory.
 int
-exec_s64_2p_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, blob_t * p2)
+exec_s64_pbb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, blob_t * p2)
 {
     int result;
     sqlite3_stmt * stmt;
@@ -347,6 +347,36 @@ exec_s64_2p_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, blob_t * p2)
     }
 
     result = text_bind_db(stmt, 2, p2);
+    if (result != SQLITE_OK) {
+        finalize_db(stmt);
+        return result;
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        *value = s64_db(stmt, 0);
+    }
+
+    result = finalize_db(stmt);
+
+    return result;
+}
+
+int
+exec_s64_pbi_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, s64 p2)
+{
+    int result;
+    sqlite3_stmt * stmt;
+
+    result = prepare_db(db, &stmt, sql);
+    if (result != SQLITE_OK) return result;
+
+    result = text_bind_db(stmt, 1, p1);
+    if (result != SQLITE_OK) {
+        finalize_db(stmt);
+        return result;
+    }
+
+    result = s64_bind_db(stmt, 2, p2);
     if (result != SQLITE_OK) {
         finalize_db(stmt);
         return result;
@@ -383,7 +413,7 @@ exec_s64_pii_db(db_t * db, blob_t * sql, s64 * value, s64 p1, s64 p2)
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
-        *value = s64_db(stmt, 0);
+        if (value) *value = s64_db(stmt, 0);
     }
 
     result = finalize_db(stmt);

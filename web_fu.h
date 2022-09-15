@@ -294,7 +294,7 @@ percent_decode_blob(blob_t * dest, const blob_t * src)
 
     // while there are more characters to scan and no error
     ssize_t offset = 0;
-    while ((scan_blob(dest, src, '%', &offset)) != -1) {
+    while (scan_blob(dest, src, '%', &offset) != -1) {
         ssize_t remaining = remaining_blob(src, offset);
 
         if (remaining >= 2
@@ -682,7 +682,10 @@ require_request_body_web(request_t * req)
     //debug_blob(req->request_body);
 
     if (req->request_content_length > req->request_body->size) {
-        info_log("request content length larger than intial read");
+        //info_log("request content length larger than intial read");
+        // TODO(jason): this should be better and check that the full
+        // content-length can be read.  although, the general case should be
+        // that it fits in request_body unless it's a file upload
         read_file_fu(req->fd, req->request_body);
     }
 
@@ -1251,7 +1254,7 @@ files_handler(endpoint_t * ep, request_t * req)
         return -1;
     }
 
-    param_t * file_key = param_endpoint(ep, file_key_id_field);
+    param_t * file_key = param_endpoint(ep, file_key_field);
     if (empty_blob(file_key->value)) {
         debug("empty param");
         internal_server_error_response(req);
@@ -1407,14 +1410,81 @@ respond:
     return 0;
 }
 
-#define MAX_CHILDREN_WEB 100
+pid_t
+fork_worker_web(int srv_fd, int (* after_fork_func)())
+{
+    // clear the logs before forking
+    flush_log();
+
+    pid_t pid = fork();
+
+    if (pid != 0) {
+        return pid;
+    }
+
+    // child
+    struct sockaddr_in6 client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+
+    request_t * req = new_request();
+
+    if (!req) {
+        log_errno("new_request");
+        exit(EXIT_FAILURE);
+    }
+
+    // NOTE(jason): callback so application can open db connections,
+    // etc
+    after_fork_func();
+
+    flush_log();
+
+    while (1)
+    {
+        int client_fd = accept(srv_fd, (struct sockaddr *)&client_addr, &client_addr_len);
+        if (client_fd == -1) {
+            log_errno("accept");
+            continue;
+        }
+
+        int result;
+handle_request:
+        req->fd = client_fd;
+
+        // where the magic happens
+        result = handle_request(req);
+
+        bool keep_alive = result != -1 && req->keep_alive;
+
+        // NOTE(jason): overwrite the request data so it can't be used
+        // across requests to different clients.
+        reuse_request(req);
+
+        // write log after request is finished
+        // possibly pass a request trace-id when writing
+        flush_log();
+
+        abort();
+
+        if (keep_alive) {
+            goto handle_request;
+        } else {
+            close(client_fd);
+            req->fd = -1;
+        }
+    }
+
+    return pid;
+}
+
+#define MAX_CHILDREN_WEB 1000
 
 // doesn't return.  calls exit() on failure
 int
 main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* after_fork_func)())
 {
     assert(res_dir != NULL);
-    assert(n_children < MAX_CHILDREN_WEB);
+    assert(n_children <= MAX_CHILDREN_WEB);
 
     // no idea what this should be
     const int backlog = 20;
@@ -1489,13 +1559,20 @@ main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* a
     //log_var_u64(enum_res_web(wrap_blob("service unavailable"), 0)); 
     //log_var_blob(res_web.service_unavailable);
 
-    // clear the logs before forking
-    flush_log();
-
     for (int i = 0; i < n_children; i++)
     {
-        pid_t pid = fork();
+        pid_t pid = fork_worker_web(srv_fd, after_fork_func);
+        if (pid > 0) {
+            pids[i] = pid;
+        }
+        else if (pid == -1) {
+            // this should kill all children before exiting?
+            // atexit callback
+            log_errno("fork_worker_web");
+            exit(EXIT_FAILURE);
+        }
 
+        /*
         if (pid == -1) {
             log_errno("fork");
             exit(EXIT_FAILURE);
@@ -1558,13 +1635,45 @@ handle_request:
                 }
             }
         }
+        */
     }
-
-    UNUSED(pids);
 
     flush_log();
 
-    for (;;) pause();
+    pid_t wpid;
+    int wstatus;
+    while (true) {
+        wpid = waitpid(0, &wstatus, 0);
+        if (wpid == -1) {
+            log_errno("waitpid");
+            continue;
+        }
+
+        if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) {
+            debug("worker exited");
+
+            for (int i = 0; i < n_children; i++) {
+                if (pids[i] == wpid) {
+                    debugf("found pid index: %d", i);
+
+                    pid_t cpid = fork_worker_web(srv_fd, after_fork_func);
+                    if (cpid == -1) {
+                        // TODO(jason): eventually, there will be no more
+                        // workers if this keeps failing to replace.
+                        // not sure what can be done if that's failing
+                        log_errno("fork_worker_web failed to replace worker");
+                    }
+                    else {
+                        debugf("replaced %d with new worker %d", wpid, cpid);
+                    }
+                    pids[i] = cpid;
+
+                    // TODO(jason): potentially iterate and replace any missing
+                    // workers?
+                }
+            }
+        }
+    }
 
     return 0;
 }
