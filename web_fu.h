@@ -1464,7 +1464,7 @@ handle_request:
         // possibly pass a request trace-id when writing
         flush_log();
 
-        abort();
+        //abort();
 
         if (keep_alive) {
             goto handle_request;
