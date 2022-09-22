@@ -27,28 +27,29 @@ typedef struct {
     u8 * data;
 } blob_t;
 
-// NOTE(jason): if local_blob or wrap_blob and related are used within a block
-// it's important not to set it's pointer to an outer scope variable or it will
-// overwrite, confusingly.  This will not do what you want, but will compile
-// and possibly appear to work if there is only 1 in the function scope.
-//
-// blob_t * b;
-// if (true) {
-//     b = wrap_blob("foo");
-// }
-#define local_blob(size) _init_local_blob(&(blob_t){ .data = alloca(size) }, size, 0)
-#define tmp_blob() local_blob(4096)
+// GCC specific syntax for multiple statements as an expression
+#define local_blob(capacity) \
+    ({ blob_t * b = alloca(sizeof(blob_t)); u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); })
 
-#define wrap_blob(cstr) _init_local_blob(&(blob_t){ .data = (u8 *)cstr }, strlen(cstr), -1)
+// NOTE(jason): this version is bad because alloca isn't supposed to be used in
+// function calls due to how alloca is typically implemented
+//#define local_blob(capacity) _init_local_blob(alloca(sizeof(blob_t)), alloca(capacity), capacity, 0)
+
 #define B(cstr) wrap_blob(cstr)
+// GCC specific syntax for multiple statements as an expression
+#define wrap_blob(cstr) \
+    ({ blob_t * b = alloca(sizeof(blob_t)); _init_local_blob(b, (u8 *)cstr, strlen(cstr), -1); })
 
 #define cstr_blob(blob) _cstr_blob(blob, alloca(blob->size + 1), blob->size + 1)
 
 blob_t *
-_init_local_blob(blob_t * b, size_t capacity, ssize_t size)
+_init_local_blob(blob_t * b, u8 * data, size_t capacity, ssize_t size)
 {
     b->capacity = capacity;
     b->size = size == -1 ? capacity : (size_t)size;
+    b->data = data;
+    b->error = 0;
+    // this isn't true for local_blob
     b->constant = true;
 
     return b;
@@ -376,8 +377,7 @@ skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
     return -1;
 }
 
-// incorrectly reads full src instead of stopping at max number of digits
-// doesn't skip commas.  should stop at a period
+// should take an offset pointer and set it to after the number
 s64
 s64_blob(const blob_t * src, ssize_t offset)
 {
@@ -390,7 +390,8 @@ s64_blob(const blob_t * src, ssize_t offset)
         offset++;
     }
 
-    for (size_t i = offset; i < src->size; i++) {
+    size_t imax = min_size(src->size, 19); // 19
+    for (size_t i = offset; i < imax; i++) {
         u8 c = src->data[i];
 
         if (c >= '0' && c <= '9') {
@@ -406,6 +407,9 @@ s64_blob(const blob_t * src, ssize_t offset)
         : total;
 }
 
+/*
+ * this seems problematic for overflow detection and I'm not sure we ever want
+ * to be using u64 anyway
 u64
 u64_blob(const blob_t * src, ssize_t offset)
 {
@@ -425,6 +429,7 @@ u64_blob(const blob_t * src, ssize_t offset)
 
     return total;
 }
+*/
 
 
 // TODO(jason): maybe this should be different like cstr_blob() or something

@@ -169,7 +169,7 @@ blob_db(sqlite3_stmt * stmt, int index, blob_t * value)
 int
 blob_pragma_db(db_t * db, const blob_t * pragma, blob_t * value)
 {
-    blob_t * sql = tmp_blob();
+    blob_t * sql = local_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -189,7 +189,7 @@ blob_pragma_db(db_t * db, const blob_t * pragma, blob_t * value)
 int
 set_blob_pragma_db(db_t * db, const blob_t * pragma, const blob_t * value)
 {
-    blob_t * sql = tmp_blob();
+    blob_t * sql = local_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -211,7 +211,7 @@ set_blob_pragma_db(db_t * db, const blob_t * pragma, const blob_t * value)
 int
 set_s64_pragma_db(db_t * db, blob_t * pragma, s64 value)
 {
-    blob_t * sql = tmp_blob();
+    blob_t * sql = local_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -236,7 +236,7 @@ set_s64_pragma_db(db_t * db, blob_t * pragma, s64 value)
 s64
 s64_pragma_db(db_t * db, blob_t * pragma)
 {
-    blob_t * sql = tmp_blob();
+    blob_t * sql = local_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -558,7 +558,7 @@ exec_blob_i1b2_db(db_t * db, blob_t * sql, blob_t * value, s64 i1, blob_t * b1, 
 int
 insert_params(db_t * db, blob_t * table, s64 * id, s64 user_id, param_t * params, int n_params)
 {
-    blob_t * sql = tmp_blob();
+    blob_t * sql = local_blob(255);
 
     add_blob(sql, B("insert into "));
     add_blob(sql, table);
@@ -614,7 +614,7 @@ insert_params(db_t * db, blob_t * table, s64 * id, s64 user_id, param_t * params
 int
 update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t * id_field, s64 id)
 {
-    blob_t * sql = tmp_blob();
+    blob_t * sql = local_blob(255);
 
     add_blob(sql, B("update "));
     add_blob(sql, table);
@@ -683,7 +683,7 @@ update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t
 int
 delete_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t * id_field, s64 id)
 {
-    blob_t * sql = tmp_blob();
+    blob_t * sql = local_blob(255);
 
     add_blob(sql, B("delete from "));
     add_blob(sql, table);
@@ -748,48 +748,18 @@ struct row_handler_db_s {
     int (* func)(row_handler_db_t * handler);
     sqlite3_stmt * stmt;
     s64 n_rows;
+
+    // TODO(jason): getting kind of wonky with these extra values to use
+    // outside the callback.  probably should be including it all in data instead
     s64 last_id;
+    s64 last_user_id;
+    // TODO(jason): should outputs be passed as parameters to the row_handler?
+    param_t * outputs;
+    int n_outputs;
     void * data;
 };
 
-// run the query and calling callback for each row.  If there are no rows, the
-// callback is called with a NULL sqlite3_stmt
-int
-rows_pii_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, s64 p1, s64 p2)
-{
-    int result;
-    sqlite3_stmt * stmt;
-
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = s64_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    if (sqlite3_bind_parameter_count(stmt) > 1) {
-        result = s64_bind_db(stmt, 2, p2);
-        if (result != SQLITE_OK) {
-            finalize_db(stmt);
-            return result;
-        }
-    }
-
-    handler->n_rows = 0;
-    handler->stmt = stmt;
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        handler->func(handler);
-        handler->n_rows++;
-    }
-
-    handler->stmt = NULL;
-    result = finalize_db(stmt);
-
-    return result;
-}
-
+// NOTE(jason): sql should use field->id for bind parameters with "?12", etc
 int
 rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_t * params, int n_params)
 {
@@ -801,6 +771,7 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
 
     for (int i = 0; i < n_params; i++) {
         param_t * p = &params[i];
+        //debug_s64(p->field->id);
         result = text_bind_db(stmt, p->field->id, p->value);
         if (result != SQLITE_OK) {
             finalize_db(stmt);
@@ -808,15 +779,43 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
         }
     }
 
+    int n_outputs = sqlite3_column_count(stmt);
+    //param_t * outputs = alloca(n_outputs * sizeof(param_t));
+    param_t outputs[n_outputs];
+    for (int i = 0; i < n_outputs; i++) {
+        param_t * p = &outputs[i];
+        const char * column = sqlite3_column_name(stmt, i);
+        field_t * f = by_name_field(B(column));
+        if (!f) {
+            debugf("unknown field name: %s", column);
+            continue;
+        }
+        //debug_blob(f->name);
+
+        p->field = f;
+        p->value = local_blob(f->max_size);
+        p->error = local_blob(128);
+    }
+
+    handler->outputs = outputs;
+    handler->n_outputs = n_outputs;
     handler->n_rows = 0;
     handler->stmt = stmt;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
+        for (int i = 0; i < n_outputs; i++) {
+            reset_blob(outputs[i].value);
+            blob_db(stmt, i, outputs[i].value);
+        }
+
         handler->func(handler);
         handler->n_rows++;
     }
 
     handler->stmt = NULL;
     result = finalize_db(stmt);
+
+    handler->outputs = NULL;
+    handler->n_outputs = 0;
 
     return result;
 }

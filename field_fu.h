@@ -18,13 +18,13 @@ ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 // NOTE(jason): still not sure if autocomplete should be part of the field.
 // seems like it might be sitation/usage dependent
 // is autocomplete desirable for stuff other than address and payment info?
-#define AUTOCOMPLETE_TABLE(var, E) \
+#define AUTOCOMPLETE_ENUM(var, E) \
     E(off, "off", var) \
     E(on, "on", var) \
     E(email, "email", var) \
     E(name, "name", var) \
 
-ENUM_BLOB(autocomplete, AUTOCOMPLETE_TABLE)
+ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
 
 #define EXTRACT_AS_ENUM_FIELD(name, ...) name##_field,
 #define EXTRACT_AS_STRUCT_FIELD(name, ...) field_t * name;
@@ -52,7 +52,16 @@ typedef struct {
     field_t * field;
     blob_t * value;
     blob_t * error;
-} param_t;
+} param_t; // rename field_value_t?
+
+// NOTE(jason): I think this usage of local_blob which uses alloca is ok.
+// It shouldn't have issues with pointers in blocks since it isn't a pointer.
+// we'll see.
+#define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
+
+#define log_param(p) \
+    log_var_field(p->field); \
+    log_var_blob(p->value); \
 
 s32
 max_size_field_type(field_type_t type, s32 req_size)
@@ -61,6 +70,8 @@ max_size_field_type(field_type_t type, s32 req_size)
     if (req_size) return req_size;
 
     switch (type) {
+        case timestamp_field_type:
+            return 20;
         case integer_field_type:
             return 19 + 1 + 6; // 1 for '-', 6 for separators
         default:
@@ -108,10 +119,48 @@ init_fields()
     fields.n_list = N_FIELDS;
 }
 
+field_t *
+by_name_field(const blob_t * name)
+{
+    for (size_t i = 0; i < fields.n_list; i++) {
+        if (equal_blob(fields.list[i]->name, name)) {
+            return fields.list[i];
+        }
+    }
+
+    return NULL;
+}
+
 #define log_var_field(field) \
     log_var_u64(field->id); \
     log_var_blob(field->name); \
     log_var_blob(field->label); \
     log_var_u64(field->type); \
     log_var_u64(field->max_size); \
+
+param_t *
+by_id_param(param_t * params, int n_params, field_id_t field_id)
+{
+    for (int i = 0; i < n_params; i++) {
+        param_t * p = &params[i];
+        if (p->field->id == field_id) {
+            return p;
+        }
+    }
+
+    return NULL;
+}
+
+blob_t *
+value_by_id_param(param_t * params, int n_params, field_id_t field_id)
+{
+    for (int i = 0; i < n_params; i++) {
+        param_t * p = &params[i];
+        if (p->field->id == field_id) {
+            return p->value;
+        }
+    }
+
+    return NULL;
+}
 

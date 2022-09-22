@@ -64,6 +64,7 @@ typedef enum {
 #endif
 
 #define debug_s64(var) debugf("%s: %ld", #var, (s64)var);
+#define debug_u64(var) debugf("%s: %lu", #var, (u64)var);
 
 bool
 dev_mode()

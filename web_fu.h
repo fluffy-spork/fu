@@ -35,11 +35,6 @@ ENUM_BLOB(method, METHOD)
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
-#define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
-#define log_param(p) \
-    log_var_field(p->field); \
-    log_var_blob(p->value); \
-
 typedef enum {
     NO_STORE_CACHE_CONTROL,
     STATIC_ASSET_CACHE_CONTROL,
@@ -82,7 +77,7 @@ typedef struct {
     blob_t * uri;
 
     content_type_t request_content_type;
-    u64 request_content_length;
+    size_t request_content_length;
     bool keep_alive;
     bool expect_continue;
 
@@ -379,8 +374,8 @@ urldecode_params(const blob_t * input, param_t * params, size_t n_params)
     assert(params != NULL);
     assert(n_params > 0);
 
-    blob_t * name = tmp_blob();
-    blob_t * urlencoded = tmp_blob();
+    blob_t * name = local_blob(255);
+    blob_t * urlencoded = local_blob(1024);
 
     int count = 0;
 
@@ -618,8 +613,8 @@ require_request_head_web(request_t * req)
 
     //log_var_blob(headers);
 
-    blob_t * name = tmp_blob();
-    blob_t * value = tmp_blob();
+    blob_t * name = local_blob(255);
+    blob_t * value = local_blob(1024);
 
     ssize_t offset = 0;
 
@@ -633,15 +628,15 @@ require_request_head_web(request_t * req)
             req->request_content_type = enum_content_type(value, 0);
         }
         else if (case_equal_blob(res_web.content_length, name)) {
-            req->request_content_length = u64_blob(value, 0);
+            req->request_content_length = s64_blob(value, 0);
         }
         else if (case_equal_blob(res_web.connection, name)) {
             req->keep_alive = equal_blob(value, res_web.connection_keep_alive)
                 || !equal_blob(value, res_web.connection_close);
         }
         else if (case_equal_blob(res_web.cookie, name)) {
-            blob_t * name_cookie = tmp_blob();
-            blob_t * value_cookie = tmp_blob();
+            blob_t * name_cookie = local_blob(255);
+            blob_t * value_cookie = local_blob(255);
 
             ssize_t coff = 0;
             while (scan_blob(name_cookie, value, '=', &coff) != -1) {
@@ -925,10 +920,8 @@ payload_too_large_response(request_t * req)
 int
 file_response(request_t * req, const blob_t * dir, const blob_t * path, s64 user_id)
 {
-    blob_t * file_path = tmp_blob();
+    blob_t * file_path = local_blob(255);
     vadd_blob(file_path, dir, path);
-
-    //debug_blob(file_path);
 
     int fd = open_read_file_fu(file_path);
     if (fd == -1) {
@@ -977,7 +970,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, s64 user
 int
 redirect_params_endpoint(request_t * req, const endpoint_t * ep, param_t * params, size_t n_params)
 {
-    blob_t * url = tmp_blob();
+    blob_t * url = local_blob(255);
     add_blob(url, ep->path);
     urlencode_params(url, params, n_params);
 
@@ -1038,14 +1031,7 @@ route_endpoint(request_t * req)
 param_t *
 param_endpoint(endpoint_t * ep, field_id_t field_id)
 {
-    for (int i = 0; i < ep->n_params; i++) {
-        param_t * p = &ep->params[i];
-        if (p->field->id == field_id) {
-            return p;
-        }
-    }
-
-    return NULL;
+    return by_id_param(ep->params, ep->n_params, field_id);
 }
 
 // Sets the param value if it's empty
@@ -1139,7 +1125,7 @@ require_session_web(request_t * req)
 
     req->session_id = new_id;
 
-    blob_t * c = tmp_blob();
+    blob_t * c = local_blob(255);
 
     add_blob(c, res_web.name_session_cookie);
     write_blob(c, "=", 1);
@@ -1238,7 +1224,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         return -1;
     }
 
-    blob_t * location = tmp_blob();
+    blob_t * location = local_blob(255);
     url_field_endpoint(location, endpoints.files, fields.file_key, file_key);
 
     return created_response(req, binary_content_type, location);
@@ -1274,7 +1260,7 @@ handle_request(request_t *req)
     // TODO(jason): adjust this size so the entire request is read one shot in
     // non-file upload cases.
     blob_t * input = local_blob(16384);
-    blob_t * tmp = tmp_blob();
+    blob_t * tmp = local_blob(1024);
 
     // NOTE(jason): read in the request line, headers, part of body.  any body
     // will be copied to req->request_body and handlers can read the rest of
@@ -1464,8 +1450,6 @@ handle_request:
         // possibly pass a request trace-id when writing
         flush_log();
 
-        //abort();
-
         if (keep_alive) {
             goto handle_request;
         } else {
@@ -1571,71 +1555,6 @@ main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* a
             log_errno("fork_worker_web");
             exit(EXIT_FAILURE);
         }
-
-        /*
-        if (pid == -1) {
-            log_errno("fork");
-            exit(EXIT_FAILURE);
-        }
-        else if (pid > 0)
-        {
-            // parent
-            pids[i] = pid;
-        }
-        else
-        {
-            // child
-            struct sockaddr_in6 client_addr;
-            socklen_t client_addr_len = sizeof(client_addr);
-            // ??? signal(SIGINT, SIG_IGN);
-
-            request_t * req = new_request();
-
-            if (!req) {
-                log_errno("new_request");
-                exit(EXIT_FAILURE);
-            }
-
-            // NOTE(jason): callback so application can open db connections,
-            // etc
-            after_fork_func();
-
-            flush_log();
-
-            while (1)
-            {
-                int client_fd = accept(srv_fd, (struct sockaddr *)&client_addr, &client_addr_len);
-                if (client_fd == -1) {
-                    log_errno("accept");
-                    continue;
-                }
-
-                int result;
-handle_request:
-                req->fd = client_fd;
-
-                // where the magic happens
-                result = handle_request(req);
-
-                bool keep_alive = result != -1 && req->keep_alive;
-
-                // NOTE(jason): overwrite the request data so it can't be used
-                // across requests to different clients.
-                reuse_request(req);
-
-                // write log after request is finished
-                // possibly pass a request trace-id when writing
-                flush_log();
-
-                if (keep_alive) {
-                    goto handle_request;
-                } else {
-                    close(client_fd);
-                    req->fd = -1;
-                }
-            }
-        }
-        */
     }
 
     flush_log();
@@ -1651,6 +1570,14 @@ handle_request:
 
         if (WIFEXITED(wstatus) || WIFSIGNALED(wstatus)) {
             debug("worker exited");
+
+            if (WIFEXITED(wstatus)) {
+                debugf("exit status: %d", WEXITSTATUS(wstatus));
+            }
+
+            if (WIFSIGNALED(wstatus)) {
+                debugf("exit signaled %d", WTERMSIG(wstatus));
+            }
 
             for (int i = 0; i < n_children; i++) {
                 if (pids[i] == wpid) {
