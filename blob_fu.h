@@ -604,7 +604,8 @@ split_blob(const blob_t * src, u8 c, blob_t * b1, blob_t * b2)
         add_blob(b1, src);
     } else {
         sub_blob(b1, src, 0, i);
-        sub_blob(b2, src, i + 1, -1);
+        i++;
+        if ((size_t)i < src->size) sub_blob(b2, src, i, -1);
     }
 
     return 0;
