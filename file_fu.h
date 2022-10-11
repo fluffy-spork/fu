@@ -41,30 +41,46 @@ write_file_fu(int fd, const blob_t * b)
     return write(fd, b->data, b->size);
 }
 
+// writes until there's an error or full success.  retries on partial writes
+ssize_t
+write_full_file_fu(int fd, const blob_t * b)
+{
+    ssize_t ret = 0;
+
+    size_t n = b->size;
+
+    while (n) {
+        ssize_t written = write_file_fu(fd, b);
+        if (written == -1) return log_errno("write full failed");
+
+        n -= written;
+        ret += written;
+    }
+
+    return ret;
+}
+
 ssize_t
 copy_file_fu(int out_fd, int in_fd, size_t len)
 {
     // NOTE(jason): from https://stackoverflow.com/questions/7463689/most-efficient-way-to-copy-a-file-in-linux
 
-    const int n_buf = 8192;
-    char buf[n_buf];
+    blob_t * buf = local_blob(8192);
 
     ssize_t ret = 0;
 
-    // TODO(jason): seems like this could be cleaner or something
-    // It's an error if the whole file isn't written so not sure what the point
-    // of the return value is
     while (len) {
-        ssize_t read_result = read(in_fd, buf, n_buf);
-        if (read_result == 0) break;
-        if (read_result == -1) return log_errno("read");
+        reset_blob(buf);
 
-        ssize_t write_result = write(out_fd, buf, read_result);
-        if (write_result == -1) return log_errno("write");
-        assert(read_result == write_result);
+        ssize_t read = read_file_fu(in_fd, buf);
+        if (read == 0) break;
+        if (read == -1) return log_errno("copy read");
 
-        len -= write_result;
-        ret += write_result;
+        ssize_t written = write_full_file_fu(out_fd, buf);
+        if (written == -1) return log_errno("copy write");
+
+        len -= written;
+        ret += written;
     }
 
     return ret;
