@@ -15,6 +15,7 @@
     _log(plog, value->data, value->size, label, strlen(label), 0, __FILE__, __func__, __LINE__)
 
 #define log_var_blob(var) log_blob(var, #var)
+// TODO(jason): needs to handle 0 bytes within string and be able to print hex
 #define debug_blob(var) debugf("%s: %s", #var, cstr_blob(var))
 
 
@@ -39,8 +40,11 @@ typedef struct {
 // GCC specific syntax for multiple statements as an expression
 #define wrap_blob(cstr) \
     ({ blob_t * b = alloca(sizeof(blob_t)); _init_local_blob(b, (u8 *)cstr, strlen(cstr), -1); })
+#define wrap_array_blob(array) \
+    ({ blob_t * b = alloca(sizeof(blob_t)); _init_local_blob(b, (u8 *)array, array_size_fu(array), -1); })
 
-#define cstr_blob(blob) _cstr_blob(blob, alloca(blob->size + 1), blob->size + 1)
+#define cstr_blob(blob) \
+    ({ size_t size = blob->size + 1; char * c = alloca(size); _cstr_blob(blob, c, size); })
 
 blob_t *
 _init_local_blob(blob_t * b, u8 * data, size_t capacity, ssize_t size)
@@ -563,7 +567,7 @@ ends_with_char_blob(blob_t * b, char c)
 }
 
 bool
-begins_with_blob(blob_t * b, blob_t * prefix)
+begins_with_blob(const blob_t * b, const blob_t * prefix)
 {
     if (prefix->size > b->size) return false;
 
@@ -578,6 +582,17 @@ index_blob(const blob_t * b, u8 c, size_t offset)
     }
 
     return -1;
+}
+
+bool
+first_contains_blob(const blob_t * b, const blob_t * target)
+{
+    ssize_t off = index_blob(b, target->data[0], 0);
+    if (off >= 0 && (size_t)remaining_blob(b, off) >= target->size) {
+        return memcmp(&b->data[off], target->data, target->size) == 0;
+    }
+
+    return false;
 }
 
 // XXX: reconsider the ssize_t and -1 to get end of src
@@ -641,6 +656,12 @@ write_hex_blob(blob_t * b, void * src, ssize_t n_src)
     u8 * data = src;
 
     ssize_t n_hex = 2*n_src;
+    if ((size_t)n_hex > available_blob(b)) {
+        b->error = ENOSPC;
+        return -1;
+    }
+
+    // TODO(jason): be better if this didn't allocate
     char * hex = alloca(n_hex);
 
     u8 char_to_hex(u8 c) {

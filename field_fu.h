@@ -12,6 +12,7 @@
     E(file, "file", var) \
     E(timestamp, "timestamp", var) \
     E(password, "password", var) \
+    E(select, "select", var) \
 
 ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 
@@ -59,9 +60,19 @@ typedef struct {
 // we'll see.
 #define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
 
-#define log_param(p) \
-    log_var_field(p->field); \
-    log_var_blob(p->value); \
+#define debug_param(p) \
+    debug_blob(p->field->name); \
+    debug_s64(p->field->id); \
+    debug_blob(p->value); \
+
+void
+debug_params(param_t * params, int n_params)
+{
+    for (int i = 0; i < n_params; i++) {
+        param_t * p = &params[i];
+        debug_param(p);
+    }
+}
 
 s32
 max_size_field_type(field_type_t type, s32 req_size)
@@ -70,12 +81,24 @@ max_size_field_type(field_type_t type, s32 req_size)
     if (req_size) return req_size;
 
     switch (type) {
+        // TODO(jason): reconsider changing select to id_select or something to
+        // make it clear the value is an integer
+        // these are 64 ids
+        case select_field_type:
         case timestamp_field_type:
+        case file_field_type:
             return 20;
         case integer_field_type:
             return 19 + 1 + 6; // 1 for '-', 6 for separators
-        default:
+        case text_field_type:
+        case hidden_field_type:
+        case password_field_type:
             return req_size;
+        case unknown_field_type:
+            return 0;
+        default:
+            debugf("missing max size for field_type: %d", type);
+            assert(false);
     }
 }
 

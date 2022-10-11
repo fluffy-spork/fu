@@ -3,12 +3,15 @@
 #ifndef SKIP_DEFAULT_INCLUDES_FU
 #include <assert.h>
 #include <errno.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
 #include <time.h>
 #include <sys/random.h>
+
+#include <execinfo.h>
 #endif
 
 typedef uint8_t u8;
@@ -73,6 +76,21 @@ dev_mode()
 }
 
 /* timespec stuff is included for crude performance timing */
+
+int
+debug_backtrace_fu()
+{
+    const int BT_BUF_SIZE = 1024;
+    void *buffer[BT_BUF_SIZE];
+    int nptrs;
+
+    nptrs = backtrace(buffer, BT_BUF_SIZE);
+    debugf("\n\nbacktrace() returned %d addresses", nptrs);
+
+    backtrace_symbols_fd(buffer, nptrs, STDERR_FILENO);
+
+    return 0;
+}
 
 void
 debug_timespec(const struct timespec *ts, const char *label)

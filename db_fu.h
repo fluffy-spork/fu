@@ -103,13 +103,13 @@ prepare_db(db_t * db, sqlite3_stmt **stmt, const blob_t * sql)
 int
 finalize_db(sqlite3_stmt * stmt)
 {
-    int result = sqlite3_finalize(stmt);
-    if (result) {
+    int rc = sqlite3_finalize(stmt);
+    if (rc) {
         //debugf("finalize failed: %ld: %s", line, file);
         log_error_db(db, "sqlite3_finalize");
     }
 
-    return result;
+    return rc;
 }
 
 int
@@ -155,6 +155,7 @@ s64_db(sqlite3_stmt * stmt, int index)
 }
 
 // 0 based index
+// should be text_db since getting a blob could be different?
 ssize_t
 blob_db(sqlite3_stmt * stmt, int index, blob_t * value)
 {
@@ -746,13 +747,13 @@ typedef struct row_handler_db_s row_handler_db_t;
 
 struct row_handler_db_s {
     int (* func)(row_handler_db_t * handler);
-    sqlite3_stmt * stmt;
     s64 n_rows;
 
     // TODO(jason): getting kind of wonky with these extra values to use
     // outside the callback.  probably should be including it all in data instead
     s64 last_id;
     s64 last_user_id;
+
     // TODO(jason): should outputs be passed as parameters to the row_handler?
     param_t * outputs;
     int n_outputs;
@@ -780,7 +781,6 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
     }
 
     int n_outputs = sqlite3_column_count(stmt);
-    //param_t * outputs = alloca(n_outputs * sizeof(param_t));
     param_t outputs[n_outputs];
     for (int i = 0; i < n_outputs; i++) {
         param_t * p = &outputs[i];
@@ -800,7 +800,6 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
     handler->outputs = outputs;
     handler->n_outputs = n_outputs;
     handler->n_rows = 0;
-    handler->stmt = stmt;
     while (sqlite3_step(stmt) == SQLITE_ROW) {
         for (int i = 0; i < n_outputs; i++) {
             reset_blob(outputs[i].value);
@@ -811,12 +810,180 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
         handler->n_rows++;
     }
 
-    handler->stmt = NULL;
     result = finalize_db(stmt);
 
     handler->outputs = NULL;
     handler->n_outputs = 0;
 
     return result;
+}
+
+int
+ids_params_db(db_t * db, const blob_t * sql, s64 * ids, int * n_ids, param_t * inputs, int n_inputs)
+{
+    int result;
+    sqlite3_stmt * stmt;
+
+    result = prepare_db(db, &stmt, sql);
+    if (result != SQLITE_OK) return result;
+
+    int n_bind = sqlite3_bind_parameter_count(stmt);
+
+    int bind_to_input[n_bind];
+    memset(bind_to_input, -1, sizeof(int) * n_bind);
+
+    for (int i = 0; i < n_bind; i++) {
+        const char * name = sqlite3_bind_parameter_name(stmt, i + 1);
+        if (!name) {
+            debugf("unamed bind param at index %d", i);
+            continue;
+        }
+
+        blob_t * bind_name = B(name + 1);
+
+        for (int j = 0; j < n_inputs; j++) {
+            param_t * p = &inputs[j];
+            if (equal_blob(p->field->name, bind_name)) {
+                bind_to_input[i] = j;
+                break;
+            }
+        }
+
+        // NOTE(jason): this should only happen if there's a developer error
+        if (bind_to_input[i] == -1) {
+            debugf("missing param for bind param %s", name);
+        }
+    }
+
+    // TODO(jason): cache the stuff above
+
+    for (int i = 0; i < n_bind; i++) {
+        param_t * p = &inputs[bind_to_input[i]];
+        result = text_bind_db(stmt, i + 1, p->value);
+        if (result != SQLITE_OK) {
+            finalize_db(stmt);
+            return result;
+        }
+    }
+
+    int max_ids = *n_ids;
+    int i = 0;
+    for (; i < max_ids; i++) {
+        if (sqlite3_step(stmt) != SQLITE_ROW) {
+            break;
+        }
+
+        ids[i] = s64_db(stmt, 0);
+    }
+    *n_ids = i;
+
+    return finalize_db(stmt);
+}
+
+int
+rows_ids_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, s64 * ids, int n_ids)
+{
+    int result;
+    sqlite3_stmt * stmt;
+
+    result = prepare_db(db, &stmt, sql);
+    if (result != SQLITE_OK) return result;
+
+    int n_outputs = sqlite3_column_count(stmt);
+    param_t outputs[n_outputs];
+    for (int i = 0; i < n_outputs; i++) {
+        param_t * p = &outputs[i];
+        const char * column = sqlite3_column_name(stmt, i);
+        field_t * f = by_name_field(B(column));
+        if (!f) {
+            debugf("unknown field name: %s", column);
+            continue;
+        }
+        //debug_blob(f->name);
+
+        p->field = f;
+        p->value = local_blob(f->max_size);
+        p->error = local_blob(128);
+    }
+
+    // TODO(jason): could also pass the ids array to a single statement using
+    // carray.  it might not be faster though and requires a sqlite extension.
+    handler->outputs = outputs;
+    handler->n_outputs = n_outputs;
+    handler->n_rows = 0;
+    for (int i = 0; i < n_ids; i++) {
+        sqlite3_reset(stmt);
+        s64_bind_db(stmt, 1, ids[i]);
+        if (sqlite3_step(stmt) != SQLITE_ROW) {
+            // TODO(jason): maybe this should keep going as long as no error
+            // even if there aren't any rows
+            log_error_db(db, "rows_ids_db");
+            break;
+        }
+
+        for (int i = 0; i < n_outputs; i++) {
+            reset_blob(outputs[i].value);
+            blob_db(stmt, i, outputs[i].value);
+        }
+
+        handler->func(handler);
+        handler->n_rows++;
+    }
+
+    handler->outputs = NULL;
+    handler->n_outputs = 0;
+
+    return finalize_db(stmt);
+}
+
+int
+by_id_db(db_t * db, const blob_t * sql, s64 id, ...)
+{
+    assert(id > 0);
+
+    //debug_s64(id);
+    //debug_blob(sql);
+
+    sqlite3_stmt * stmt;
+    if (prepare_db(db, &stmt, sql)) {
+        return -1;
+    }
+
+    int n_parameters = sqlite3_bind_parameter_count(stmt);
+    if (n_parameters != 1) {
+        info_log("sql must have 1 bind parameter for the id");
+        return -1;
+    }
+
+    s64_bind_db(stmt, 1, id);
+
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
+        // TODO(jason): probably should return an error value for no rows since
+        // in this case there should always be 1 row
+        info_log("sql exec failed");
+        return -1;
+    }
+
+    int n_columns = sqlite3_column_count(stmt);
+    if (n_columns < 1) {
+        info_log("must have at least 1 output column");
+        return -1;
+    }
+
+    va_list args;
+    va_start(args, id);
+    for (int i = 0; i < n_columns; i++) {
+        param_t * p = va_arg(args, param_t *);
+        if (!p) {
+            info_log("not enough arguments");
+            break;
+        }
+
+        reset_blob(p->value);
+        blob_db(stmt, i, p->value);
+    }
+    va_end(args);
+
+    return finalize_db(stmt);
 }
 

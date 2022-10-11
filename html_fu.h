@@ -22,6 +22,7 @@
 #define page_end() page_end_html(html)
 #define h1(...) h1_html(html, __VA_ARGS__)
 #define img(...) img_html(html, __VA_ARGS__)
+#define video(...) video_html(html, __VA_ARGS__)
 #define start_post_form(...) start_post_form_html(html, __VA_ARGS__)
 #define start_get_form(...) start_get_form_html(html, __VA_ARGS__)
 #define end_form() end_form_html(html)
@@ -86,6 +87,10 @@
     E(img, "img", var) \
     E(src, "src", var) \
     E(alt, "alt", var) \
+    E(video, "video", var) \
+    E(controls, "controls", var) \
+    E(preload, "preload", var) \
+    E(metadata, "metadata", var) \
     E(anchor, "a", var) \
     E(href, "href", var) \
     E(para, "p", var) \
@@ -113,11 +118,15 @@
     E(accept, "accept", var) \
     E(accept_video, "video/mp4", var) \
     E(accept_image, "image/gif,image/png,image/jpeg", var) \
+    E(accept_image_video, "image/gif,image/png,image/jpeg,video/mp4", var) \
     E(no_files_selected, "no files selected", var) \
     E(minlength, "minlength", var) \
     E(maxlength, "maxlength", var) \
     E(tabindex, "tabindex", var) \
     E(ignore_tabindex, "-1", var) \
+    E(select, "select", var) \
+    E(option, "option", var) \
+    E(selected, "selected", var) \
     E(disabled, "disabled", var) \
     E(cols, "cols", var) \
     E(rows, "rows", var) \
@@ -140,6 +149,10 @@
 
 ENUM_BLOB(res_html, RES_HTML)
 
+typedef int param_options_html_f(blob_t * html, param_t * param);
+
+param_options_html_f * _param_options_html;
+
 blob_t * _res_suffix_html;
 blob_t * _page_res_html;
 
@@ -153,9 +166,11 @@ res_url(blob_t * b, blob_t * name)
 // /res/main.css?v=23098abc089ef09
 
 void
-init_html()
+init_html(param_options_html_f * param_options)
 {
     init_res_html();
+
+    _param_options_html = param_options;
 
     blob_t * b = blob(1024);
     add_blob(b, B("?v="));
@@ -349,6 +364,19 @@ img_html(blob_t * html, const blob_t * src, const blob_t * alt)
     attr_html(html, res_html.src, src);
     if (alt) attr_html(html, res_html.alt, alt);
     close_tag_html(html);
+}
+
+void
+video_html(blob_t * html, const blob_t * src, const blob_t * alt)
+{
+    open_tag_html(html, res_html.video);
+    attr_html(html, res_html.src, src);
+    attr_html(html, res_html.preload, res_html.metadata);
+    empty_attr_html(html, res_html.controls);
+    if (alt) attr_html(html, res_html.alt, alt);
+    close_tag_html(html);
+
+    end_tag_html(html, res_html.video);
 }
 
 void
@@ -573,6 +601,56 @@ textarea_html(blob_t * html, param_t * param, bool autofocus)
     end_tag_html(html, res_html.textarea);
 }
 
+void
+option_html(blob_t * html, param_t * param, blob_t * value, blob_t * label)
+{
+    open_tag_html(html, res_html.option);
+    attr_html(html, res_html.value, value);
+    if (param && equal_blob(value, param->value)) empty_attr_html(html, res_html.selected);
+    close_tag_html(html);
+    escape_html(html, label);
+    end_tag_html(html, res_html.option);
+}
+
+void
+select_html(blob_t * html, param_t * param)
+{
+    open_tag_html(html, res_html.select);
+    attr_html(html, res_html.name, param->field->name);
+    close_tag_html(html);
+
+    if (_param_options_html) {
+        _param_options_html(html, param);
+    }
+
+    end_tag_html(html, res_html.select);
+}
+
+void
+select_values_html(blob_t * html, param_t * param, blob_t ** values, blob_t ** labels, int n_values)
+{
+    open_tag_html(html, res_html.select);
+    attr_html(html, res_html.name, param->field->name);
+    close_tag_html(html);
+
+    //blob_t * v = param->value;
+
+    for (int i = 0; i < n_values; i++) {
+        option_html(html, param, values[i], labels[i]);
+
+        /*
+        open_tag_html(html, res_html.option);
+        attr_html(html, res_html.value, v);
+        if (equal_blob(values[i], v)) empty_attr_html(html, res_html.selected);
+        close_tag_html(html);
+        escape_html(html, labels[i]);
+        end_tag_html(html, res_html.option);
+        */
+    }
+
+    end_tag_html(html, res_html.select);
+}
+
 // NOTE(jason): could be improved.  maybe other input types?
 void
 param_input_html(blob_t * html, param_t * param, bool autofocus)
@@ -588,6 +666,20 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         label(field->label, field->name);
         end_div();
     }
+    else if (field->type == select_field_type) {
+        start_div_class(res_html.field);
+
+        //open_tag_html(html, res_html.select);
+        //close_tag_html(html);
+
+        select_html(html, param);
+
+        label(field->label, field->name);
+        end_div();
+
+        //render options from a db query
+        //set the default choice with the value
+    }
     else if (field->type == file_field_type) {
         start_div_class(res_html.field);
         open_tag_html(html, res_html.input);
@@ -602,7 +694,8 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         //attr_html(html, res_html.id, field->name);
         //attr_html(html, res_html.name, field->name);
         attr_html(html, res_html.class_name, res_html.file_input_class);
-        attr_html(html, res_html.accept, res_html.accept_image);
+        // needs to be a param
+        attr_html(html, res_html.accept, res_html.accept_image_video);
         // NOTE(jason): capture disables file selection on mobile
         //attr_html(html, res_html.capture, res_html.environment);
         //s64_attr_html(html, res_html.maxlength, param->field->max_size);

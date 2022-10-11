@@ -2,7 +2,7 @@
 
 #define MAX_REQUEST_BODY 4096
 #define MAX_RESPONSE_BODY 8192
-#define MAX_SIZE_FILE_UPLOAD 10*1024*1024
+#define MAX_SIZE_FILE_UPLOAD 100*1024*1024
 
 // TODO(jason): possibly should call this http_server (seems to long), httpd
 // (daemon?), or something.  doesn't really matter and "web" is short.
@@ -271,6 +271,7 @@ const endpoint_t * login_endpoint_web;
     E(user_file_cache_control,"private, max-age=2592000, immutable", var) \
     E(res_path,"/res/", var) \
     E(res_path_suffix,"?v=", var) \
+    E(file_table,"file", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -428,9 +429,6 @@ init_web(const blob_t * res_dir)
     // dir) and then this is a subdir of that
     upload_dir_web = const_blob("uploads/");
 
-    // TODO(jason): make this a config param
-    login_endpoint_web = endpoints.email_login_code;
-
     if (mkdir_file_fu(upload_dir_web, S_IRWXU)) {
         if (errno != EEXIST) {
             exit(EXIT_FAILURE);
@@ -444,6 +442,38 @@ init_web(const blob_t * res_dir)
     init_http_status();
 
     init_endpoints();
+
+    // TODO(jason): make this a config param
+    login_endpoint_web = endpoints.email_login_code;
+}
+
+content_type_t
+content_type_magic(const blob_t * data)
+{
+    // this could all be way better
+    static char jpeg_magic[] = { 0xFF, 0xD8, 0xFF };
+    static char png_magic[] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
+    static char gif_magic[] = { 0x47, 0x49, 0x46, 0x38 };
+    //static char mp4_magic[] = { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
+    static char mp4_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D };
+
+    blob_t * magic = local_blob(40);
+    sub_blob(magic, data, 0, magic->capacity);
+
+    if (begins_with_blob(data, wrap_array_blob(jpeg_magic))) {
+        return jpeg_content_type;
+    }
+    else if (begins_with_blob(data, wrap_array_blob(png_magic))) {
+        return png_content_type;
+    }
+    else if (begins_with_blob(data, wrap_array_blob(gif_magic))) {
+        return gif_content_type;
+    }
+    else if (first_contains_blob(data, wrap_array_blob(mp4_magic))) {
+        return mp4_content_type;
+    }
+
+    return binary_content_type;
 }
 
 content_type_t
@@ -489,37 +519,30 @@ content_type_for_path(const blob_t * path)
         return binary_content_type;
     }
 
-    char jpeg_magic[] = { 0xFF, 0xD8, 0xFF, 0x00 };
-    char png_magic[] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00 };
-    char gif_magic[] = { 0x47, 0x49, 0x46, 0x38, 0x00 };
-    char mp4_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D, 0x00 };
+    return content_type_magic(magic);
+}
 
-//    debug_blob(magic);
-//    debug_blob(B(jpeg_magic));
-//    debug_blob(B(png_magic));
-//    debug_blob(B(gif_magic));
-//    debug_blob(B(mp4_magic));
-//    debug_s64(magic->data[0]);
-//    debug_s64(B(jpeg_magic)->data[0]);
-//    debug_s64(magic->data[1]);
-//    debug_s64(B(jpeg_magic)->data[1]);
-//    debug_s64(magic->data[2]);
-//    debug_s64(B(jpeg_magic)->data[2]);
-
-    if (begins_with_blob(magic, B(jpeg_magic))) {
-        return jpeg_content_type;
-    }
-    else if (begins_with_blob(magic, B(png_magic))) {
-        return png_content_type;
-    }
-    else if (begins_with_blob(magic, B(gif_magic))) {
-        return gif_content_type;
-    }
-    else if (begins_with_blob(magic, B(mp4_magic))) {
-        return mp4_content_type;
+bool
+video_content_type(content_type_t type)
+{
+    if (type == mp4_content_type) {
+        return true;
     }
 
-    return binary_content_type;
+    return false;
+}
+
+bool
+image_content_type(content_type_t type)
+{
+    switch (type) {
+        case jpeg_content_type:
+        case png_content_type:
+        case gif_content_type:
+            return true;
+        default:
+            return false;
+    }
 }
 
 bool
@@ -603,6 +626,7 @@ u64_header(blob_t * b, const blob_t *name, const u64 value)
     add_blob(b, res_web.crlf);
 }
 
+// TODO(jason): this probably shouldn't be "require"
 int
 require_request_head_web(request_t * req)
 {
@@ -690,10 +714,12 @@ require_request_body_web(request_t * req)
 int
 query_params(request_t * req, endpoint_t * ep)
 {
+    //debug_blob(req->query);
+
+    if (empty_blob(req->query)) return 0;
+
     param_t * params = ep->params;
     size_t n_params = ep->n_params;;
-
-    //debug_blob(req->query);
 
     return urldecode_params(req->query, params, n_params);
 }
@@ -923,6 +949,8 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, s64 user
     blob_t * file_path = local_blob(255);
     vadd_blob(file_path, dir, path);
 
+    //debug_blob(file_path);
+
     int fd = open_read_file_fu(file_path);
     if (fd == -1) {
         not_found_response(req);
@@ -1042,6 +1070,7 @@ default_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
     param_t * p = param_endpoint(ep, field_id);
     assert(p != NULL);
     if (empty_blob(p->value) || (p->value->size == 1 && p->value->data[0] == '0')) {
+        reset_blob(p->value);
         add_s64_blob(p->value, value);
     }
 
@@ -1062,8 +1091,12 @@ default_param_endpoint(endpoint_t * ep, field_id_t field_id, blob_t * value)
 }
 
 // TODO(jason): re-evaluate if this flow is correct.  possibly make all sqlite errors an assert/abort?
+// this create seems odd i don't think it's quite right.  the only place that
+// sessions seem to need to be created is the email_login_code_handler.
+// everywhere else is only read.  until maybe there's a shopping cart or
+// something.  that could also directly create a session if necessary too.
 int
-require_session_web(request_t * req)
+require_session_web(request_t * req, bool create)
 {
     if (req->session_id) return 0;
 
@@ -1102,37 +1135,39 @@ require_session_web(request_t * req)
         if (req->session_id) return 0;
     }
 
-    s64 new_id = random_s64_fu();
+    if (create) {
+        s64 new_id = random_s64_fu();
 
-    blob_t * cookie = local_blob(32);
-    add_random_blob(cookie, 16);
+        blob_t * cookie = local_blob(32);
+        add_random_blob(cookie, 16);
 
-    log_var_blob(cookie);
+        log_var_blob(cookie);
 
-    sqlite3_stmt * stmt;
-    if (prepare_db(db, &stmt, B("insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
-        internal_server_error_response(req);
-        return -1;
+        sqlite3_stmt * stmt;
+        if (prepare_db(db, &stmt, B("insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
+            internal_server_error_response(req);
+            return -1;
+        }
+        s64_bind_db(stmt, 1, new_id);
+        s64_bind_db(stmt, 2, COOKIE_EXPIRES_WEB);
+        text_bind_db(stmt, 3, cookie);
+        sqlite3_step(stmt);
+        if (finalize_db(stmt)) {
+            internal_server_error_response(req);
+            return -1;
+        }
+
+        req->session_id = new_id;
+
+        blob_t * c = local_blob(255);
+
+        add_blob(c, res_web.name_session_cookie);
+        write_blob(c, "=", 1);
+        add_blob(c, cookie);
+        //write_hex_blob(c, &new_id, sizeof(new_id));
+        add_blob(c, res_web.session_cookie_attributes);
+        header(req->head, res_web.set_cookie, c);
     }
-    s64_bind_db(stmt, 1, new_id);
-    s64_bind_db(stmt, 2, COOKIE_EXPIRES_WEB);
-    text_bind_db(stmt, 3, cookie);
-    sqlite3_step(stmt);
-    if (finalize_db(stmt)) {
-        internal_server_error_response(req);
-        return -1;
-    }
-
-    req->session_id = new_id;
-
-    blob_t * c = local_blob(255);
-
-    add_blob(c, res_web.name_session_cookie);
-    write_blob(c, "=", 1);
-    add_blob(c, cookie);
-    //write_hex_blob(c, &new_id, sizeof(new_id));
-    add_blob(c, res_web.session_cookie_attributes);
-    header(req->head, res_web.set_cookie, c);
 
     return 0;
 }
@@ -1140,7 +1175,7 @@ require_session_web(request_t * req)
 int
 require_user_web(request_t * req, const endpoint_t * auth)
 {
-    if (require_session_web(req)) return -1;
+    if (require_session_web(req, false)) return -1;
 
     //log_var_s64(req->user_id);
 
@@ -1167,6 +1202,12 @@ require_user_web(request_t * req, const endpoint_t * auth)
     return 1;
 }
 
+int
+optional_user_web(request_t * req)
+{
+    return require_session_web(req, false);
+}
+
 // return a file from the AppDir/res directory with cache-control header set
 // for static assets.  the url should include some sort of cache breaker query
 // parameter.  there will be a function for generating res urls.
@@ -1178,8 +1219,22 @@ res_handler(endpoint_t * ep, request_t * req)
     return file_response(req, res_dir_web, req->path, 0);
 }
 
-// TODO(jason): this should probably require a user by default, but would
-// probably have to configure a login url
+int
+insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * name, s64 size, s64 content_type)
+{
+    param_t params[] = {
+        local_param(fields.name),
+        local_param(fields.size),
+        local_param(fields.content_type),
+    };
+
+    add_blob(params[0].value, name);
+    add_s64_blob(params[1].value, size);
+    add_s64_blob(params[2].value, content_type);
+
+    return insert_params(db, res_web.file_table, file_id, user_id, params, array_size_fu(params));
+}
+
 int
 files_upload_handler(endpoint_t * ep, request_t * req)
 {
@@ -1187,8 +1242,11 @@ files_upload_handler(endpoint_t * ep, request_t * req)
 
     if (require_user_web(req, login_endpoint_web)) return -1;
 
-    // TODO(jason): need the content type before checking length.  larger for
-    // videos and smaller for images
+    if (req->request_content_length == 0) {
+        bad_request_response(req);
+        return -1;
+    }
+
     if (req->request_content_length > MAX_SIZE_FILE_UPLOAD) {
         payload_too_large_response(req);
         return -1;
@@ -1204,9 +1262,16 @@ files_upload_handler(endpoint_t * ep, request_t * req)
             return -1;
         }
         //check for read available on req->fd
-
-        //put something in a db table with user who uploaded, size, type, etc
     }
+
+    if (empty_blob(req->request_body)) {
+        if (read_file_fu(req->fd, req->request_body) == -1) {
+            log_errno("read initial request body");
+            // should we return error here?
+        }
+    }
+
+    content_type_t type = content_type_magic(req->request_body);
 
     blob_t * file_key = local_blob(32);
     fill_random_blob(file_key);
@@ -1214,6 +1279,12 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     blob_t * path = local_blob(255);
     add_blob(path, upload_dir_web);
     add_blob(path, file_key);
+
+    s64 file_id;
+    if (insert_file(db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
+        internal_server_error_response(req);
+        return -1;
+    }
 
     // TODO(jason): switch to storing the files with a SHA256 or something
     // filename to avoid duplicate uploads.
@@ -1225,7 +1296,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     }
 
     blob_t * location = local_blob(255);
-    url_field_endpoint(location, endpoints.files, fields.file_key, file_key);
+    add_s64_blob(location, file_id);
 
     return created_response(req, binary_content_type, location);
 }
@@ -1240,14 +1311,22 @@ files_handler(endpoint_t * ep, request_t * req)
         return -1;
     }
 
-    param_t * file_key = param_endpoint(ep, file_key_field);
-    if (empty_blob(file_key->value)) {
+    param_t * file_id = param_endpoint(ep, file_id_field);
+    if (empty_blob(file_id->value)) {
         debug("empty param");
         internal_server_error_response(req);
         return -1;
     }
 
-    return file_response(req, upload_dir_web, file_key->value, req->user_id);
+    param_t name = local_param(fields.name);
+
+    // this should probably also return the content type
+    if (by_id_db(db, B("select name from file where file_id = ?"), s64_blob(file_id->value, 0), &name)) {
+        not_found_response(req);
+        return -1;
+    }
+
+    return file_response(req, upload_dir_web, name.value, req->user_id);
 }
 
 int
