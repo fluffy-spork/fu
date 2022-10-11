@@ -91,7 +91,8 @@
     E(video, "video", var) \
     E(controls, "controls", var) \
     E(preload, "preload", var) \
-    E(metadata, "metadata", var) \
+    E(preload_none, "none", var) \
+    E(preload_metadata, "metadata", var) \
     E(anchor, "a", var) \
     E(href, "href", var) \
     E(para, "p", var) \
@@ -372,7 +373,10 @@ video_html(blob_t * html, const blob_t * src, const blob_t * alt)
 {
     open_tag_html(html, res_html.video);
     attr_html(html, res_html.src, src);
-    attr_html(html, res_html.preload, res_html.metadata);
+    // NOTE(jason): preload can make pages slow if there's a lot of videos.
+    // really need preload_none and posters
+    //attr_html(html, res_html.preload, res_html.preload_none);
+    attr_html(html, res_html.preload, res_html.preload_metadata);
     empty_attr_html(html, res_html.controls);
     if (alt) attr_html(html, res_html.alt, alt);
     close_tag_html(html);
