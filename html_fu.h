@@ -60,6 +60,7 @@
 
 #define RES_HTML(var, E) \
     E(space, " ", var) \
+    E(zero, "0", var) \
     E(double_quote_ref, "&quot;", var) \
     E(less_than_ref, "&lt;", var) \
     E(error, "error", var) \
@@ -709,7 +710,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         //label(field->label, NULL);
         //div_class(res_html.file_preview_class, res_html.no_files_selected);
 
-        hidden_input(field->name, NULL);
+        hidden_input(field->name, res_html.zero);
         button(res_html.file_class, field->label);
         div_class(res_html.file_upload_class, NULL);
         end_div();

@@ -147,6 +147,13 @@ valid_blob(const blob_t * b)
     return b != NULL && b->size > 0;
 }
 
+// TODO(jason): is this weird and should just convert to an integer?
+bool
+not_zero_blob(const blob_t * b)
+{
+    return valid_blob(b) && (b->size != 1 || b->data[0] != '0');
+}
+
 bool
 equal_blob(const blob_t * b1, const blob_t * b2)
 {
