@@ -557,7 +557,7 @@ exec_blob_i1b2_db(db_t * db, blob_t * sql, blob_t * value, s64 i1, blob_t * b1, 
 }
 
 int
-insert_params(db_t * db, blob_t * table, s64 * id, s64 user_id, param_t * params, int n_params)
+insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * params, int n_params)
 {
     blob_t * sql = local_blob(255);
 
