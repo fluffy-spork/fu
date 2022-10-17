@@ -49,31 +49,6 @@ typedef struct {
     s32 max_size;
 } field_t;
 
-typedef struct {
-    field_t * field;
-    blob_t * value;
-    blob_t * error;
-} param_t; // rename field_value_t?
-
-// NOTE(jason): I think this usage of local_blob which uses alloca is ok.
-// It shouldn't have issues with pointers in blocks since it isn't a pointer.
-// we'll see.
-#define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
-
-#define debug_param(p) \
-    debug_blob(p->field->name); \
-    debug_s64(p->field->id); \
-    debug_blob(p->value); \
-
-void
-debug_params(param_t * params, int n_params)
-{
-    for (int i = 0; i < n_params; i++) {
-        param_t * p = &params[i];
-        debug_param(p);
-    }
-}
-
 s32
 max_size_field_type(field_type_t type, s32 req_size)
 {
@@ -160,6 +135,67 @@ by_name_field(const blob_t * name)
     log_var_blob(field->label); \
     log_var_u64(field->type); \
     log_var_u64(field->max_size); \
+
+
+typedef struct {
+    field_t * field;
+    blob_t * value;
+    blob_t * error;
+} param_t; // rename field_value_t?
+
+// NOTE(jason): I think this usage of local_blob which uses alloca is ok.
+// It shouldn't have issues with pointers in blocks since it isn't a pointer.
+// we'll see.
+#define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
+
+#define def_param(field) param_t field = local_param(fields.field);
+
+#define debug_param(p) \
+    debug_blob(p->field->name); \
+    debug_s64(p->field->id); \
+    debug_blob(p->value); \
+
+void
+debug_params(param_t * params, int n_params)
+{
+    for (int i = 0; i < n_params; i++) {
+        param_t * p = &params[i];
+        debug_param(p);
+    }
+}
+
+int
+init_param(param_t * param, field_t * field)
+{
+    param->field = field;
+    param->value = blob(field->max_size);
+    param->error = blob(256);
+
+    return 0;
+}
+
+int
+init_by_name_param(param_t * param, const blob_t * field_name)
+{
+    field_t * field = by_name_field(field_name);
+    dev_error(!field);
+
+    return init_param(param, field);
+}
+
+param_t *
+param(field_t * field)
+{
+    param_t * p = malloc(sizeof(*p));
+    if (!p) return NULL;
+
+    if (init_param(p, field)) {
+        free(p);
+        return NULL;
+    }
+
+    return p;
+}
 
 param_t *
 by_id_param(param_t * params, int n_params, field_id_t field_id)

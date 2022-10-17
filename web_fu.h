@@ -59,7 +59,10 @@ typedef enum {
 
 ENUM_BLOB(http_status, HTTP_STATUS)
 
-typedef struct {
+typedef struct request_s request_t;
+typedef int (* request_task_f)(request_t *);
+
+struct request_s {
     int fd;
 
     // sqlite uses s64 for rowid so... in theory could use negative ids to mark
@@ -98,7 +101,10 @@ typedef struct {
     //blob_t * status_line;
     blob_t * head;
     blob_t * body;
-} request_t;
+
+    request_task_f after_task;
+    s64 id_task; // pass an id to the task, like file_id, or whatever
+};
 
 typedef struct endpoint_s endpoint_t;
 typedef int (* request_handler_func)(endpoint_t * ep, request_t *);
@@ -165,9 +171,12 @@ _endpoint(endpoint_id_t id, blob_t * path, blob_t * name, blob_t * title, reques
 
     for (u8 i = 0; i < n; i++) {
         param_t * p = &params[i];
+        init_param(p, fields[i]);
+        /*
         p->field = fields[i];
         p->value = blob(fields[i]->max_size);
         p->error = blob(256);
+        */
 
         //log_field(p->field);
     }
@@ -272,6 +281,7 @@ const endpoint_t * login_endpoint_web;
     E(res_path,"/res/", var) \
     E(res_path_suffix,"?v=", var) \
     E(file_table,"file", var) \
+    E(poster_kind,"poster", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -494,7 +504,15 @@ content_type_for_path(const blob_t * path)
             case 'c':
                 return css_content_type;
             case 'j':
-                return javascript_content_type;
+                {
+                    char second = *(dot + 2);
+                    if (second == 'p') {
+                        return jpeg_content_type;
+                    } else if (second == 'a') {
+                        return javascript_content_type;
+                    }
+                }
+                break;
             case 'g':
                 return gif_content_type;
             case 'h':
@@ -574,6 +592,9 @@ reuse_request(request_t * req)
     erase_blob(req->user_name);
 
     req->status = 0;
+
+    req->after_task = NULL;
+    req->id_task = 0;
 
     erase_blob(req->uri);
     erase_blob(req->path);
@@ -944,7 +965,7 @@ payload_too_large_response(request_t * req)
 }
 
 int
-file_response(request_t * req, const blob_t * dir, const blob_t * path, s64 user_id)
+file_response(request_t * req, const blob_t * dir, const blob_t * path, content_type_t content_type, s64 user_id)
 {
     blob_t * file_path = local_blob(255);
     vadd_blob(file_path, dir, path);
@@ -967,10 +988,14 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, s64 user
 
     size_t len = st.st_size;
 
+    if (content_type == 0) {
+        content_type = content_type_for_path(file_path);
+    }
+
     //debug_s64(len);
 
     // TODO(jason): need to look at the actual data for content type
-    ok_response(req, content_type_for_path(file_path));
+    ok_response(req, content_type);
     // TODO(jason): not sure if all file responses should be cacheable
     req->cache_control = user_id  ? USER_FILE_CACHE_CONTROL : STATIC_ASSET_CACHE_CONTROL;
     req->content_length = len;
@@ -992,7 +1017,16 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, s64 user
         return log_errno("copy_file_fu");
     }
 
-    return len;
+    return 0;
+}
+
+int
+url_params_endpoint(blob_t * url, endpoint_t * ep, param_t * params, size_t n_params)
+{
+    add_blob(url, ep->path);
+    urlencode_params(url, params, n_params);
+
+    return 0;
 }
 
 int
@@ -1181,6 +1215,11 @@ require_user_web(request_t * req, const endpoint_t * auth)
 
     if (req->user_id) return 0;
 
+    if (!auth) {
+        not_found_response(req);
+        return -1;
+    }
+
     sqlite3_stmt * stmt;
     if (prepare_db(db, &stmt, B("update session set redirect_url = ?, modified = unixepoch() where session_id = ?"))) {
         internal_server_error_response(req);
@@ -1216,7 +1255,7 @@ res_handler(endpoint_t * ep, request_t * req)
 {
     UNUSED(ep);
 
-    return file_response(req, res_dir_web, req->path, 0);
+    return file_response(req, res_dir_web, req->path, 0, 0);
 }
 
 int
@@ -1236,11 +1275,128 @@ insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * name, s64 size, s64 
 }
 
 int
+file_info(db_t * db, param_t * file_id, param_t * name, param_t * content_type)
+{
+    return by_id_db(db, B("select name, content_type from file where file_id = ?"), s64_blob(file_id->value, 0), name, content_type);
+}
+
+#define MAX_CMD_WEB 1024
+
+int
+path_file_web(blob_t * path, const blob_t * name)
+{
+    add_blob(path, upload_dir_web);
+    add_blob(path, name);
+
+    return path->error;
+}
+
+// TODO(jason): don't like calling an external prog.  eventually replace with header code
+int
+_ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * filter)
+{
+    char * fmt_cmd = "ffmpeg -hide_banner -loglevel error -nostdin -i %s %s %s";
+
+    char cmd[MAX_CMD_WEB];
+    if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(input), cstr_blob(filter), cstr_blob(output)) < 0) {
+        log_errno("ffmpeg cmd format failed");
+        return -1;
+    }
+
+    info_log(cmd);
+
+    int rc = system(cmd);
+    if (rc) {
+        log_errno("failed to process media file");
+        return -1;
+    }
+
+    return 0;
+}
+
+// TODO(jason): don't like calling an external prog.  eventually replace with header code
+int
+resize_image_web(const blob_t * input, const blob_t * output)
+{
+    char * fmt_cmd = "convert-im6 -resize 1024x %s %s";
+
+    char cmd[MAX_CMD_WEB];
+    if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(input), cstr_blob(output)) < 0) {
+        log_errno("imagemagick convert cmd format failed");
+        return -1;
+    }
+
+    info_log(cmd);
+
+    int rc = system(cmd);
+    if (rc) {
+        log_errno("failed to process media file");
+        return -1;
+    }
+
+    return 0;
+}
+
+int
+process_media_web(param_t * file_id)
+{
+    def_param(name);
+    def_param(content_type);
+
+    if (file_info(db, file_id, &name, &content_type)) {
+        log_error_db(db, "failed to get file info");
+        return -1;
+    }
+
+    content_type_t type = s64_blob(content_type.value, 0);
+
+    blob_t * input = local_blob(255);
+    path_file_web(input, name.value);
+
+    blob_t * output = local_blob(255);
+    // really I think these will be similar random names and stored in the
+    // db for each that exists
+    add_blob(output, input);
+    add_blob(output, B(".jpg"));
+
+    if (video_content_type(type)) {
+        // make a poster image
+        debug("XXXXX making poster image XXXX");
+        return _ffmpeg_call_web(input, output, B("-vframes 1 -vf scale=1024:-1"));
+    }
+    else if (image_content_type(type)) {
+        // resize
+        // remove exif and other identifying info
+        debug("XXXXX resizing static image XXXX");
+        return resize_image_web(input, output);
+    }
+
+    return 0;
+}
+
+int
+process_media_task_web(request_t * req)
+{
+    s64 id = req->id_task;
+
+    if (id < 1) {
+        error_log("missing id_task for file_id", "web_fu", 1);
+    }
+
+    def_param(file_id);
+    add_s64_blob(file_id.value, id);
+
+    return process_media_web(&file_id);
+}
+
+int
 files_upload_handler(endpoint_t * ep, request_t * req)
 {
     UNUSED(ep);
 
-    if (require_user_web(req, login_endpoint_web)) return -1;
+    // NOTE(jason): as long as this endpoint doesn't do a UI not much point in
+    // redirecting.
+    if (require_user_web(req, NULL)) return -1;
 
     if (req->request_content_length == 0) {
         bad_request_response(req);
@@ -1295,6 +1451,11 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         return -1;
     }
 
+    if (video_content_type(type) || image_content_type(type)) {
+        req->after_task = process_media_task_web;
+        req->id_task = file_id;
+    }
+
     blob_t * location = local_blob(255);
     add_s64_blob(location, file_id);
 
@@ -1304,7 +1465,9 @@ files_upload_handler(endpoint_t * ep, request_t * req)
 int
 files_handler(endpoint_t * ep, request_t * req)
 {
-    if (require_user_web(req, login_endpoint_web)) return -1;
+    // NOTE(jason): as long as this endpoint doesn't do a UI not much point in
+    // redirecting.
+    if (require_user_web(req, NULL)) return -1;
 
     if (query_params(req, ep) == -1) {
         debug("query_params");
@@ -1318,15 +1481,40 @@ files_handler(endpoint_t * ep, request_t * req)
         return -1;
     }
 
-    param_t name = local_param(fields.name);
+    def_param(name);
+    def_param(content_type);
 
-    // this should probably also return the content type
-    if (by_id_db(db, B("select name from file where file_id = ?"), s64_blob(file_id->value, 0), &name)) {
+    if (file_info(db, file_id, &name, &content_type)) {
         not_found_response(req);
         return -1;
     }
 
-    return file_response(req, upload_dir_web, name.value, req->user_id);
+    content_type_t type = s64_blob(content_type.value, 0);
+
+    param_t * kind = param_endpoint(ep, kind_field);
+    if (image_content_type(type) || equal_blob(kind->value, res_web.poster_kind)) {
+        blob_t * jpg_name = local_blob(name.value->capacity);
+        add_blob(jpg_name, name.value);
+        add_blob(jpg_name, B(".jpg"));
+        type = jpeg_content_type;
+
+        //debug_blob(jpg_name);
+
+        int rc = file_response(req, upload_dir_web, jpg_name, type, req->user_id);
+        if (rc == -1 && errno == ENOENT) {
+            if (process_media_web(file_id)) {
+                internal_server_error_response(req);
+                return -1;
+            }
+
+            return file_response(req, upload_dir_web, jpg_name, type, req->user_id);
+        }
+
+        return rc;
+    }
+    else {
+        return file_response(req, upload_dir_web, name.value, type, req->user_id);
+    }
 }
 
 int
@@ -1518,6 +1706,12 @@ handle_request:
 
         // where the magic happens
         result = handle_request(req);
+
+        if (result == 0 && req->after_task) {
+            if (req->after_task(req)) {
+                log_errno("request task function failed");
+            }
+        }
 
         bool keep_alive = result != -1 && req->keep_alive;
 

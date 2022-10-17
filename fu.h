@@ -53,6 +53,10 @@ typedef enum {
 // needs to not use assert so exp is always run.
 #define RARE_FAIL(exp) assert(exp)
 
+// NOTE(jason): this developer has an error that must be fixed but could only
+// be checked at runtime
+#define dev_error(exp) assert(exp)
+
 #define array_size_fu(array) sizeof(array)/sizeof(array[0])
 
 #ifdef NDEBUG
