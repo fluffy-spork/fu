@@ -8,6 +8,11 @@
 // small_blob, etc which hopefully work for this purpose.  Also now local_blob,
 // etc
 
+// TODO(jason): local_vblob(list of blobs) that allocates a local blob the size
+// of the combined list of blobs and adds them all.  basically alloca + concat
+// also could do vblob for a heap version
+
+
 // for isspace.  need to replace
 #include <ctype.h>
 
@@ -28,6 +33,8 @@ typedef struct {
     u8 * data;
 } blob_t;
 
+// TODO(jason): maybe this should be called stack_blob?  it's not block local,
+// it's stack frame/function
 // GCC specific syntax for multiple statements as an expression
 #define local_blob(capacity) \
     ({ blob_t * b = alloca(sizeof(blob_t)); u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); })
@@ -115,8 +122,6 @@ free_blob(blob_t * blob)
 void
 erase_blob(blob_t * blob)
 {
-    assert(blob != NULL);
-
     memset(blob->data, 0, blob->size);
     blob->size = 0;
     blob->error = 0;
@@ -125,8 +130,6 @@ erase_blob(blob_t * blob)
 void
 reset_blob(blob_t * blob)
 {
-    assert(blob != NULL);
-
     blob->size = 0;
     blob->error = 0;
 }
@@ -136,8 +139,6 @@ reset_blob(blob_t * blob)
 bool
 empty_blob(const blob_t * b)
 {
-    assert(b != NULL);
-
     return b->size == 0;
 }
 
@@ -220,6 +221,14 @@ replace_blob(blob_t * b, u8 c, u8 replacement)
 }
 
 // also useful for writing single characters: write_blob(b, ":", 1)
+//
+// TODO(jason): if the blob is too small should this truncate and return an
+// error?  currently nothing is written and it returns ENOSPC
+// there are potentially a lot of scenarios where truncating would be fine
+// and errors could be ignored.
+// maybe add a write_trunc_blob?  that's probably a better answer.
+// or maybe that would call write_blob that writes the all possible data
+// and ignores the ENOSPC error but returns an error on other errors?
 ssize_t
 write_blob(blob_t * b, const void * buf, const size_t count)
 {
@@ -304,6 +313,7 @@ scan_fd_blob(blob_t * b, int fd, u8 delim, size_t max)
 ssize_t
 remaining_blob(const blob_t * src, ssize_t offset)
 {
+    // TODO(jason): this should probably do something about -1 offset
     return src->size - offset;
 }
 
@@ -321,37 +331,43 @@ scan_blob_blob(blob_t * dest, const blob_t * src, blob_t * delim, ssize_t * poff
     assert(src != NULL);
     assert(delim != NULL);
 
-    ssize_t offset = *poffset;
+    //assert(offset >= 0);
+    if (*poffset < 0) return -1;
 
-    // XXX: for now.  this method should return -1 on error eventually
-    // what can cause an error?
-    // possibly return error on not enough space in dest?
-    assert(offset >= 0);
+    size_t offset = *poffset;
+
     assert(src->size > 0);
-    //assert(offset <= (ssize_t)src->size);
-    assert(available_blob(src) >= delim->size);
+    //debug_u64(offset);
+    //debug_u64(src->size);
+    //assert(offset <= src->size);
+    // NOTE(jason): what the fuck was this assert trying to check???  must've meant
+    // remaining_blob as checking to see if there's space  in the src is pointless
+    //assert(available_blob(src) >= delim->size);
 
-    if (offset > (ssize_t)src->size) return -1;
+    if (offset > src->size) return -1;
 
     // NOTE(jason): if not found returns the whole blob
-    ssize_t size = src->size - offset;
+    size_t size = remaining_blob(src, offset); //src->size - offset;
 
-    ssize_t imax = (ssize_t)(src->size);
-    for (ssize_t i = offset; i < imax; i++) {
-        if (src->data[i] == delim->data[0]
-                && (delim->size == 1 || memcmp(&src->data[i], delim->data, delim->size) == 0))
-        {
+    size_t imax = src->size;
+    for (size_t i = offset; i < imax; i++) {
+        // NOTE(jason): there was a check for single char before the memcmp,
+        // but i'm assuming that's a premature optimization
+        if (memcmp(&src->data[i], delim->data, delim->size) == 0) {
             size = i - offset;
             break;
         }
     }
 
     if (size) {
-        write_blob(dest, &src->data[offset], size);
+        if (write_blob(dest, &src->data[offset], size) == -1) return -1;
+
+        // check for errors!!!
         *poffset = offset + size + delim->size;
         return size;
     } else if (size == 0) {
         // NOTE(jason): delim at first char
+        // check for errors!!!
         *poffset = offset + delim->size;
         return 0;
     } else {
@@ -467,11 +483,13 @@ add_blob(blob_t * dest, const blob_t * src)
     return write_blob(dest, src->data, src->size);
 }
 
-void
+ssize_t
 set_blob(blob_t * b, blob_t * value)
 {
+    // TODO(jason): should this be clearing the error since reset_blob does?
+    // overwrite_blob doesn't
     reset_blob(b);
-    add_blob(b, value);
+    return add_blob(b, value);
 }
 
 // NOTE(jason): wrapper so it's easy to not have to know the trailing NULL is
@@ -501,6 +519,8 @@ _vadd_blob(blob_t * b, ...)
     return 0;
 }
 
+// TODO(jason): is there a point now?  just using B("cstr")  instead does the
+// same thing right?  either way using strlen.
 ssize_t
 add_cstr_blob(blob_t * b, const char * cstr)
 {
@@ -535,6 +555,7 @@ add_s64_blob(blob_t * b, s64 n)
 {
     // TODO(jason): replace with something that doesn't use stdio
     // and direct
+    // possibly should use %jd and cast to intmax_t
     char s[256];
     int size = snprintf(s, 256, "%ld", n);
     write_blob(b, s, size);
@@ -552,6 +573,7 @@ add_u64_blob(blob_t * b, u64 n)
 {
     // TODO(jason): replace with something that doesn't use stdio
     // and direct
+    // possibly should use %ju and cast to uintmax_t
     char s[256];
     int size = snprintf(s, 256, "%lu", n);
     write_blob(b, s, size);
@@ -603,19 +625,15 @@ first_contains_blob(const blob_t * b, const blob_t * target)
 }
 
 // XXX: reconsider the ssize_t and -1 to get end of src
-int
+ssize_t
 sub_blob(blob_t * dest, const blob_t * src, size_t offset, ssize_t size)
 {
     assert(offset < src->size);
 
-    if (size == -1) size = src->size - offset;
+    if (size == -1) size = remaining_blob(src, offset);
 
-    //assert(dest->size >= size);
-
-    memcpy(dest->data, src->data + offset, size);
-    dest->size = size;
-
-    return 0;
+    //assert(dest->size + size <= dest->capacity);
+    return write_blob(dest, src->data + offset, size);
 }
 
 int

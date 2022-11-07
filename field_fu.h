@@ -129,6 +129,13 @@ by_name_field(const blob_t * name)
     return NULL;
 }
 
+field_t *
+by_id_field(field_id_t id)
+{
+    dev_error(id < fields.n_list);
+    return fields.list[id];
+}
+
 #define log_var_field(field) \
     log_var_u64(field->id); \
     log_var_blob(field->name); \

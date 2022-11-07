@@ -2,6 +2,7 @@
 
 #define MAX_REQUEST_BODY 4096
 #define MAX_RESPONSE_BODY 8192
+
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
 
 // TODO(jason): possibly should call this http_server (seems to long), httpd
@@ -43,19 +44,21 @@ typedef enum {
 
 // NOTE(jason): the reason strings is pointless.  maybe need to store the code
 // as a number, but this is only used for generating responses.
+// how can  payload too large max size be configurable?
 #define HTTP_STATUS(var, E) \
     E(unknown, "HTTP/1.1 000 N\r\n", var) \
     E(ok, "HTTP/1.1 200 X\r\n", var) \
     E(created, "HTTP/1.1 201 X\r\n", var) \
     E(not_found, "HTTP/1.1 404 X\r\n", var) \
-    E(redirect, "HTTP/1.1 302 X\r\n", var) \
+    E(redirect, "HTTP/1.1 303 X\r\n", var) \
     E(permanent_redirect, "HTTP/1.1 301 X\r\n", var) \
     E(method_not_implemented, "HTTP/1.1 501 X\r\n", var) \
-    E(bad_request, "HTTP/1.1 400 X\r\n", var) \
+    E(bad_request, "HTTP/1.1 400 bad request\r\n", var) \
     E(internal_server_error, "HTTP/1.1 500 X\r\n", var) \
     E(service_unavailable, "HTTP/1.1 503 X\r\n", var) \
+    E(payload_too_large, "HTTP/1.1 413 file too large: max size 100MB\r\n", var) \
     E(expect_continue, "100 X\r\n", var) \
-    E(payload_too_large, "413 X\r\n", var) \
+    E(payment_required, "HTTP/1.1 402 X\r\n", var) \
 
 ENUM_BLOB(http_status, HTTP_STATUS)
 
@@ -266,6 +269,7 @@ const endpoint_t * login_endpoint_web;
     E(method_not_implemented,"method not implemented", var) \
     E(bad_request,"bad request", var) \
     E(not_found,"not found", var) \
+    E(payment_required, "payment required", var) \
     E(application_octet_stream,"application/octet-stream", var) \
     E(application_x_www_form_urlencoded,"application/x-www-form-urlencoded", var) \
     E(text_plain,"text/plain", var) \
@@ -441,6 +445,7 @@ init_web(const blob_t * res_dir)
 
     if (mkdir_file_fu(upload_dir_web, S_IRWXU)) {
         if (errno != EEXIST) {
+            log_errno("make upload dir");
             exit(EXIT_FAILURE);
         }
     }
@@ -466,6 +471,7 @@ content_type_magic(const blob_t * data)
     static char gif_magic[] = { 0x47, 0x49, 0x46, 0x38 };
     //static char mp4_magic[] = { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
     static char mp4_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D };
+    static char mp42_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
 
     blob_t * magic = local_blob(40);
     sub_blob(magic, data, 0, magic->capacity);
@@ -480,6 +486,9 @@ content_type_magic(const blob_t * data)
         return gif_content_type;
     }
     else if (first_contains_blob(data, wrap_array_blob(mp4_magic))) {
+        return mp4_content_type;
+    }
+    else if (first_contains_blob(data, wrap_array_blob(mp42_magic))) {
         return mp4_content_type;
     }
 
@@ -508,7 +517,7 @@ content_type_for_path(const blob_t * path)
                     char second = *(dot + 2);
                     if (second == 'p') {
                         return jpeg_content_type;
-                    } else if (second == 'a') {
+                    } else if (second == 's') {
                         return javascript_content_type;
                     }
                 }
@@ -639,6 +648,7 @@ header(blob_t * t, const blob_t *name, const blob_t *value)
     vadd_blob(t, name, res_web.header_sep, value, res_web.crlf);
 }
 
+// TODO(jason): probably remove and add s64_header
 void
 u64_header(blob_t * b, const blob_t *name, const u64 value)
 {
@@ -655,8 +665,7 @@ require_request_head_web(request_t * req)
     if (empty_blob(req->request_head)) return 0;
 
     blob_t * headers = req->request_head;
-
-    //log_var_blob(headers);
+    //debug_blob(headers);
 
     blob_t * name = local_blob(255);
     blob_t * value = local_blob(1024);
@@ -676,6 +685,7 @@ require_request_head_web(request_t * req)
             req->request_content_length = s64_blob(value, 0);
         }
         else if (case_equal_blob(res_web.connection, name)) {
+            // TODO(jason): keep alive is not close so...
             req->keep_alive = equal_blob(value, res_web.connection_keep_alive)
                 || !equal_blob(value, res_web.connection_close);
         }
@@ -790,12 +800,16 @@ add_response_headers(request_t *req)
 
     if (req->content_type != none_content_type) {
         header(t, res_web.content_type, blob_content_type(req->content_type));
-        if (req->content_length > 0) {
-            u64_header(t, res_web.content_length, req->content_length);
-        }
-        else {
-            u64_header(t, res_web.content_length, (u64)req->body->size);
-        }
+    }
+
+    // NOTE(jason): content length is always required because of persistent
+    // connections/keep alive.  this was a problem with webkit and redirects
+    // would hang
+    if (req->content_length > 0) {
+        u64_header(t, res_web.content_length, req->content_length);
+    }
+    else {
+        u64_header(t, res_web.content_length, (u64)req->body->size);
     }
 
     if (req->cache_control == STATIC_ASSET_CACHE_CONTROL) {
@@ -850,8 +864,8 @@ html_response(request_t * req)
 }
 
 // generate an error response that formats a body with html about the error 
-void
-error_response(request_t *req, http_status_t status, blob_t * reason)
+int
+error_response(request_t * req, http_status_t status, blob_t * reason)
 {
     // NOTE(jason): have to overwrite existing head and body in error
     // case and not just append to any existing code.
@@ -866,6 +880,8 @@ error_response(request_t *req, http_status_t status, blob_t * reason)
     page_begin(reason);
     h1(reason);
     page_end();
+
+    return -1;
 }
 
 int
@@ -873,9 +889,7 @@ internal_server_error_response(request_t * req)
 {
     // TODO(jason): should probably have the status code and message as a
     // struct.  maybe a typedef of a general integer/message struct
-    error_response(req, internal_server_error_http_status, res_web.internal_server_error);
-
-    return 0;
+    return error_response(req, internal_server_error_http_status, res_web.internal_server_error);
 }
 
 int
@@ -914,9 +928,7 @@ method_not_implemented_response(request_t * req)
 {
     // TODO(jason): should probably have the status code and message as a
     // struct.  maybe a typedef of a general integer/message struct
-    error_response(req, method_not_implemented_http_status, res_web.method_not_implemented);
-
-    return 0;
+    return error_response(req, method_not_implemented_http_status, res_web.method_not_implemented);
 }
 
 int
@@ -929,9 +941,7 @@ method_not_implemented_handler(endpoint_t * ep, request_t * req)
 int
 bad_request_response(request_t * req)
 {
-    error_response(req, bad_request_http_status, res_web.bad_request);
-
-    return 0;
+    return error_response(req, bad_request_http_status, res_web.bad_request);
 }
 
 int
@@ -944,9 +954,7 @@ bad_request_handler(endpoint_t * ep, request_t * req)
 int
 not_found_response(request_t * req)
 {
-    error_response(req, not_found_http_status, res_web.not_found);
-
-    return 0;
+    return error_response(req, not_found_http_status, res_web.not_found);
 }
 
 int
@@ -957,13 +965,29 @@ not_found_handler(endpoint_t * ep, request_t * req)
 }
 
 int
-payload_too_large_response(request_t * req)
+payment_required_response(request_t * req)
 {
-    error_response(req, payload_too_large_http_status, res_web.payload_too_large);
+    error_response(req, payment_required_http_status, res_web.payment_required);
 
-    return 0;
+    return -1;
 }
 
+int
+payment_required_handler(endpoint_t * ep, request_t * req)
+{
+    UNUSED(ep);
+    return payment_required_response(req);
+}
+
+int
+payload_too_large_response(request_t * req)
+{
+    return error_response(req, payload_too_large_http_status, res_web.payload_too_large);
+}
+
+// TODO(jason): add last-modified response header?  i'm not sure if it matters
+// because all the static assets have super long cache control max-age so
+// should never be checking.  probably be better to use etag/if-not-match
 int
 file_response(request_t * req, const blob_t * dir, const blob_t * path, content_type_t content_type, s64 user_id)
 {
@@ -1017,7 +1041,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
         return log_errno("copy_file_fu");
     }
 
-    return 0;
+    return req->content_length;
 }
 
 int
@@ -1129,6 +1153,9 @@ default_param_endpoint(endpoint_t * ep, field_id_t field_id, blob_t * value)
 // sessions seem to need to be created is the email_login_code_handler.
 // everywhere else is only read.  until maybe there's a shopping cart or
 // something.  that could also directly create a session if necessary too.
+//
+// TODO(jason): is another random value cookie needed that's only sent to the
+// login path or something that helps security?  i'm not sure what i'm talking about.
 int
 require_session_web(request_t * req, bool create)
 {
@@ -1136,7 +1163,7 @@ require_session_web(request_t * req, bool create)
 
     require_request_head_web(req);
 
-    log_var_blob(req->session_cookie);
+    //debug_blob(req->session_cookie);
 
     if (valid_blob(req->session_cookie)) {
         sqlite3_stmt * stmt;
@@ -1164,7 +1191,7 @@ require_session_web(request_t * req, bool create)
         }
 
         // update last access time?  I don't think it matters and there should
-        // just be a max time session expiration
+        // just be a max time session expiration.  it should be in logs anyway
 
         if (req->session_id) return 0;
     }
@@ -1204,6 +1231,18 @@ require_session_web(request_t * req, bool create)
     }
 
     return 0;
+}
+
+int
+end_session_web(request_t * req)
+{
+    if (!req->session_id) return 0;
+
+    // NOTE(jason): set session id cookie to blank?  probably doesn't matter as
+    // it will be invalid the next request anyway.
+
+    blob_t * sql = B("update session set expires = unixepoch(), modified = unixepoch() where session_id = ?1");
+    return exec_s64_pi_db(db, sql, NULL, req->session_id);
 }
 
 int
@@ -1316,8 +1355,11 @@ _ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * fil
 
 // TODO(jason): don't like calling an external prog.  eventually replace with header code
 int
-resize_image_web(const blob_t * input, const blob_t * output)
+resize_image_web(const blob_t * input)
 {
+    blob_t * output = local_blob(255);
+    vadd_blob(output, input, B(".jpg"));
+
     char * fmt_cmd = "convert-im6 -resize 1024x %s %s";
 
     char cmd[MAX_CMD_WEB];
@@ -1338,6 +1380,24 @@ resize_image_web(const blob_t * input, const blob_t * output)
 }
 
 int
+extract_poster_web(const blob_t * input)
+{
+    blob_t * output = local_blob(255);
+    vadd_blob(output, input, B(".jpg"));
+
+    return _ffmpeg_call_web(input, output, B("-y -vframes 1 -vf scale=1024:-1"));
+}
+
+int
+transcode_video_web(const blob_t * input)
+{
+    blob_t * output = local_blob(255);
+    vadd_blob(output, input, B(".mp4"));
+
+    return _ffmpeg_call_web(input, output, B("-y -vf scale=1024:-1 -c:v libx264 -preset medium -crf 18 -pix_fmt yuv420p -movflags +faststart"));
+}
+
+int
 process_media_web(param_t * file_id)
 {
     def_param(name);
@@ -1353,22 +1413,21 @@ process_media_web(param_t * file_id)
     blob_t * input = local_blob(255);
     path_file_web(input, name.value);
 
-    blob_t * output = local_blob(255);
-    // really I think these will be similar random names and stored in the
-    // db for each that exists
-    add_blob(output, input);
-    add_blob(output, B(".jpg"));
-
     if (video_content_type(type)) {
-        // make a poster image
-        debug("XXXXX making poster image XXXX");
-        return _ffmpeg_call_web(input, output, B("-vframes 1 -vf scale=1024:-1"));
+        // make a poster image and transcode to consistent video format
+        debug("XXXXX processing video file XXXX");
+        if (extract_poster_web(input)
+                || transcode_video_web(input))
+        {
+            return -1;
+        }
+
+        return 0;
     }
     else if (image_content_type(type)) {
-        // resize
         // remove exif and other identifying info
-        debug("XXXXX resizing static image XXXX");
-        return resize_image_web(input, output);
+        //debug("XXXXX resizing static image XXXX");
+        return resize_image_web(input);
     }
 
     return 0;
@@ -1389,6 +1448,7 @@ process_media_task_web(request_t * req)
     return process_media_web(&file_id);
 }
 
+// TODO(jason): can still upload a file of an invalid/unknown file type
 int
 files_upload_handler(endpoint_t * ep, request_t * req)
 {
@@ -1399,13 +1459,12 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     if (require_user_web(req, NULL)) return -1;
 
     if (req->request_content_length == 0) {
-        bad_request_response(req);
-        return -1;
+        return bad_request_response(req);
     }
 
     if (req->request_content_length > MAX_SIZE_FILE_UPLOAD) {
-        payload_too_large_response(req);
-        return -1;
+        //return bad_request_response(req);
+        return payload_too_large_response(req);
     }
 
     // should check user permissions before sending 100 continue
@@ -1414,8 +1473,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         if (write_file_fu(req->fd, http_status.expect_continue) == -1) {
             // NOTE(jason): will this even work if it's failed.  probably not
             // as the only real failure scenario is the socket won't write.
-            internal_server_error_response(req);
-            return -1;
+            return internal_server_error_response(req);
         }
         //check for read available on req->fd
     }
@@ -1423,11 +1481,15 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     if (empty_blob(req->request_body)) {
         if (read_file_fu(req->fd, req->request_body) == -1) {
             log_errno("read initial request body");
-            // should we return error here?
+            return bad_request_response(req);
         }
     }
 
     content_type_t type = content_type_magic(req->request_body);
+    if (type == binary_content_type) {
+        return bad_request_response(req);
+    }
+
 
     blob_t * file_key = local_blob(32);
     fill_random_blob(file_key);
@@ -1492,29 +1554,38 @@ files_handler(endpoint_t * ep, request_t * req)
     content_type_t type = s64_blob(content_type.value, 0);
 
     param_t * kind = param_endpoint(ep, kind_field);
+    blob_t * filename = NULL;
     if (image_content_type(type) || equal_blob(kind->value, res_web.poster_kind)) {
-        blob_t * jpg_name = local_blob(name.value->capacity);
-        add_blob(jpg_name, name.value);
-        add_blob(jpg_name, B(".jpg"));
+        filename = local_blob(name.value->capacity + 4);
+        vadd_blob(filename, name.value, B(".jpg"));
         type = jpeg_content_type;
-
-        //debug_blob(jpg_name);
-
-        int rc = file_response(req, upload_dir_web, jpg_name, type, req->user_id);
-        if (rc == -1 && errno == ENOENT) {
-            if (process_media_web(file_id)) {
-                internal_server_error_response(req);
-                return -1;
-            }
-
-            return file_response(req, upload_dir_web, jpg_name, type, req->user_id);
-        }
-
-        return rc;
+    }
+    else if (video_content_type(type)) {
+        filename = local_blob(name.value->capacity + 4);
+        vadd_blob(filename, name.value, B(".mp4"));
+        type = mp4_content_type;
     }
     else {
-        return file_response(req, upload_dir_web, name.value, type, req->user_id);
+        filename = name.value;
     }
+
+    //debug_blob(filename);
+
+    if (!filename) {
+        return bad_request_response(req);
+    }
+
+    int rc = file_response(req, upload_dir_web, filename, type, req->user_id);
+    if (rc == -1 && errno == ENOENT) {
+        if (process_media_web(file_id)) {
+            internal_server_error_response(req);
+            return -1;
+        }
+
+        return file_response(req, upload_dir_web, filename, type, req->user_id);
+    }
+
+    return rc;
 }
 
 int
@@ -1526,17 +1597,31 @@ handle_request(request_t *req)
 
     // TODO(jason): adjust this size so the entire request is read one shot in
     // non-file upload cases.
-    blob_t * input = local_blob(16384);
+    blob_t * input = local_blob(MAX_RESPONSE_BODY/2);
     blob_t * tmp = local_blob(1024);
 
     // NOTE(jason): read in the request line, headers, part of body.  any body
     // will be copied to req->request_body and handlers can read the rest of
     // the body if necessary.
+    //
+    // If the request delays sending data this closes the connection.  for
+    // example, if you're manually typing into telnet to test.  It doesn't
+    // seem like a huge deal so far.  Reasonable users should be immediately
+    // sending the request and not just opening a socket.  I'm wondering if
+    // this will be a problem with shitty internet connections though.
+    // Seemed to still work ok with chrome set to network throttle poor 3g
+    //
+    // I think not waiting for data is actually causing http keep alive to only
+    // work when the request has already been sent.  may not be happening at
+    // all as there are currently many "empty request" log messages.
     ssize_t n = read_file_fu(req->fd, input);
     if (n == -1) {
         log_errno("read request head");
         return -1;
     } else if (n == 0) {
+        // TODO(Jason): seems like this is happening way more than desirable.
+        // although I guess it always has to happened for all requests that do
+        // keep alive?  maybe it's just stupid to log.
         info_log("empty request");
         return -1;
     }
@@ -1548,7 +1633,7 @@ handle_request(request_t *req)
     // be required for supporting multiple requests on a connection too.
     timestamp_log(&start);
 
-    //log_blob(input, "input");
+    //debug_blob(input);
 
     ssize_t offset = 0;
 
@@ -1607,21 +1692,40 @@ handle_request(request_t *req)
     }
 
     // NOTE(jason): ignore for requests with an empty body
-    if (remaining_blob(input, offset) > 0) sub_blob(req->request_body, input, offset, -1);
+    if (remaining_blob(input, offset) > 0
+            && sub_blob(req->request_body, input, offset, -1) == -1) {
+        // NOTE(jason): I spent a lot of time on a bug caused by having body
+        // smaller.  the real fix is input is a fraction of the
+        // MAX_RESPONSE_BODY size
+        if (req->request_body->error == ENOSPC) {
+            dev_error(req->request_body->capacity >= input->capacity);
+            debug("request body somehow smaller than input size");
+        }
 
-    //log_blob(req->request_head, "head");
-    //log_blob(req->request_body, "body");
+        internal_server_error_response(req);
+        goto respond;
+    }
+
+    //debug_blob(req->request_head);
+    //debug_blob(req->request_body);
 
     // NOTE(jason): don't parse headers here or otherwise process the body.
     // That way no time is wasted parsing headers, etc for a url that doesn't
     // even exist
 
-    if (route_endpoint(req) > 0) {
-        // the handler already wrote the full response
-
-        elapsed_log(start, "request-time");
-
-        return 0;
+    // TODO(jason): idk if i like this switch usage
+    switch (route_endpoint(req)) {
+        case -1:
+            //debug("error routing endpoint keep alive false");
+            req->keep_alive = false;
+            break;
+        case 0:
+            break;
+        default:
+            // should be > 0
+            // the handler already wrote the full response
+            elapsed_log(start, "request-time");
+            return 0;
     }
 
 respond:
@@ -1631,6 +1735,7 @@ respond:
     }
 
     if (req->body->error) {
+        // TODO(jason); should this be a dev_error?
         error_log("response probably too big", "http", req->body->error);
         internal_server_error_response(req);
     }
@@ -1640,7 +1745,8 @@ respond:
 
     const blob_t * status = blob_http_status(req->status);
 
-    //log_var_blob(status);
+    //debug_blob(status);
+    //debug_blob(req->head);
 
     // write headers and body that should be in request_t
     // TODO(jason): maybe this should be done in the caller?
@@ -1652,10 +1758,13 @@ respond:
     iov[2].iov_len = req->body->size;
     result = writev(req->fd, iov, n_iov);
 
+    //debug_s64(result);
     if (result == -1) log_errno("write response");
 
     if (!sqlite3_get_autocommit(db)) {
-        debug("sqlite transaction open");
+        dev_error("sqlite transaction open, rolling back");
+        // NOTE(jason): the rollback is here just so the db won't be borked
+        rollback_db(db);
     }
 
     elapsed_log(start, "request-time");
@@ -1700,20 +1809,21 @@ fork_worker_web(int srv_fd, int (* after_fork_func)())
             continue;
         }
 
-        int result;
+        int rc;
 handle_request:
         req->fd = client_fd;
 
         // where the magic happens
-        result = handle_request(req);
+        rc = handle_request(req);
 
-        if (result == 0 && req->after_task) {
+        if (rc == 0 && req->after_task) {
             if (req->after_task(req)) {
                 log_errno("request task function failed");
             }
         }
 
-        bool keep_alive = result != -1 && req->keep_alive;
+        bool keep_alive = rc != -1 && req->keep_alive;
+        //debug_s64(keep_alive);
 
         // NOTE(jason): overwrite the request data so it can't be used
         // across requests to different clients.
@@ -1779,8 +1889,15 @@ main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* a
         }
 
         int reuseaddr = 1;
-        result = setsockopt(srv_fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(int));
-        if (result == -1) {
+        struct timeval timeout;      
+        // NOTE(jason): setting tv_sec to 10 causes a bunch of accept errors.
+        // maybe something to look into later.
+        timeout.tv_sec = 0;
+        timeout.tv_usec = 0;
+        if (setsockopt(srv_fd, SOL_SOCKET, SO_REUSEADDR, &reuseaddr, sizeof(int))
+                || setsockopt (srv_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout))
+                || setsockopt (srv_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
+        {
             log_errno("setsockopt");
             exit(EXIT_FAILURE);
         }

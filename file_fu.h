@@ -4,7 +4,7 @@ int
 mkdir_file_fu(const blob_t * path, mode_t mode)
 {
     if (mkdir(cstr_blob(path), mode)) {
-        return log_errno("mkdir");
+        return -1;
     }
 
     return 0;

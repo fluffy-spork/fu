@@ -12,6 +12,7 @@
 // since it's more meaningful
 
 // NOTE(jason): checks for a variable named "html" in the current context
+// TODO(jason): does this have a point?  doesn't seem like it
 #define assert_html() assert(html != NULL);
 
 // TODO(jason): could these be defined as a macro at the definition?
@@ -32,6 +33,10 @@
 #define numeric_input(...) numeric_input_html(html, __VA_ARGS__)
 #define submit_input(...) input_html(html, res_html.submit_type, __VA_ARGS__)
 #define button(...) button_html(html, __VA_ARGS__)
+#define start_button_bar() start_button_bar_html(html)
+#define end_button_bar() end_button_bar_html(html)
+#define start_action_bar() start_action_bar_html(html)
+#define end_action_bar() end_action_bar_html(html)
 #define label(...) label_html(html, __VA_ARGS__)
 #define para(...) para_html(html, __VA_ARGS__)
 #define start_para() start_para_html(html)
@@ -118,6 +123,8 @@
     E(file_class, "file", var) \
     E(file_input_class, "file visually-hidden", var) \
     E(file_upload_class, "file-upload hidden", var) \
+    E(data_max_size_upload, "data-max-size-upload", var) \
+    E(data_max_size_upload_msg, "data-max-size-upload-msg", var) \
     E(accept, "accept", var) \
     E(accept_video, "video/mp4", var) \
     E(accept_image, "image/gif,image/png,image/jpeg", var) \
@@ -154,8 +161,14 @@ ENUM_BLOB(res_html, RES_HTML)
 
 typedef int param_options_html_f(blob_t * html, param_t * param);
 
-param_options_html_f * _param_options_html;
+typedef struct {
+    s64 max_size_upload;
+    param_options_html_f * param_options;
+} config_html_t;
 
+config_html_t config_html;
+
+blob_t * _max_size_upload_msg;
 blob_t * _res_suffix_html;
 blob_t * _page_res_html;
 
@@ -169,17 +182,24 @@ res_url(blob_t * b, blob_t * name)
 // /res/main.css?v=23098abc089ef09
 
 void
-init_html(param_options_html_f * param_options)
+init_html(config_html_t * config)
 {
     init_res_html();
 
-    _param_options_html = param_options;
+    config_html = *config;
 
-    blob_t * b = blob(1024);
+    blob_t * b = blob(64);
+    add_blob(b, B("upload too large: "));
+    add_s64_blob(b, megabytes(config_html.max_size_upload));
+    add_blob(b, B("MB"));
+    _max_size_upload_msg = b;
+    //debug_blob(_max_size_upload_msg);
+
+    b = blob(1024);
     add_blob(b, B("?v="));
     add_random_blob(b, 8);
     _res_suffix_html = b;
-    log_var_blob(_res_suffix_html);
+    //debug_blob(_res_suffix_html);
 
     b = blob(1024);
     add_blob(b, B("<link rel=\"stylesheet\" href=\""));
@@ -513,14 +533,41 @@ end_form_html(blob_t * html)
 }
 
 void
-button_html(blob_t * html, const blob_t * class_name, const blob_t * content)
+button_html(blob_t * html, const blob_t * class_name, const blob_t * content, bool disabled)
 {
     open_tag_html(html, res_html.button);
     if (class_name) attr_html(html, res_html.class_name, class_name);
     attr_html(html, res_html.type, res_html.button);
+    if (disabled) empty_attr_html(html, res_html.disabled);
     close_tag_html(html);
     escape_html(html, content);
     end_element_html(html, res_html.button);
+}
+
+void
+start_button_bar_html(blob_t * html)
+{
+    start_div_class_html(html, res_html.button_bar);
+}
+
+void
+end_button_bar_html(blob_t * html)
+{
+    end_div_html(html);
+}
+
+void
+start_action_bar_html(blob_t * html)
+{
+    start_div_class_html(html, res_html.action_bar);
+    start_button_bar_html(html);
+}
+
+void
+end_action_bar_html(blob_t * html)
+{
+    end_button_bar_html(html);
+    end_div_html(html);
 }
 
 void
@@ -626,8 +673,8 @@ select_html(blob_t * html, param_t * param)
     attr_html(html, res_html.name, param->field->name);
     close_tag_html(html);
 
-    if (_param_options_html) {
-        _param_options_html(html, param);
+    if (config_html.param_options) {
+        config_html.param_options(html, param);
     }
 
     end_tag_html(html, res_html.select);
@@ -691,6 +738,8 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         start_div_class(res_html.field);
         open_tag_html(html, res_html.input);
         attr_html(html, res_html.type, res_html.file_type);
+        s64_attr_html(html, res_html.data_max_size_upload, config_html.max_size_upload);
+        attr_html(html, res_html.data_max_size_upload_msg, _max_size_upload_msg);
         attr_html(html, res_html.tabindex, res_html.ignore_tabindex);
         // TODO(jason): default disabled and javascript will enable file input
         // until multipart/form-data is implemented.  most people will have JS
@@ -717,7 +766,8 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         //div_class(res_html.file_preview_class, res_html.no_files_selected);
 
         hidden_input(field->name, res_html.zero);
-        button(res_html.file_class, field->label);
+        div_class(res_html.error, NULL);
+        button(res_html.file_class, field->label, true);
         div_class(res_html.file_upload_class, NULL);
         end_div();
     }

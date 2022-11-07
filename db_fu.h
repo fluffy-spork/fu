@@ -100,13 +100,16 @@ prepare_db(db_t * db, sqlite3_stmt **stmt, const blob_t * sql)
 //#define finalize_db(stmt) _finalize_db(stmt, __FILE__, __LINE__)
 //_finalize_db(sqlite3_stmt * stmt, const char * file, s64 line)
 
+// TODO(jason): the way i'm using this isn't quite right as a bind error will
+// still return 0 for sqlite3_finalize since the statement hasn't been
+// executed.  I want it to print an error if any error has happened since the
+// last finalize.  possibly should change the name.
 int
 finalize_db(sqlite3_stmt * stmt)
 {
     int rc = sqlite3_finalize(stmt);
     if (rc) {
-        //debugf("finalize failed: %ld: %s", line, file);
-        log_error_db(db, "sqlite3_finalize");
+        log_error_db(db, sqlite3_sql(stmt));
     }
 
     return rc;
@@ -124,6 +127,10 @@ commit_db(db_t * db)
     return ddl_db(db, B("commit"));
 }
 
+// TODO(jason): rollback_dbl was assumed to return non-zero as it's only called after an error
+// doesn't seem to matter if the rollback succeeded
+// not sure how this should work but needs to work in the case of || multiple statements in
+// a transaction
 int
 rollback_db(db_t * db)
 {
@@ -133,18 +140,55 @@ rollback_db(db_t * db)
     return ddl_db(db, B("rollback"));
 }
 
+int
+savepoint_db(db_t * db, const blob_t * name)
+{
+    blob_t * sql = local_blob(256);
+    vadd_blob(sql, B("savepoint "), name);
+    return ddl_db(db, sql);
+}
+
+int
+release_db(db_t * db, const blob_t * name)
+{
+    blob_t * sql = local_blob(256);
+    vadd_blob(sql, B("release "), name);
+    return ddl_db(db, sql);
+}
+
+int
+rollback_to_db(db_t * db, const blob_t * name)
+{
+    blob_t * sql = local_blob(256);
+    vadd_blob(sql, B("rollback to "), name);
+    return ddl_db(db, sql);
+}
+
 // 1 based index
 int
-text_bind_db(sqlite3_stmt * stmt, int index, blob_t * value)
+text_bind_db(sqlite3_stmt * stmt, int index, const blob_t * value)
 {
-    return sqlite3_bind_text(stmt, index, (char *)value->data, value->size, SQLITE_STATIC);
+    int rc = sqlite3_bind_text(stmt, index, (char *)value->data, value->size, SQLITE_STATIC);
+    if (rc) {
+        log_error_db(db, "text bind failed");
+        return -1;
+    }
+        
+    return 0;
 }
 
 // 1 based index
 int
 s64_bind_db(sqlite3_stmt * stmt, int index, s64 value)
 {
-    return sqlite3_bind_int64(stmt, index, value);
+    int rc = sqlite3_bind_int64(stmt, index, value);
+    if (rc) {
+        // TODO(jason): dev_error?
+        log_error_db(db, "s64 bind failed");
+        return -1;
+    }
+
+    return 0;
 }
 
 // 0 based index
@@ -277,9 +321,10 @@ user_version_db(db_t * db)
 }
 
 int
-set_user_version_db(db_t * db, s32 version)
+set_user_version_db(db_t * db, s32 user_version)
 {
-    return set_s64_pragma_db(db, B("user_version"), version);
+    log_var_s64(user_version);
+    return set_s64_pragma_db(db, B("user_version"), user_version);
 }
 
 int
@@ -291,43 +336,34 @@ set_wal_mode_db(db_t * db)
 int
 exec_s64_db(db_t * db, blob_t * sql, s64 * value)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
+    if (prepare_db(db, &stmt, sql)) return -1;
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
-        *value = s64_db(stmt, 0);
+        if (value) *value = s64_db(stmt, 0);
     }
 
-    result = finalize_db(stmt);
-
-    return result;
+    return finalize_db(stmt);
 }
 
 int
 exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = text_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
+    if (prepare_db(db, &stmt, sql)
+            || text_bind_db(stmt, 1, p1)
+       )
+    {
+        return finalize_db(stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
-        *value = s64_db(stmt, 0);
+        if (value) *value = s64_db(stmt, 0);
     }
 
-    result = finalize_db(stmt);
-
-    return result;
+    return finalize_db(stmt);
 }
 
 // NOTE(jason): all parameters should be text that sqlite will convert or app
@@ -335,91 +371,76 @@ exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1)
 int
 exec_s64_pbb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, blob_t * p2)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = text_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    result = text_bind_db(stmt, 2, p2);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        *value = s64_db(stmt, 0);
-    }
-
-    result = finalize_db(stmt);
-
-    return result;
-}
-
-int
-exec_s64_pbi_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, s64 p2)
-{
-    int result;
-    sqlite3_stmt * stmt;
-
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = text_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    result = s64_bind_db(stmt, 2, p2);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    if (sqlite3_step(stmt) == SQLITE_ROW) {
-        *value = s64_db(stmt, 0);
-    }
-
-    result = finalize_db(stmt);
-
-    return result;
-}
-
-int
-exec_s64_pii_db(db_t * db, blob_t * sql, s64 * value, s64 p1, s64 p2)
-{
-    int result;
-    sqlite3_stmt * stmt;
-
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = s64_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    result = s64_bind_db(stmt, 2, p2);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
+    if (prepare_db(db, &stmt, sql)
+            || text_bind_db(stmt, 1, p1)
+            || text_bind_db(stmt, 2, p2))
+    {
+        return finalize_db(stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         if (value) *value = s64_db(stmt, 0);
     }
 
-    result = finalize_db(stmt);
+    return finalize_db(stmt);
+}
 
-    return result;
+int
+exec_s64_pbi_db(db_t * db, const blob_t * sql, s64 * value, const blob_t * p1, const s64 p2)
+{
+    sqlite3_stmt * stmt;
+
+    if (prepare_db(db, &stmt, sql)
+            || text_bind_db(stmt, 1, p1)
+            || s64_bind_db(stmt, 2, p2))
+    {
+        return finalize_db(stmt);
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (value) *value = s64_db(stmt, 0);
+    }
+
+    return finalize_db(stmt);
+}
+
+int
+exec_s64_pi_db(db_t * db, blob_t * sql, s64 * value, s64 p1)
+{
+    sqlite3_stmt * stmt;
+
+    if (prepare_db(db, &stmt, sql)
+            || s64_bind_db(stmt, 1, p1))
+    {
+        return finalize_db(stmt);
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (value) *value = s64_db(stmt, 0);
+    }
+
+    return finalize_db(stmt);
+}
+
+int
+exec_s64_pii_db(db_t * db, blob_t * sql, s64 * value, s64 p1, s64 p2)
+{
+    sqlite3_stmt * stmt;
+
+    if (prepare_db(db, &stmt, sql)
+            || s64_bind_db(stmt, 1, p1)
+            || s64_bind_db(stmt, 2, p2))
+    {
+        return finalize_db(stmt);
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (value) *value = s64_db(stmt, 0);
+    }
+
+    return finalize_db(stmt);
 }
 
 // TODO(jason): should this return an error like SQLITE_NOTFOUND if a value
@@ -427,133 +448,192 @@ exec_s64_pii_db(db_t * db, blob_t * sql, s64 * value, s64 p1, s64 p2)
 int
 exec_blob_db(db_t * db, blob_t * sql, blob_t * value)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
+    if (prepare_db(db, &stmt, sql)) return -1;
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         blob_db(stmt, 0, value);
     }
 
-    result = finalize_db(stmt);
-
-    return result;
+    return finalize_db(stmt);
 }
 
 int
 exec_blob_pb_db(db_t * db, blob_t * sql, blob_t * value, blob_t * p1)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = text_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
+    if (prepare_db(db, &stmt, sql)
+            || text_bind_db(stmt, 1, p1))
+    {
+        return finalize_db(stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         blob_db(stmt, 0, value);
     }
 
-    result = finalize_db(stmt);
-
-    return result;
+    return finalize_db(stmt);
 }
 
 int
 exec_blob_pi_db(db_t * db, blob_t * sql, blob_t * value, s64 p1)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = s64_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
+    if (prepare_db(db, &stmt, sql)
+            || s64_bind_db(stmt, 1, p1))
+    {
+        return finalize_db(stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         blob_db(stmt, 0, value);
     }
 
-    result = finalize_db(stmt);
-
-    return result;
+    return finalize_db(stmt);
 }
 
 int
-exec_blob_2b_db(db_t * db, blob_t * sql, blob_t * value, blob_t * p1, blob_t * p2)
+exec_blob_pbb_db(db_t * db, blob_t * sql, blob_t * value, blob_t * p1, blob_t * p2)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = text_bind_db(stmt, 1, p1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    result = text_bind_db(stmt, 2, p2);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
+    if (prepare_db(db, &stmt, sql)
+            || text_bind_db(stmt, 1, p1)
+            || text_bind_db(stmt, 2, p2))
+    {
+        return finalize_db(stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         blob_db(stmt, 0, value);
     }
 
-    result = finalize_db(stmt);
-
-    return result;
+    return finalize_db(stmt);
 }
 
 int
-exec_blob_i1b2_db(db_t * db, blob_t * sql, blob_t * value, s64 i1, blob_t * b1, blob_t * b2)
+exec_blob_pibb_db(db_t * db, blob_t * sql, blob_t * value, s64 i1, blob_t * b1, blob_t * b2)
 {
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = s64_bind_db(stmt, 1, i1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    result = text_bind_db(stmt, 2, b1);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
-    }
-
-    result = text_bind_db(stmt, 3, b2);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
+    if (prepare_db(db, &stmt, sql)
+            || s64_bind_db(stmt, 1, i1)
+            || text_bind_db(stmt, 2, b1)
+            || text_bind_db(stmt, 3, b2))
+    {
+        return finalize_db(stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
         blob_db(stmt, 0, value);
     }
 
-    result = finalize_db(stmt);
+    return finalize_db(stmt);
+}
 
-    return result;
+// NOTE(jason): automatically adds a created field with unixepoch() value
+int
+insert_sql_db(blob_t * sql, const blob_t * table, param_t * params, int n_params)
+{
+    add_blob(sql, B("insert into "));
+    add_blob(sql, table);
+
+    add_blob(sql, B(" ("));
+    add_blob(sql, fields.created->name);
+    for (int i = 0; i < n_params; i++) {
+        write_blob(sql, ",", 1);
+        add_blob(sql, params[i].field->name);
+    }
+    add_blob(sql, B(") values ("));
+    add_blob(sql, B("unixepoch()"));
+    for (int i = 0; i < n_params; i++) {
+        write_blob(sql, ",?", 2);
+        add_s64_blob(sql, params[i].field->id);
+    }
+    add_blob(sql, B(")"));
+
+    return sql->error ? -1 : 0;
+}
+
+#define insert_fields_db(db, ...) _insert_fields_db(db, __VA_ARGS__, 0)
+
+// NOTE(jason): probably won't work with without rowid tables due to
+// "returning rowid" clause
+int
+_insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
+{
+    va_list args;
+    va_start(args, rowid);
+
+    // NOTE(jason): can't do N_FIELDS for params size because then the
+    // loop to bind params, etc has to loop over all fields to check
+    // for actually provided values or have a lookup or something.
+    // eventually this should be removed when all db stuff is inited
+    // at startup.
+    const int max_params = 16;
+    param_t params[max_params];
+    int n_params = 0;
+
+    /// how to detect too many varargs for max_params?
+    for (int i = 0; i < max_params; i++) {
+        field_id_t id = va_arg(args, s64);
+        if (!id) break;
+
+        field_t * f = by_id_field(id);
+        params[i] = local_param(f);
+
+        //log_var_field(params[i].field);
+        //debug_s64(params[i].value->capacity);
+
+        switch (f->type) {
+            case text_field_type:
+                blob_t * value = va_arg(args, blob_t *);
+                //debug_blob(value);
+                dev_error(value);
+                add_blob(params[i].value, value);
+                break;
+            case integer_field_type:
+                s64 s64_value = va_arg(args, s64);
+                //debug_s64(s64_value);
+                add_s64_blob(params[i].value, s64_value);
+                break;
+            default:
+                log_var_field(f);
+                dev_error("unhandled field type");
+        }
+
+        n_params++;
+    }
+
+    // TODO(jason): somehow test for extra params over the max_params
+
+    blob_t * sql = local_blob(4096);
+    insert_sql_db(sql, table, params, n_params);
+    add_blob(sql, B(" returning rowid"));
+
+    debug_blob(sql);
+
+    sqlite3_stmt * stmt;
+
+    if (prepare_db(db, &stmt, sql)) {
+        return -1;
+    }
+
+    for (int i = 0; i < n_params; i++) {
+        param_t p = params[i];
+        if (text_bind_db(stmt, p.field->id, p.value)) {
+            return finalize_db(stmt);
+        }
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW && rowid) {
+        *rowid = s64_db(stmt, 0);
+    }
+
+    return finalize_db(stmt);
 }
 
 int
@@ -582,34 +662,26 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
 
     log_var_blob(sql);
 
-    int result;
     sqlite3_stmt * stmt;
 
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    result = s64_bind_db(stmt, fields.user_id->id, user_id);
-    if (result != SQLITE_OK) {
-        finalize_db(stmt);
-        return result;
+    if (prepare_db(db, &stmt, sql)
+            || s64_bind_db(stmt, fields.user_id->id, user_id))
+    {
+        return finalize_db(stmt);
     }
 
     for (int i = 0; i < n_params; i++) {
         param_t * p = &params[i];
-        result = text_bind_db(stmt, p->field->id, p->value);
-        if (result != SQLITE_OK) {
-            finalize_db(stmt);
-            return result;
+        if (text_bind_db(stmt, p->field->id, p->value)) {
+            return finalize_db(stmt);
         }
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
-        *id = s64_db(stmt, 0);
+        if (id) *id = s64_db(stmt, 0);
     }
 
-    result = finalize_db(stmt);
-
-    return result;
+    return finalize_db(stmt);
 }
 
 int
@@ -792,6 +864,9 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
         }
         //debug_blob(f->name);
 
+        // think this should work, but can't test now and this entire function
+        // should eventually be deleted
+        //outputs[i] = local_param(f);
         p->field = f;
         p->value = local_blob(f->max_size);
         p->error = local_blob(128);
@@ -861,8 +936,7 @@ ids_params_db(db_t * db, const blob_t * sql, s64 * ids, int * n_ids, param_t * i
         param_t * p = &inputs[bind_to_input[i]];
         result = text_bind_db(stmt, i + 1, p->value);
         if (result != SQLITE_OK) {
-            finalize_db(stmt);
-            return result;
+            return finalize_db(stmt);
         }
     }
 
@@ -870,6 +944,7 @@ ids_params_db(db_t * db, const blob_t * sql, s64 * ids, int * n_ids, param_t * i
     int i = 0;
     for (; i < max_ids; i++) {
         if (sqlite3_step(stmt) != SQLITE_ROW) {
+            ids[i] = 0;
             break;
         }
 
@@ -987,3 +1062,15 @@ by_id_db(db_t * db, const blob_t * sql, s64 id, ...)
     return finalize_db(stmt);
 }
 
+
+#define select_fields_db(db, ...) _select_fields_db(db, __VA_ARGS__, 0)
+
+int
+_select_fields_db(db_t * db, const blob_t * table, s64 rowid, ...)
+{
+    UNUSED(db);
+    UNUSED(table);
+    UNUSED(rowid);
+
+    return 0;
+}

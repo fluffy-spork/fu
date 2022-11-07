@@ -73,6 +73,10 @@ typedef enum {
 #define debug_s64(var) debugf("%s: %ld", #var, (s64)var);
 #define debug_u64(var) debugf("%s: %lu", #var, (u64)var);
 
+#define kilobytes(n_bytes) round((double)n_bytes/1024)
+#define megabytes(n_bytes) round((double)n_bytes/1024/1024)
+#define gigabytes(n_bytes) round((double)n_bytes/1024/1024)
+
 bool
 dev_mode()
 {
