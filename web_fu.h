@@ -33,6 +33,7 @@ ENUM_BLOB(method, METHOD)
     E(jpeg, "image/jpeg", var) \
     E(gif, "image/gif", var) \
     E(mp4, "video/mp4", var) \
+    E(mov, "video/quicktime", var) \
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
@@ -472,6 +473,7 @@ content_type_magic(const blob_t * data)
     //static char mp4_magic[] = { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
     static char mp4_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x69, 0x73, 0x6F, 0x6D };
     static char mp42_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
+    static char mov_magic[] = { 0x66, 0x74, 0x79, 0x70 };
 
     blob_t * magic = local_blob(40);
     sub_blob(magic, data, 0, magic->capacity);
@@ -490,6 +492,9 @@ content_type_magic(const blob_t * data)
     }
     else if (first_contains_blob(data, wrap_array_blob(mp42_magic))) {
         return mp4_content_type;
+    }
+    else if (first_contains_blob(data, wrap_array_blob(mov_magic))) {
+        return mov_content_type;
     }
 
     return binary_content_type;
@@ -1487,7 +1492,8 @@ files_upload_handler(endpoint_t * ep, request_t * req)
 
     content_type_t type = content_type_magic(req->request_body);
     if (type == binary_content_type) {
-        return bad_request_response(req);
+        type = mp4_content_type;
+        //return bad_request_response(req);
     }
 
 
