@@ -590,15 +590,19 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
 
         switch (f->type) {
             case text_field_type:
-                blob_t * value = va_arg(args, blob_t *);
-                //debug_blob(value);
-                dev_error(value);
-                add_blob(params[i].value, value);
+                {
+                    blob_t * value = va_arg(args, blob_t *);
+                    //debug_blob(value);
+                    dev_error(value);
+                    add_blob(params[i].value, value);
+                }
                 break;
             case integer_field_type:
-                s64 s64_value = va_arg(args, s64);
-                //debug_s64(s64_value);
-                add_s64_blob(params[i].value, s64_value);
+                {
+                    s64 s64_value = va_arg(args, s64);
+                    //debug_s64(s64_value);
+                    add_s64_blob(params[i].value, s64_value);
+                }
                 break;
             default:
                 log_var_field(f);
