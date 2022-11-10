@@ -1399,7 +1399,7 @@ transcode_video_web(const blob_t * input)
     blob_t * output = local_blob(255);
     vadd_blob(output, input, B(".mp4"));
 
-    return _ffmpeg_call_web(input, output, B("-y -vf scale=1024:-1 -c:v libx264 -preset medium -crf 18 -an -pix_fmt yuv420p -movflags +faststart"));
+    return _ffmpeg_call_web(input, output, B("-y -vf scale=512:-1 -c:v libx264 -preset ultrafast -crf 18 -an -pix_fmt yuv420p -movflags +faststart"));
 }
 
 int
