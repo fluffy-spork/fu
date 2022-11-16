@@ -166,6 +166,27 @@ rollback_to_db(db_t * db, const blob_t * name)
 
 // 1 based index
 int
+cstr_bind_db(sqlite3_stmt * stmt, int index, const char * value)
+{
+    int len = value[0] ? strlen(value) : 0;
+    int rc = 0;
+    if (len) {
+        rc = sqlite3_bind_text(stmt, index, value, len, SQLITE_STATIC);
+    }
+    else {
+        rc = sqlite3_bind_null(stmt, index);
+    }
+
+    if (rc) {
+        log_error_db(db, "cstr bind failed");
+        return -1;
+    }
+
+    return 0;
+}
+
+// 1 based index
+int
 text_bind_db(sqlite3_stmt * stmt, int index, const blob_t * value)
 {
     int rc = sqlite3_bind_text(stmt, index, (char *)value->data, value->size, SQLITE_STATIC);
@@ -618,7 +639,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
     insert_sql_db(sql, table, params, n_params);
     add_blob(sql, B(" returning rowid"));
 
-    debug_blob(sql);
+    //debug_blob(sql);
 
     sqlite3_stmt * stmt;
 
