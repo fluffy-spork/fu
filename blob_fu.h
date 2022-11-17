@@ -673,6 +673,35 @@ escape_blob(blob_t * b, const blob_t * value, const u8 c, const blob_t * replace
     return written;
 }
 
+ssize_t
+c_escape_blob(blob_t * b, const blob_t * value)
+{
+    if (!value) return 0;
+
+    char * escape[256] = {};
+    escape['\\'] = "\\\\";
+    escape['\"'] = "\\\"";
+    escape['\b'] = "\\b";
+    escape['\f'] = "\\f";
+    escape['\n'] = "\\n";
+    escape['\r'] = "\\r";
+    escape['\t'] = "\\t";
+
+    ssize_t written = 0;
+    for (size_t i = 0; i < value->size; i++) {
+        u8 c = value->data[i];
+        char * v = escape[c];
+        if (v) {
+            write_blob(b, v, 2);
+        }
+        else {
+            write_blob(b, &c, 1);
+        }
+    }
+
+    return written;
+}
+
 // NOTE(jason): using hex for short values like 64-bit is better than base64
 // since it's simpler and the overhead isn't worth it.
 ssize_t

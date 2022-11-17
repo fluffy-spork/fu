@@ -212,7 +212,7 @@ init_endpoints()
 }
 
 endpoint_t *
-endpoint_by_id(endpoint_id_t id)
+by_id_endpoint(endpoint_id_t id)
 {
     assert(id < endpoints.n_list);
     return endpoints.list[id];
@@ -1078,16 +1078,6 @@ url_field_endpoint(blob_t * url, endpoint_t * ep, field_t * field, blob_t * valu
     return 0;
 }
 
-// NOTE(jason): this is probably fine in most cases as long as it's ok for dest
-// to have extra params and it doesn't matter if they're in the url
-int
-redirect_endpoint(request_t * req, const endpoint_t * dest, endpoint_t * src)
-{
-    return src != NULL
-        ? redirect_params_endpoint(req, dest, src->params, src->n_params)
-        : redirect_web(req, dest->path);
-}
-
 bool
 match_route_endpoint(endpoint_t * ep, request_t * req)
 {
@@ -1152,6 +1142,29 @@ default_param_endpoint(endpoint_t * ep, field_id_t field_id, blob_t * value)
 
     return 0;
 }
+
+// NOTE(jason): this is probably fine in most cases as long as it's ok for dest
+// to have extra params and it doesn't matter if they're in the url
+int
+redirect_endpoint(request_t * req, const endpoint_t * dest, endpoint_t * src)
+{
+    return src != NULL
+        ? redirect_params_endpoint(req, dest, src->params, src->n_params)
+        : redirect_web(req, dest->path);
+}
+
+/*
+int
+redirect_next_endpoint(request_t * req, endpoint_t * ep, int default_endpoint)
+{
+    int next_id = default_s64_param_endpoint(ep, next_id_field, default_endpoint);
+
+    endpoint_t * next_ep = by_id_endpoint(next_id);
+    dev_error(next_ep != NULL);
+
+    return redirect_endpoint(req, next_ep, ep);
+}
+*/
 
 // TODO(jason): re-evaluate if this flow is correct.  possibly make all sqlite errors an assert/abort?
 // this create seems odd i don't think it's quite right.  the only place that

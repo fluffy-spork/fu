@@ -140,6 +140,9 @@ rollback_db(db_t * db)
     return ddl_db(db, B("rollback"));
 }
 
+// TODO(jason): i think for my usage, this shouldn't be used and should just
+// have ensure_transaction or something that will only start a new transaction
+// if there isn't one instead of nested transactions.
 int
 savepoint_db(db_t * db, const blob_t * name)
 {
