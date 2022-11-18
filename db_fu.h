@@ -55,7 +55,7 @@ open_db(blob_t * file, db_t ** db)
     // help:(  The message is "database is locked" for SQLITE_BUSY which seems
     // misleading.  1 second easily fixes the problem.
     // the time is in "milliseconds" not seconds as I initially thought.
-    sqlite3_busy_timeout(*db, 1000);
+    sqlite3_busy_timeout(*db, 3000);
 
     return 0;
 }
