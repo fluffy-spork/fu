@@ -267,6 +267,7 @@ const endpoint_t * login_endpoint_web;
     E(self_default_content_security_policy,"default-src 'self' blob:", var) \
     E(name_session_cookie,"z", var) \
     E(session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=strict", var) \
+    E(secure_session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=strict; secure", var) \
     E(method_not_implemented,"method not implemented", var) \
     E(bad_request,"bad request", var) \
     E(not_found,"not found", var) \
@@ -1115,6 +1116,16 @@ param_endpoint(endpoint_t * ep, field_id_t field_id)
     return by_id_param(ep->params, ep->n_params, field_id);
 }
 
+s64
+set_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
+{
+    param_t * p = param_endpoint(ep, field_id);
+    assert(p != NULL);
+    reset_blob(p->value);
+    add_s64_blob(p->value, value);
+    return value;
+}
+
 // Sets the param value if it's empty
 s64
 default_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
@@ -1244,7 +1255,12 @@ require_session_web(request_t * req, bool create)
         write_blob(c, "=", 1);
         add_blob(c, cookie);
         //write_hex_blob(c, &new_id, sizeof(new_id));
-        add_blob(c, res_web.session_cookie_attributes);
+        if (dev_mode()) {
+            add_blob(c, res_web.secure_session_cookie_attributes);
+        }
+        else {
+            add_blob(c, res_web.session_cookie_attributes);
+        }
         header(req->head, res_web.set_cookie, c);
     }
 
@@ -1534,6 +1550,12 @@ files_upload_handler(endpoint_t * ep, request_t * req)
 
     if (video_content_type(type) || image_content_type(type)) {
         req->after_task = process_media_task_web;
+        // NOTE(jason): need to set keep_alive before response headers are sent
+        // so connection: close is sent.
+        // works, but then the redirect is fast and the file hasn't been
+        // processed.  still probably the right choice.  need to improve the
+        // media processing and can get a faster vm.
+        //req->keep_alive = false;
         req->id_task = file_id;
     }
 

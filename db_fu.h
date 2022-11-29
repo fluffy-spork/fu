@@ -922,6 +922,55 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
 }
 
 int
+bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
+{
+    int n_bind = sqlite3_bind_parameter_count(stmt);
+
+    // NOTE(jason): i think the reason for bind_to_input was
+    // to bind the params in order?  not sure.  eventually
+    // bind_to_input would be done at program load and then saved
+    // for all calls.  maybe that was why.
+    int bind_to_param[n_bind];
+    memset(bind_to_param, -1, sizeof(int) * n_bind);
+
+    for (int i = 0; i < n_bind; i++) {
+        const char * name = sqlite3_bind_parameter_name(stmt, i + 1);
+        if (!name) {
+            debugf("unamed bind param at index %d", i);
+            dev_error(!"unamed bind param");
+        }
+
+        blob_t * bind_name = B(name + 1);
+
+        for (int j = 0; j < n_params; j++) {
+            param_t * p = &params[j];
+            if (equal_blob(p->field->name, bind_name)) {
+                bind_to_param[i] = j;
+                break;
+            }
+        }
+
+        // NOTE(jason): this should only happen if there's a developer error
+        if (bind_to_param[i] == -1) {
+            debugf("missing param for bind param %s", name);
+            dev_error(!"missing param");
+        }
+    }
+
+    // TODO(jason): cache the stuff above
+
+    for (int i = 0; i < n_bind; i++) {
+        param_t * p = &params[bind_to_param[i]];
+        int rc = text_bind_db(stmt, i + 1, p->value);
+        if (rc != SQLITE_OK) {
+            return finalize_db(stmt);
+        }
+    }
+
+    return 0;
+}
+
+int
 ids_params_db(db_t * db, const blob_t * sql, s64 * ids, int * n_ids, param_t * inputs, int n_inputs)
 {
     int result;
@@ -930,42 +979,9 @@ ids_params_db(db_t * db, const blob_t * sql, s64 * ids, int * n_ids, param_t * i
     result = prepare_db(db, &stmt, sql);
     if (result != SQLITE_OK) return result;
 
-    int n_bind = sqlite3_bind_parameter_count(stmt);
-
-    int bind_to_input[n_bind];
-    memset(bind_to_input, -1, sizeof(int) * n_bind);
-
-    for (int i = 0; i < n_bind; i++) {
-        const char * name = sqlite3_bind_parameter_name(stmt, i + 1);
-        if (!name) {
-            debugf("unamed bind param at index %d", i);
-            continue;
-        }
-
-        blob_t * bind_name = B(name + 1);
-
-        for (int j = 0; j < n_inputs; j++) {
-            param_t * p = &inputs[j];
-            if (equal_blob(p->field->name, bind_name)) {
-                bind_to_input[i] = j;
-                break;
-            }
-        }
-
-        // NOTE(jason): this should only happen if there's a developer error
-        if (bind_to_input[i] == -1) {
-            debugf("missing param for bind param %s", name);
-        }
-    }
-
-    // TODO(jason): cache the stuff above
-
-    for (int i = 0; i < n_bind; i++) {
-        param_t * p = &inputs[bind_to_input[i]];
-        result = text_bind_db(stmt, i + 1, p->value);
-        if (result != SQLITE_OK) {
-            return finalize_db(stmt);
-        }
+    if (bind_params_db(stmt, inputs, n_inputs)) {
+        finalize_db(stmt);
+        return -1;
     }
 
     int max_ids = *n_ids;
