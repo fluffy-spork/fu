@@ -1256,10 +1256,10 @@ require_session_web(request_t * req, bool create)
         add_blob(c, cookie);
         //write_hex_blob(c, &new_id, sizeof(new_id));
         if (dev_mode()) {
-            add_blob(c, res_web.secure_session_cookie_attributes);
+            add_blob(c, res_web.session_cookie_attributes);
         }
         else {
-            add_blob(c, res_web.session_cookie_attributes);
+            add_blob(c, res_web.secure_session_cookie_attributes);
         }
         header(req->head, res_web.set_cookie, c);
     }
