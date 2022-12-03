@@ -137,6 +137,8 @@ struct endpoint_s {
     // TODO(jason): possibly should be description
     blob_t * title;
     request_handler_func handler;
+
+    bool params_parsed;
     u8 n_params;
     param_t * params;
 };
@@ -558,7 +560,8 @@ content_type_for_path(const blob_t * path)
 bool
 video_content_type(content_type_t type)
 {
-    if (type == mp4_content_type) {
+    if (type == mp4_content_type
+            || type == mov_content_type) {
         return true;
     }
 
@@ -753,28 +756,30 @@ query_params(request_t * req, endpoint_t * ep)
 {
     //debug_blob(req->query);
 
+    if (ep->params_parsed) return 0;
+
     if (empty_blob(req->query)) return 0;
 
-    param_t * params = ep->params;
-    size_t n_params = ep->n_params;;
-
-    return urldecode_params(req->query, params, n_params);
+    ep->params_parsed = true;
+    return urldecode_params(req->query, ep->params, ep->n_params);
 }
 
 int
 post_params(request_t * req, endpoint_t * ep)
 {
-    param_t * params = ep->params;
-    size_t n_params = ep->n_params;;
+    if (ep->params_parsed) return 0;
 
-    assert(req->method == post_method);
+    dev_error(req->method == post_method);
 
+    // NOTE(jason): has to be called before next check so the headers have been
+    // read
     require_request_head_web(req);
 
-    assert(req->request_content_type == urlencoded_content_type);
+    dev_error(req->request_content_type == urlencoded_content_type);
 
     require_request_body_web(req);
-    return urldecode_params(req->request_body, params, n_params);
+    ep->params_parsed = true;
+    return urldecode_params(req->request_body, ep->params, ep->n_params);
 }
 
 int
@@ -1101,6 +1106,7 @@ route_endpoint(request_t * req)
             // by a later request.  this doesn't seem very good.  maybe
             // endpoint should be on the request and clear params in
             // reuse_request
+            ep->params_parsed = false;
             clear_params(ep->params, ep->n_params);
             return result;
         }
@@ -1127,6 +1133,9 @@ set_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
 }
 
 // Sets the param value if it's empty
+// TODO(jason): this does weird things if called before the params have been
+// parsed.  it may be that the solution is to always parse params before
+// calling handlers?
 s64
 default_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
 {
@@ -1638,7 +1647,7 @@ handle_request(request_t *req)
 
     // TODO(jason): adjust this size so the entire request is read one shot in
     // non-file upload cases.
-    blob_t * input = local_blob(MAX_RESPONSE_BODY/2);
+    blob_t * input = local_blob(MAX_REQUEST_BODY/2);
     blob_t * tmp = local_blob(1024);
 
     // NOTE(jason): read in the request line, headers, part of body.  any body
@@ -1737,10 +1746,10 @@ handle_request(request_t *req)
             && sub_blob(req->request_body, input, offset, -1) == -1) {
         // NOTE(jason): I spent a lot of time on a bug caused by having body
         // smaller.  the real fix is input is a fraction of the
-        // MAX_RESPONSE_BODY size
+        // MAX_REQUEST_BODY size
         if (req->request_body->error == ENOSPC) {
-            dev_error(req->request_body->capacity >= input->capacity);
             debug("request body somehow smaller than input size");
+            dev_error(req->request_body->capacity >= input->capacity);
         }
 
         internal_server_error_response(req);
