@@ -205,7 +205,7 @@ init_html(config_html_t * config)
     add_blob(b, B("<link rel=\"stylesheet\" href=\""));
     res_url(b, B("main.css"));
     add_blob(b, B("\">"));
-    add_blob(b, B("<script async src=\""));
+    add_blob(b, B("<script defer src=\""));
     res_url(b, B("main.js"));
     add_blob(b, B("\"></script>"));
     _page_res_html = b;
