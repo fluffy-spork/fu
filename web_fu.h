@@ -1628,8 +1628,7 @@ files_handler(endpoint_t * ep, request_t * req)
     int rc = file_response(req, upload_dir_web, filename, type, req->user_id);
     if (rc == -1 && errno == ENOENT) {
         if (process_media_web(file_id)) {
-            internal_server_error_response(req);
-            return -1;
+            return internal_server_error_response(req);
         }
 
         return file_response(req, upload_dir_web, filename, type, req->user_id);

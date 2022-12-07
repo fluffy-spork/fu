@@ -449,7 +449,7 @@ exec_s64_pi_db(db_t * db, blob_t * sql, s64 * value, s64 p1)
 }
 
 int
-exec_s64_pii_db(db_t * db, blob_t * sql, s64 * value, s64 p1, s64 p2)
+exec_s64_pii_db(db_t * db, const blob_t * sql, s64 * value, s64 p1, s64 p2)
 {
     sqlite3_stmt * stmt;
 
@@ -1107,10 +1107,10 @@ by_id_db(db_t * db, const blob_t * sql, s64 id, ...)
 }
 
 
-#define select_fields_db(db, ...) _select_fields_db(db, __VA_ARGS__, 0)
+#define by_id_fields_db(db, ...) _select_fields_db(db, __VA_ARGS__, 0)
 
 int
-_select_fields_db(db_t * db, const blob_t * table, s64 rowid, ...)
+_by_id_fields_db(db_t * db, const blob_t * table, s64 rowid, ...)
 {
     UNUSED(db);
     UNUSED(table);

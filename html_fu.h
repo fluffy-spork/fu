@@ -628,6 +628,19 @@ hidden_submit_post_form_html(blob_t * html, blob_t * action, field_t * field, bl
     end_form();
 }
 
+/*
+ * NOTE(jason): so far, everytime i think i want this function i end up using post.  we'll see.
+ *
+void
+hidden_submit_get_form_html(blob_t * html, blob_t * action, field_t * field, blob_t * value, blob_t * label)
+{
+    start_get_form(action, off_autocomplete);
+    hidden_input(field->name, value);
+    submit_input(res_html.action, label);
+    end_form();
+}
+*/
+
 void
 textarea_html(blob_t * html, param_t * param, bool autofocus)
 {
