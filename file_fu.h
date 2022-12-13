@@ -1,7 +1,7 @@
 #pragma once
 
 int
-path_file_fu(blob_t * path, blob_t * dir, blob_t * file)
+path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
 {
     assert(path != NULL);
     assert(dir != NULL);

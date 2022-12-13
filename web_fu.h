@@ -1014,7 +1014,7 @@ int
 file_response(request_t * req, const blob_t * dir, const blob_t * path, content_type_t content_type, s64 user_id)
 {
     blob_t * file_path = local_blob(255);
-    vadd_blob(file_path, dir, path);
+    path_file_fu(file_path, dir, path);
 
     //debug_blob(file_path);
 
@@ -1545,13 +1545,11 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         //return bad_request_response(req);
     }
 
-
     blob_t * file_key = local_blob(32);
     fill_random_blob(file_key);
 
     blob_t * path = local_blob(255);
-    add_blob(path, upload_dir_web);
-    add_blob(path, file_key);
+    path_file_fu(path, upload_dir_web, file_key);
 
     s64 file_id;
     if (insert_file(db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
