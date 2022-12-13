@@ -63,6 +63,14 @@ typedef enum {
 
 ENUM_BLOB(http_status, HTTP_STATUS)
 
+typedef struct {
+    char * port;
+    blob_t * res_dir;
+    blob_t * upload_dir;
+    int n_children;
+    int (* after_fork_f)();
+} config_web_t;
+
 typedef struct request_s request_t;
 typedef int (* request_task_f)(request_t *);
 
@@ -213,10 +221,15 @@ init_endpoints()
     endpoints.n_list = N_ENDPOINTS;
 }
 
+// returns the endpoint or null if id is out of range
 endpoint_t *
 by_id_endpoint(endpoint_id_t id)
 {
-    assert(id < endpoints.n_list);
+    if (id < 0 || id >= endpoints.n_list) {
+        error_log("invalid endpoint_id_t", __func__, id);
+        return NULL;
+    }
+
     return endpoints.list[id];
 }
 
@@ -440,12 +453,10 @@ clear_params(param_t * params, size_t n_params)
 }
 
 void
-init_web(const blob_t * res_dir)
+init_web(const blob_t * res_dir, const blob_t * upload_dir)
 {
     res_dir_web = res_dir;
-    // TODO(jason): improve.  probably move to an app data dir (app user home
-    // dir) and then this is a subdir of that
-    upload_dir_web = const_blob("uploads/");
+    upload_dir_web = upload_dir;
 
     if (mkdir_file_fu(upload_dir_web, S_IRWXU)) {
         if (errno != EEXIST) {
@@ -1173,18 +1184,18 @@ redirect_endpoint(request_t * req, const endpoint_t * dest, endpoint_t * src)
         : redirect_web(req, dest->path);
 }
 
-/*
 int
-redirect_next_endpoint(request_t * req, endpoint_t * ep, int default_endpoint)
+redirect_next_endpoint(request_t * req, endpoint_t * ep, endpoint_t * default_ep)
 {
-    int next_id = default_s64_param_endpoint(ep, next_id_field, default_endpoint);
+    s64 next_id = default_s64_param_endpoint(ep, next_id_field, default_ep ? default_ep->id : 0);
 
     endpoint_t * next_ep = by_id_endpoint(next_id);
-    dev_error(next_ep != NULL);
+    if (!next_ep) {
+        next_ep = default_ep;
+    }
 
     return redirect_endpoint(req, next_ep, ep);
 }
-*/
 
 // TODO(jason): re-evaluate if this flow is correct.  possibly make all sqlite errors an assert/abort?
 // this create seems odd i don't think it's quite right.  the only place that
@@ -1822,7 +1833,7 @@ respond:
 }
 
 pid_t
-fork_worker_web(int srv_fd, int (* after_fork_func)())
+fork_worker_web(int srv_fd, int (* after_fork_f)())
 {
     // clear the logs before forking
     flush_log();
@@ -1846,7 +1857,7 @@ fork_worker_web(int srv_fd, int (* after_fork_func)())
 
     // NOTE(jason): callback so application can open db connections,
     // etc
-    after_fork_func();
+    after_fork_f();
 
     flush_log();
 
@@ -1897,15 +1908,16 @@ handle_request:
 
 // doesn't return.  calls exit() on failure
 int
-main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* after_fork_func)())
+//main_web(const char * srv_port, const blob_t * res_dir, const blob_t * upload_dir, int n_children, int (* after_fork_f)())
+main_web(config_web_t * config)
 {
-    assert(res_dir != NULL);
-    assert(n_children <= MAX_CHILDREN_WEB);
+    assert_blob(config->res_dir);
+    assert(config->n_children <= MAX_CHILDREN_WEB);
 
     // no idea what this should be
     const int backlog = 20;
 
-    init_web(res_dir);
+    init_web(config->res_dir, config->upload_dir);
 
     // setup server socket to listen for requests
     int srv_fd = -1;
@@ -1920,7 +1932,7 @@ main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* a
     hints.ai_flags = AI_PASSIVE | AI_V4MAPPED;
 
     struct addrinfo *srv_info;
-    result = getaddrinfo(NULL, srv_port, &hints, &srv_info);
+    result = getaddrinfo(NULL, config->port, &hints, &srv_info);
     if (result != 0) {
         error_log(gai_strerror(result), "getaddrinfo", result);
         //errorf("getaddrinfo: %s", gai_strerror(result));
@@ -1982,9 +1994,9 @@ main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* a
     //log_var_u64(enum_res_web(wrap_blob("service unavailable"), 0)); 
     //log_var_blob(res_web.service_unavailable);
 
-    for (int i = 0; i < n_children; i++)
+    for (int i = 0; i < config->n_children; i++)
     {
-        pid_t pid = fork_worker_web(srv_fd, after_fork_func);
+        pid_t pid = fork_worker_web(srv_fd, config->after_fork_f);
         if (pid > 0) {
             pids[i] = pid;
         }
@@ -2018,11 +2030,11 @@ main_web(const char * srv_port, const blob_t * res_dir, int n_children, int (* a
                 debugf("exit signaled %d", WTERMSIG(wstatus));
             }
 
-            for (int i = 0; i < n_children; i++) {
+            for (int i = 0; i < config->n_children; i++) {
                 if (pids[i] == wpid) {
                     debugf("found pid index: %d", i);
 
-                    pid_t cpid = fork_worker_web(srv_fd, after_fork_func);
+                    pid_t cpid = fork_worker_web(srv_fd, config->after_fork_f);
                     if (cpid == -1) {
                         // TODO(jason): eventually, there will be no more
                         // workers if this keeps failing to replace.

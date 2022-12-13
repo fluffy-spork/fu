@@ -22,7 +22,7 @@
 #define log_var_blob(var) log_blob(var, #var)
 // TODO(jason): needs to handle 0 bytes within string and be able to print hex
 #define debug_blob(var) debugf("%s: %s", #var, cstr_blob(var))
-
+#define assert_blob(var) assert(valid_blob(var))
 
 typedef struct {
     // XXX maybe make this flags?  could track error, pooled, etc

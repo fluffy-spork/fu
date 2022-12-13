@@ -11,9 +11,9 @@ db_t * db = NULL;
 // be run at all.  oops!
 // should make them something like abort_prepare_db or fail_prepare_db.  should
 // work the same but always run the code and fail.
-#define assert_open_db(file, ppdb) assert(open_db(wrap_blob(file), ppdb) != -1)
-#define assert_ddl_db(db, sql) assert(ddl_db(db, wrap_blob(sql)) != -1)
-#define assert_prepare_db(db, ppstmt, sql) assert(prepare_db(db, ppstmt, wrap_blob(sql)) != -1)
+#define assert_open_db(file, ppdb) assert(open_db(B(file), ppdb) != -1)
+#define assert_ddl_db(db, sql) assert(ddl_db(db, B(sql)) != -1)
+#define assert_prepare_db(db, ppstmt, sql) assert(prepare_db(db, ppstmt, B(sql)) != -1)
 
 void
 log_callback_db(void * arg, int err_code, const char *msg)
@@ -36,13 +36,8 @@ init_db()
 int
 open_db(blob_t * file, db_t ** db)
 {
-    assert(file != NULL);
+    assert_blob(file);
     assert(file->size < 256);
-
-    if (begins_with_blob(file, B("/"))) {
-        error_log("file must relative path", "file", 1);
-        return -1;
-    }
 
     if (sqlite3_open(cstr_blob(file), db)) {
         log_error_db(*db, "sqlite3_open");
@@ -55,7 +50,7 @@ open_db(blob_t * file, db_t ** db)
     // help:(  The message is "database is locked" for SQLITE_BUSY which seems
     // misleading.  1 second easily fixes the problem.
     // the time is in "milliseconds" not seconds as I initially thought.
-    sqlite3_busy_timeout(*db, 3000);
+    sqlite3_busy_timeout(*db, 10000);
 
     return 0;
 }

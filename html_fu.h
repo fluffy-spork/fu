@@ -409,7 +409,9 @@ video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob
 void
 link_html(blob_t * html, const blob_t * url, const blob_t * content)
 {
-    assert_html();
+    // TODO(jason): maybe link should take another blob_t * query parameter instead
+    // of assuming they're already in the url
+
     assert(url != NULL);
 
     open_tag_html(html, res_html.anchor);

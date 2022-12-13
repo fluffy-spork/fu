@@ -1,6 +1,20 @@
 #pragma once
 
 int
+path_file_fu(blob_t * path, blob_t * dir, blob_t * file)
+{
+    assert(path != NULL);
+    assert(dir != NULL);
+    assert(file != NULL);
+
+    add_blob(path, dir);
+    write_blob(path, "/", 1);
+    add_blob(path, file);
+
+    return 0;
+}
+
+int
 mkdir_file_fu(const blob_t * path, mode_t mode)
 {
     if (mkdir(cstr_blob(path), mode)) {
