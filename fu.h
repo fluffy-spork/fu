@@ -48,6 +48,8 @@ typedef enum {
 // mark a variable as unused to since warnings are set to errors
 #define UNUSED(var) (void)var
 
+#define assert_not_null(var) assert(var != NULL);
+
 // crash on a rare error situation that shouldn't ever happen and if does
 // everything is probably fucked
 // needs to not use assert so exp is always run.

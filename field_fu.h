@@ -12,7 +12,7 @@
     E(file, "file", var) \
     E(timestamp, "timestamp", var) \
     E(password, "password", var) \
-    E(select, "select", var) \
+    E(select_integer, "select_integer", var) \
 
 ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 
@@ -56,10 +56,7 @@ max_size_field_type(field_type_t type, s32 req_size)
     if (req_size) return req_size;
 
     switch (type) {
-        // TODO(jason): reconsider changing select to id_select or something to
-        // make it clear the value is an integer
-        // these are 64 ids
-        case select_field_type:
+        case select_integer_field_type:
         case timestamp_field_type:
         case file_field_type:
             return 20;

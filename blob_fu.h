@@ -20,9 +20,9 @@
     _log(plog, value->data, value->size, label, strlen(label), 0, __FILE__, __func__, __LINE__)
 
 #define log_var_blob(var) log_blob(var, #var)
+#define error_log_blob(var) error_log(#var, "error_log_blob", var->error)
 // TODO(jason): needs to handle 0 bytes within string and be able to print hex
 #define debug_blob(var) debugf("%s: %s", #var, cstr_blob(var))
-#define assert_blob(var) assert(valid_blob(var))
 
 typedef struct {
     // XXX maybe make this flags?  could track error, pooled, etc

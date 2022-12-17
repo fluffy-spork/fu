@@ -36,7 +36,7 @@ init_db()
 int
 open_db(blob_t * file, db_t ** db)
 {
-    assert_blob(file);
+    assert_not_null(file);
     assert(file->size < 256);
 
     if (sqlite3_open(cstr_blob(file), db)) {
@@ -660,7 +660,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
 }
 
 int
-insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * params, int n_params)
+insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * params, int n_params, field_id_t ignore_field)
 {
     blob_t * sql = local_blob(255);
 
@@ -670,12 +670,16 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
     add_blob(sql, B(" ("));
     add_blob(sql, fields.user_id->name);
     for (int i = 0; i < n_params; i++) {
+        if (params[i].field->id == ignore_field) continue;
+
         write_blob(sql, ",", 1);
         add_blob(sql, params[i].field->name);
     }
     add_blob(sql, B(") values (?"));
     add_s64_blob(sql, fields.user_id->id);
     for (int i = 0; i < n_params; i++) {
+        if (params[i].field->id == ignore_field) continue;
+
         write_blob(sql, ",?", 2);
         add_s64_blob(sql, params[i].field->id);
     }
@@ -683,7 +687,12 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
     add_blob(sql, table);
     add_blob(sql, B("_id"));
 
-    log_var_blob(sql);
+    if (sql->error) {
+        error_log_blob(sql);
+        return -1;
+    }
+
+    //log_var_blob(sql);
 
     sqlite3_stmt * stmt;
 
@@ -694,6 +703,8 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
     }
 
     for (int i = 0; i < n_params; i++) {
+        if (params[i].field->id == ignore_field) continue;
+
         param_t * p = &params[i];
         if (text_bind_db(stmt, p->field->id, p->value)) {
             return finalize_db(stmt);
@@ -917,6 +928,19 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
 }
 
 int
+sql_type_param(param_t * p)
+{
+    switch (p->field->type) {
+        case integer_field_type:
+        case timestamp_field_type:
+        case select_integer_field_type:
+            return SQLITE_INTEGER;
+        default:
+            return SQLITE_TEXT;
+    }
+}
+
+int
 bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
 {
     int n_bind = sqlite3_bind_parameter_count(stmt);
@@ -955,9 +979,19 @@ bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
     // TODO(jason): cache the stuff above
 
     for (int i = 0; i < n_bind; i++) {
+        int rc = 0;
+
         param_t * p = &params[bind_to_param[i]];
-        int rc = text_bind_db(stmt, i + 1, p->value);
+        int sql_type = sql_type_param(p);
+        if (sql_type == SQLITE_INTEGER) {
+            rc = s64_bind_db(stmt, i + 1, s64_blob(p->value, 0));
+        }
+        else {
+            rc = text_bind_db(stmt, i + 1, p->value);
+        }
+
         if (rc != SQLITE_OK) {
+            // TODO(jason): should these be doing this still?
             return finalize_db(stmt);
         }
     }

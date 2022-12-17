@@ -3,9 +3,9 @@
 int
 path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
 {
-    assert(path != NULL);
-    assert(dir != NULL);
-    assert(file != NULL);
+    assert_not_null(path);
+    assert_not_null(dir);
+    assert_not_null(file);
 
     add_blob(path, dir);
     write_blob(path, "/", 1);

@@ -622,7 +622,7 @@ single_input_post_form_html(blob_t * html, blob_t * action, field_t * field, aut
 }
 
 void
-hidden_submit_post_form_html(blob_t * html, blob_t * action, field_t * field, blob_t * value, blob_t * label)
+hidden_post_form_html(blob_t * html, blob_t * action, field_t * field, blob_t * value, blob_t * label)
 {
     start_post_form(action, off_autocomplete);
     hidden_input(field->name, value);
@@ -735,19 +735,13 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         label(field->label, field->name);
         end_div();
     }
-    else if (field->type == select_field_type) {
+    else if (field->type == select_integer_field_type) {
         start_div_class(res_html.field);
-
-        //open_tag_html(html, res_html.select);
-        //close_tag_html(html);
 
         select_html(html, param);
 
         label(field->label, field->name);
         end_div();
-
-        //render options from a db query
-        //set the default choice with the value
     }
     else if (field->type == file_field_type) {
         start_div_class(res_html.field);

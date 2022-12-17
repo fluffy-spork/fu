@@ -195,6 +195,7 @@ _endpoint(endpoint_id_t id, blob_t * path, blob_t * name, blob_t * title, reques
         //log_field(p->field);
     }
 
+    ep->params_parsed = false;
     ep->params = params;
     ep->n_params = n;
 
@@ -255,6 +256,7 @@ const endpoint_t * login_endpoint_web;
 
 #define RES_WEB(var, E) \
     E(space," ", var) \
+    E(hash,"#", var) \
     E(crlf,"\r\n", var) \
     E(crlfcrlf,"\r\n\r\n", var) \
     E(backslash,"/", var) \
@@ -903,6 +905,8 @@ error_response(request_t * req, http_status_t status, blob_t * reason)
     h1(reason);
     page_end();
 
+    error_log(cstr_blob(reason), "http", status);
+
     return -1;
 }
 
@@ -1112,14 +1116,13 @@ route_endpoint(request_t * req)
         endpoint_t * ep = endpoints.list[i];
         if (match_route_endpoint(ep, req)) {
             //log_endpoint(ep);
-            int result = ep->handler(ep, req);
             // TODO(jason): make sure parameters are cleared so don't get used
             // by a later request.  this doesn't seem very good.  maybe
             // endpoint should be on the request and clear params in
             // reuse_request
             ep->params_parsed = false;
             clear_params(ep->params, ep->n_params);
-            return result;
+            return ep->handler(ep, req);
         }
     }
 
@@ -1185,16 +1188,28 @@ redirect_endpoint(request_t * req, const endpoint_t * dest, endpoint_t * src)
 }
 
 int
-redirect_next_endpoint(request_t * req, endpoint_t * ep, endpoint_t * default_ep)
+redirect_next_endpoint(request_t * req, endpoint_t * ep, endpoint_t * default_ep, blob_t * hash)
 {
-    s64 next_id = default_s64_param_endpoint(ep, next_id_field, default_ep ? default_ep->id : 0);
+    assert_not_null(default_ep);
 
-    endpoint_t * next_ep = by_id_endpoint(next_id);
-    if (!next_ep) {
-        next_ep = default_ep;
+    param_t * next_id = param_endpoint(ep, next_id_field);
+    if (!next_id || empty_blob(next_id->value)) {
+        return redirect_endpoint(req, default_ep, NULL);
     }
 
-    return redirect_endpoint(req, next_ep, ep);
+    // NOTE(jason): have to make sure the url is a relative url
+    if (next_id->value->data[0] != '/') {
+        return redirect_endpoint(req, default_ep, NULL);
+    }
+
+    if (valid_blob(hash)) {
+        blob_t * u = local_blob(next_id->value->size + 2*hash->size);
+        vadd_blob(u, next_id->value, res_web.hash, hash);
+        return redirect_web(req, u);
+    }
+    else {
+        return redirect_web(req, next_id->value);
+    }
 }
 
 // TODO(jason): re-evaluate if this flow is correct.  possibly make all sqlite errors an assert/abort?
@@ -1354,6 +1369,13 @@ res_handler(endpoint_t * ep, request_t * req)
 int
 insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * name, s64 size, s64 content_type)
 {
+    return insert_fields_db(db, res_web.file_table, file_id,
+            user_id_field, user_id,
+            name_field, name,
+            size_field, size,
+            content_type_field, content_type);
+
+    /*
     param_t params[] = {
         local_param(fields.name),
         local_param(fields.size),
@@ -1364,7 +1386,8 @@ insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * name, s64 size, s64 
     add_s64_blob(params[1].value, size);
     add_s64_blob(params[2].value, content_type);
 
-    return insert_params(db, res_web.file_table, file_id, user_id, params, array_size_fu(params));
+    return insert_params(db, res_web.file_table, file_id, user_id, params, array_size_fu(params), 0);
+    */
 }
 
 int
@@ -1376,12 +1399,9 @@ file_info(db_t * db, param_t * file_id, param_t * name, param_t * content_type)
 #define MAX_CMD_WEB 1024
 
 int
-path_file_web(blob_t * path, const blob_t * name)
+path_upload_web(blob_t * path, const blob_t * name)
 {
-    add_blob(path, upload_dir_web);
-    add_blob(path, name);
-
-    return path->error;
+    return path_file_fu(path, upload_dir_web, name);
 }
 
 // TODO(jason): don't like calling an external prog.  eventually replace with header code
@@ -1465,7 +1485,7 @@ process_media_web(param_t * file_id)
     content_type_t type = s64_blob(content_type.value, 0);
 
     blob_t * input = local_blob(255);
-    path_file_web(input, name.value);
+    path_upload_web(input, name.value);
 
     if (video_content_type(type)) {
         // make a poster image and transcode to consistent video format
@@ -1549,7 +1569,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     fill_random_blob(file_key);
 
     blob_t * path = local_blob(255);
-    path_file_fu(path, upload_dir_web, file_key);
+    path_upload_web(path, file_key);
 
     s64 file_id;
     if (insert_file(db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
@@ -1909,7 +1929,7 @@ int
 //main_web(const char * srv_port, const blob_t * res_dir, const blob_t * upload_dir, int n_children, int (* after_fork_f)())
 main_web(config_web_t * config)
 {
-    assert_blob(config->res_dir);
+    assert_not_null(config->res_dir);
     assert(config->n_children <= MAX_CHILDREN_WEB);
 
     // no idea what this should be
