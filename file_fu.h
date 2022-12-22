@@ -1,6 +1,18 @@
 #pragma once
 
 int
+size_file_fu(int fd, size_t * size)
+{
+    struct stat st;
+    if (fstat(fd, &st) == -1) {
+        return log_errno("fstat");
+    }
+
+    *size = st.st_size;
+    return 0;
+}
+
+int
 path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
 {
     assert_not_null(path);
@@ -159,5 +171,34 @@ end:
     assert((size_t)total == count);
 
     return total;
+}
+
+// NOTE(jason): overwrites data from beginning
+int
+load_file(const blob_t * path, blob_t * data)
+{
+    int fd = open_read_file_fu(path);
+    if (fd == -1) {
+        return log_errno("open_read_file_fu");
+    }
+
+    size_t size = 0;
+    if (size_file_fu(fd, &size)) {
+        return log_errno("size_file_fu");
+    }
+
+    reset_blob(data);
+
+    if (size > available_blob(data)) {
+        error_log("sql file is too large", "db", size);
+        errno = ENOSPC;
+        return -1;
+    }
+
+    if (read_file_fu(fd, data) == -1) {
+        return -1;
+    }
+
+    return 0;
 }
 

@@ -92,6 +92,18 @@ prepare_db(db_t * db, sqlite3_stmt **stmt, const blob_t * sql)
     return 0;
 }
 
+int
+prepare_file_db(db_t * db, sqlite3_stmt **stmt, const blob_t * path)
+{
+    blob_t * sql = local_blob(8*1024);
+
+    if (load_file(path, sql)) {
+        return log_errno("load_file");
+    }
+
+    return prepare_db(db, stmt, sql);
+}
+
 //#define finalize_db(stmt) _finalize_db(stmt, __FILE__, __LINE__)
 //_finalize_db(sqlite3_stmt * stmt, const char * file, s64 line)
 
@@ -1147,3 +1159,37 @@ _by_id_fields_db(db_t * db, const blob_t * table, s64 rowid, ...)
 
     return 0;
 }
+
+
+/*
+
+char *
+sql[255] = {
+    "feed_select",
+    "post_by_id_select"
+};
+
+int
+select_db(int sql_id, s64 id, ...)
+{
+    return -1;
+}
+
+int
+insert_db(int sql_id, s64 * id, ...)
+{
+    return -1;
+}
+
+int
+update_db(int sql_id, s64 id, ...)
+{
+    return -1;
+}
+
+int
+delete_db(int sql_id, s64 id)
+{
+    return -1;
+}
+*/

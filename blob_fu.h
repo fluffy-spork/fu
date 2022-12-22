@@ -39,9 +39,14 @@ typedef struct {
 #define local_blob(capacity) \
     ({ blob_t * b = alloca(sizeof(blob_t)); u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); })
 
-// NOTE(jason): this version is bad because alloca isn't supposed to be used in
-// function calls due to how alloca is typically implemented
-//#define local_blob(capacity) _init_local_blob(alloca(sizeof(blob_t)), alloca(capacity), capacity, 0)
+// NOTE(jason): stack blob is probably more accurate.  local_ doesn't really
+// tell you anything and it's kind of wrong.
+#define stk_blob(capacity) \
+    ({ blob_t * b = alloca(sizeof(blob_t)); u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); })
+
+// stack blob large enough capacity and initialized with an s64
+#define stk_s64_blob(n) \
+    ({ blob_t * b = alloca(sizeof(blob_t)); s64 capacity = 32; u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); add_s64_blob(b, n); b; })
 
 #define B(cstr) wrap_blob(cstr)
 // GCC specific syntax for multiple statements as an expression
