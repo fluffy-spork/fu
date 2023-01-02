@@ -379,7 +379,7 @@ exec_s64_db(db_t * db, blob_t * sql, s64 * value)
 }
 
 int
-exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1)
+exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, const blob_t * p1)
 {
     sqlite3_stmt * stmt;
 
@@ -491,7 +491,7 @@ exec_blob_db(db_t * db, blob_t * sql, blob_t * value)
 }
 
 int
-exec_blob_pb_db(db_t * db, blob_t * sql, blob_t * value, blob_t * p1)
+exec_blob_pb_db(db_t * db, blob_t * sql, blob_t * value, const blob_t * p1)
 {
     sqlite3_stmt * stmt;
 
@@ -527,7 +527,7 @@ exec_blob_pi_db(db_t * db, blob_t * sql, blob_t * value, s64 p1)
 }
 
 int
-exec_blob_pbb_db(db_t * db, blob_t * sql, blob_t * value, blob_t * p1, blob_t * p2)
+exec_blob_pbb_db(db_t * db, blob_t * sql, blob_t * value, const blob_t * p1, const blob_t * p2)
 {
     sqlite3_stmt * stmt;
 
@@ -1193,3 +1193,4 @@ delete_db(int sql_id, s64 id)
     return -1;
 }
 */
+

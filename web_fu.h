@@ -64,7 +64,7 @@ typedef enum {
 ENUM_BLOB(http_status, HTTP_STATUS)
 
 typedef struct {
-    char * port;
+    s64 port;
     blob_t * res_dir;
     blob_t * upload_dir;
     int n_children;
@@ -251,8 +251,6 @@ log_endpoint(endpoint_t * ep)
 const blob_t * res_dir_web;
 // where file uploads are stored defaults to "uploads" with "uploads/<randomid>"
 const blob_t * upload_dir_web;
-
-const endpoint_t * login_endpoint_web;
 
 #define RES_WEB(var, E) \
     E(space," ", var) \
@@ -474,9 +472,6 @@ init_web(const blob_t * res_dir, const blob_t * upload_dir)
     init_http_status();
 
     init_endpoints();
-
-    // TODO(jason): make this a config param
-    login_endpoint_web = endpoints.email_login_code;
 }
 
 content_type_t
@@ -1290,6 +1285,10 @@ require_session_web(request_t * req, bool create)
         write_blob(c, "=", 1);
         add_blob(c, cookie);
         //write_hex_blob(c, &new_id, sizeof(new_id));
+        // TODO(jason): I keep getting bitten by this setting secure when it's
+        // not or vice versa, but the real fix is implementing ssl directly in
+        // fluffy.  The other option is actually checking for x-forwarded-proto
+        // header and setting a flag, but ideally it shouldn't be necessary
         if (dev_mode()) {
             add_blob(c, res_web.session_cookie_attributes);
         }
@@ -1949,8 +1948,11 @@ main_web(config_web_t * config)
     // everything as IPv6 internally
     hints.ai_flags = AI_PASSIVE | AI_V4MAPPED;
 
+    blob_t * port = local_blob(16);
+    add_s64_blob(port, config->port);
+
     struct addrinfo *srv_info;
-    result = getaddrinfo(NULL, config->port, &hints, &srv_info);
+    result = getaddrinfo(NULL, cstr_blob(port), &hints, &srv_info);
     if (result != 0) {
         error_log(gai_strerror(result), "getaddrinfo", result);
         //errorf("getaddrinfo: %s", gai_strerror(result));
