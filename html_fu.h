@@ -126,9 +126,9 @@
     E(data_max_size_upload, "data-max-size-upload", var) \
     E(data_max_size_upload_msg, "data-max-size-upload-msg", var) \
     E(accept, "accept", var) \
-    E(accept_video, "video/mp4", var) \
-    E(accept_image, "image/gif,image/png,image/jpeg", var) \
-    E(accept_image_video, "image/gif,image/png,image/jpeg,video/mp4", var) \
+    E(accept_video, "video/mp4,.mp4,.mov", var) \
+    E(accept_image, "image/jpeg,image/png,image/gif,.jpeg,.jpg,.png,.gif", var) \
+    E(accept_image_video, "video/mp4,image/jpeg,image/png,image/gif,.mp4,.mov,.jpg,.jpeg,.png,.gif", var) \
     E(no_files_selected, "no files selected", var) \
     E(minlength, "minlength", var) \
     E(maxlength, "maxlength", var) \
