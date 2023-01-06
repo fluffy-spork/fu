@@ -129,7 +129,9 @@ by_name_field(const blob_t * name)
 field_t *
 by_id_field(field_id_t id)
 {
-    dev_error(id < fields.n_list);
+    dev_error(id < 0);
+    dev_error(id >= fields.n_list);
+
     return fields.list[id];
 }
 
@@ -182,7 +184,7 @@ int
 init_by_name_param(param_t * param, const blob_t * field_name)
 {
     field_t * field = by_name_field(field_name);
-    dev_error(!field);
+    dev_error(field == NULL);
 
     return init_param(param, field);
 }

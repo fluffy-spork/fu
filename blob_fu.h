@@ -555,6 +555,8 @@ add_u8_blob(blob_t * b, u8 c)
 }
 */
 
+// TODO(jason): maybe this should have a way for 0 not be added and make an
+// empty blob
 void
 add_s64_blob(blob_t * b, s64 n)
 {

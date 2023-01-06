@@ -34,6 +34,8 @@ ENUM_BLOB(method, METHOD)
     E(gif, "image/gif", var) \
     E(mp4, "video/mp4", var) \
     E(mov, "video/quicktime", var) \
+    E(image_any, "image/*", var) \
+    E(video_any, "video/*", var) \
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
@@ -273,6 +275,8 @@ const blob_t * upload_dir_web;
     E(connection_keep_alive,"keep-alive", var) \
     E(content_type,"content-type", var) \
     E(content_length,"content-length", var) \
+    E(content_disposition,"content-disposition", var) \
+    E(content_disposition_value_prefix,"attachment; filename=", var) \
     E(cookie,"cookie", var) \
     E(set_cookie,"set-cookie", var) \
     E(location,"location", var) \
@@ -287,14 +291,6 @@ const blob_t * upload_dir_web;
     E(bad_request,"bad request", var) \
     E(not_found,"not found", var) \
     E(payment_required, "payment required", var) \
-    E(application_octet_stream,"application/octet-stream", var) \
-    E(application_x_www_form_urlencoded,"application/x-www-form-urlencoded", var) \
-    E(text_plain,"text/plain", var) \
-    E(text_html,"text/html", var) \
-    E(text_css,"text/css", var) \
-    E(text_javascript,"text/javascript", var) \
-    E(image_png,"image/png", var) \
-    E(image_gif,"image/gif", var) \
     E(cache_control,"cache-control", var) \
     E(no_store,"no-store", var) \
     E(static_asset_cache_control,"public, max-age=2592000, immutable", var) \
@@ -303,6 +299,10 @@ const blob_t * upload_dir_web;
     E(res_path_suffix,"?v=", var) \
     E(file_table,"file", var) \
     E(poster_kind,"poster", var) \
+    E(dot_gif,".gif", var) \
+    E(dot_jpg,".jpg", var) \
+    E(dot_png,".png", var) \
+    E(dot_mp4,".mp4", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -458,11 +458,9 @@ init_web(const blob_t * res_dir, const blob_t * upload_dir)
     res_dir_web = res_dir;
     upload_dir_web = upload_dir;
 
-    if (mkdir_file_fu(upload_dir_web, S_IRWXU)) {
-        if (errno != EEXIST) {
-            log_errno("make upload dir");
-            exit(EXIT_FAILURE);
-        }
+    if (ensure_dir_file_fu(upload_dir_web, S_IRWXU)) {
+        log_errno("make upload dir");
+        exit(EXIT_FAILURE);
     }
 
     init_res_web();
@@ -565,15 +563,34 @@ content_type_for_path(const blob_t * path)
     return content_type_magic(magic);
 }
 
+const blob_t *
+suffix_content_type(content_type_t type)
+{
+    switch (type) {
+        case jpeg_content_type: 
+            return res_web.dot_jpg;
+        case mp4_content_type: 
+            return res_web.dot_mp4;
+        case png_content_type: 
+            return res_web.dot_png;
+        case gif_content_type: 
+            return res_web.dot_gif;
+        default:
+            dev_error("invalid content type");
+    }
+}
+
 bool
 video_content_type(content_type_t type)
 {
-    if (type == mp4_content_type
-            || type == mov_content_type) {
-        return true;
+    switch (type) {
+        case mp4_content_type:
+        case mov_content_type:
+        case video_any_content_type:
+            return true;
+        default:
+            return false;
     }
-
-    return false;
 }
 
 bool
@@ -583,6 +600,7 @@ image_content_type(content_type_t type)
         case jpeg_content_type:
         case png_content_type:
         case gif_content_type:
+        case image_any_content_type:
             return true;
         default:
             return false;
@@ -672,6 +690,16 @@ u64_header(blob_t * b, const blob_t *name, const u64 value)
     vadd_blob(b, name, res_web.header_sep);
     add_u64_blob(b, value);
     add_blob(b, res_web.crlf);
+}
+
+// Makes the response download potentially with save as dialog
+//Content-Disposition: attachment; filename="cool.html"
+void
+add_content_disposition_header(blob_t * b, const blob_t * filename)
+{
+    blob_t * v = stk_blob(256);
+    vadd_blob(v, res_web.content_disposition_value_prefix, filename);
+    header(b, res_web.content_disposition, v);
 }
 
 // TODO(jason): this probably shouldn't be "require"
@@ -777,13 +805,13 @@ post_params(request_t * req, endpoint_t * ep)
 {
     if (ep->params_parsed) return 0;
 
-    dev_error(req->method == post_method);
+    dev_error(req->method != post_method);
 
     // NOTE(jason): has to be called before next check so the headers have been
     // read
     require_request_head_web(req);
 
-    dev_error(req->request_content_type == urlencoded_content_type);
+    dev_error(req->request_content_type != urlencoded_content_type);
 
     require_request_body_web(req);
     ep->params_parsed = true;
@@ -1015,7 +1043,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
     blob_t * file_path = local_blob(255);
     path_file_fu(file_path, dir, path);
 
-    //debug_blob(file_path);
+    debug_blob(file_path);
 
     int fd = open_read_file_fu(file_path);
     if (fd == -1) {
@@ -1426,17 +1454,29 @@ _ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * fil
     return 0;
 }
 
+int
+resize_ffmpeg_web(const blob_t * input, const blob_t * output, s64 width)
+{
+    blob_t * filter = stk_blob(1024);
+    add_blob(filter, B("-y -vf scale="));
+    add_s64_blob(filter, width);
+    add_blob(filter, B(":-1"));
+
+    log_var_blob(filter);
+
+    return _ffmpeg_call_web(input, output, filter);
+}
+
 // TODO(jason): don't like calling an external prog.  eventually replace with header code
 int
-resize_image_web(const blob_t * input)
+resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
 {
-    blob_t * output = local_blob(255);
-    vadd_blob(output, input, B(".jpg"));
-
-    char * fmt_cmd = "convert-im6 -resize 1024x %s %s";
+    return resize_ffmpeg_web(input, output, width);
+    /*
+    char * fmt_cmd = "convert-im6 -resize %dx %s %s";
 
     char cmd[MAX_CMD_WEB];
-    if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(input), cstr_blob(output)) < 0) {
+    if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, width, cstr_blob(input), cstr_blob(output)) < 0) {
         log_errno("imagemagick convert cmd format failed");
         return -1;
     }
@@ -1450,28 +1490,64 @@ resize_image_web(const blob_t * input)
     }
 
     return 0;
+    */
 }
 
 int
-extract_poster_web(const blob_t * input)
+resize_gif_web(const blob_t * input, const blob_t * output, s64 width)
 {
-    blob_t * output = local_blob(255);
-    vadd_blob(output, input, B(".jpg"));
-
-    return _ffmpeg_call_web(input, output, B("-y -vframes 1 -vf scale=1024:-1"));
+    return resize_ffmpeg_web(input, output, width);
 }
 
 int
-transcode_video_web(const blob_t * input)
+resize_png_web(const blob_t * input, const blob_t * output, s64 width)
 {
-    blob_t * output = local_blob(255);
-    vadd_blob(output, input, B(".mp4"));
-
-    return _ffmpeg_call_web(input, output, B("-y -vf scale=512:-1 -c:v libx264 -preset ultrafast -crf 18 -an -pix_fmt yuv420p -movflags +faststart"));
+    return resize_ffmpeg_web(input, output, width);
 }
 
 int
-process_media_web(param_t * file_id)
+extract_poster_web(const blob_t * input, const blob_t * output, s64 width)
+{
+    blob_t * filter = stk_blob(1024);
+    add_blob(filter, B("-y -vframes 1 -vf scale="));
+    add_s64_blob(filter, width);
+    add_blob(filter, B(":-1"));
+
+    log_var_blob(filter);
+
+    return _ffmpeg_call_web(input, output, filter);
+}
+
+int
+transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
+{
+    blob_t * filter = stk_blob(1024);
+    add_blob(filter, B("-y -vf scale="));
+    add_s64_blob(filter, width);
+    add_blob(filter, B(":-1 -c:v libx264 -preset ultrafast -crf 18 -an -pix_fmt yuv420p -movflags +faststart"));
+
+    log_var_blob(filter);
+
+    return _ffmpeg_call_web(input, output, filter);
+}
+
+int
+media_path_web(blob_t * path, s64 width, const blob_t * name, content_type_t type)
+{
+    add_s64_blob(path, width);
+    add_path_file_fu(path, name);
+    add_blob(path, suffix_content_type(type));
+
+    return path->error;
+}
+
+// NOTE(jason): currently assuming
+// std_width = 640
+// hd_width = 2*std_width
+// video default width = 1920
+// image default width = ???
+int
+process_media_web(param_t * file_id, s64 width, content_type_t target_type)
 {
     def_param(name);
     def_param(content_type);
@@ -1483,24 +1559,46 @@ process_media_web(param_t * file_id)
 
     content_type_t type = s64_blob(content_type.value, 0);
 
-    blob_t * input = local_blob(255);
+    blob_t * input = stk_blob(255);
     path_upload_web(input, name.value);
 
-    if (video_content_type(type)) {
-        // make a poster image and transcode to consistent video format
-        debug("XXXXX processing video file XXXX");
-        if (extract_poster_web(input)
-                || transcode_video_web(input))
-        {
-            return -1;
-        }
+    // TODO(jason): this path building seems a little wonky
+    blob_t * media_path = stk_blob(255);
+    media_path_web(media_path, width, name.value, target_type);
 
-        return 0;
+    blob_t * dir = stk_blob(255);
+    path_upload_web(dir, stk_s64_blob(width));
+    ensure_dir_file_fu(dir, S_IRWXU);
+
+    blob_t * output = stk_blob(255);
+    path_upload_web(output, media_path);
+
+    debug_blob(input);
+    debug_blob(output);
+
+    if (video_content_type(type)) {
+        if (target_type == jpeg_content_type) {
+            debug("XXXXX extract poster XXXX");
+            return extract_poster_web(input, output, width);
+        }
+        else {
+            debug("XXXXX transcode video XXXX");
+            return transcode_video_web(input, output, width);
+        }
     }
-    else if (image_content_type(type)) {
+    else if (gif_content_type == type) {
+        debug("XXXXX resize gif XXXX");
+        return resize_gif_web(input, output, width);
+    }
+    else if (png_content_type == type) {
+        debug("XXXXX resize png XXXX");
+        return resize_png_web(input, output, width);
+    }
+    else if (jpeg_content_type == type) {
+        debug("XXXXX resize jpg XXXX");
         // remove exif and other identifying info
         //debug("XXXXX resizing static image XXXX");
-        return resize_image_web(input);
+        return resize_jpeg_web(input, output, width);
     }
 
     return 0;
@@ -1518,7 +1616,7 @@ process_media_task_web(request_t * req)
     def_param(file_id);
     add_s64_blob(file_id.value, id);
 
-    return process_media_web(&file_id);
+    return process_media_web(&file_id, 640, none_content_type);
 }
 
 // TODO(jason): can still upload a file of an invalid/unknown file type
@@ -1560,6 +1658,8 @@ files_upload_handler(endpoint_t * ep, request_t * req)
 
     content_type_t type = content_type_magic(req->request_body);
     if (type == binary_content_type) {
+        // TODO(jason): this change doesn't seem right.  I'm not sure what's
+        // going on?
         type = mp4_content_type;
         //return bad_request_response(req);
     }
@@ -1616,7 +1716,6 @@ files_handler(endpoint_t * ep, request_t * req)
 
     param_t * file_id = param_endpoint(ep, file_id_field);
     if (empty_blob(file_id->value)) {
-        debug("empty param");
         internal_server_error_response(req);
         return -1;
     }
@@ -1632,27 +1731,18 @@ files_handler(endpoint_t * ep, request_t * req)
     content_type_t type = s64_blob(content_type.value, 0);
 
     param_t * kind = param_endpoint(ep, kind_field);
-    blob_t * filename = NULL;
-    if (image_content_type(type) || equal_blob(kind->value, res_web.poster_kind)) {
-        filename = local_blob(name.value->capacity + 4);
-        vadd_blob(filename, name.value, B(".jpg"));
+    if (equal_blob(kind->value, res_web.poster_kind)) {
         type = jpeg_content_type;
     }
-    else if (video_content_type(type)) {
-        filename = local_blob(name.value->capacity + 4);
-        vadd_blob(filename, name.value, B(".mp4"));
-        type = mp4_content_type;
-    }
-    else {
-        filename = name.value;
-    }
+
+    blob_t * filename = local_blob(name.value->capacity + 4);
+    vadd_blob(filename, name.value, suffix_content_type(type));
 
     //debug_blob(filename);
 
-    if (!filename) {
-        return bad_request_response(req);
-    }
+    return file_response(req, upload_dir_web, filename, type, req->user_id);
 
+    /*
     int rc = file_response(req, upload_dir_web, filename, type, req->user_id);
     if (rc == -1 && errno == ENOENT) {
         if (process_media_web(file_id)) {
@@ -1663,6 +1753,7 @@ files_handler(endpoint_t * ep, request_t * req)
     }
 
     return rc;
+    */
 }
 
 int
@@ -1776,7 +1867,7 @@ handle_request(request_t *req)
         // MAX_REQUEST_BODY size
         if (req->request_body->error == ENOSPC) {
             debug("request body somehow smaller than input size");
-            dev_error(req->request_body->capacity >= input->capacity);
+            dev_error(req->request_body->capacity < input->capacity);
         }
 
         internal_server_error_response(req);
@@ -1839,9 +1930,9 @@ respond:
     if (result == -1) log_errno("write response");
 
     if (!sqlite3_get_autocommit(db)) {
-        dev_error("sqlite transaction open, rolling back");
         // NOTE(jason): the rollback is here just so the db won't be borked
         rollback_db(db);
+        dev_error("sqlite transaction open");
     }
 
     elapsed_log(start, "request-time");

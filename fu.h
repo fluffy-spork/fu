@@ -57,7 +57,11 @@ typedef enum {
 
 // NOTE(jason): this developer has an error that must be fixed but could only
 // be checked at runtime
-#define dev_error(exp) assert(exp)
+// inverts the check used for assert so that a msg can be the exp or an actualy
+// expression
+// dev_error("missing param foo")
+// dev_error(user_id < 1) vs assert(user_id > 0)
+#define dev_error(exp) assert(!(exp))
 
 #define array_size_fu(array) sizeof(array)/sizeof(array[0])
 

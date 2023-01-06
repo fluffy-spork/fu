@@ -624,7 +624,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
                 {
                     blob_t * value = va_arg(args, blob_t *);
                     //debug_blob(value);
-                    dev_error(value);
+                    dev_error(value == NULL);
                     add_blob(params[i].value, value);
                 }
                 break;
@@ -968,7 +968,7 @@ bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
         const char * name = sqlite3_bind_parameter_name(stmt, i + 1);
         if (!name) {
             debugf("unamed bind param at index %d", i);
-            dev_error(!"unamed bind param");
+            dev_error("unamed bind param");
         }
 
         blob_t * bind_name = B(name + 1);
@@ -984,7 +984,7 @@ bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
         // NOTE(jason): this should only happen if there's a developer error
         if (bind_to_param[i] == -1) {
             debugf("missing param for bind param %s", name);
-            dev_error(!"missing param");
+            dev_error("missing param");
         }
     }
 
@@ -1096,8 +1096,10 @@ rows_ids_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, s64 * ids
     return finalize_db(stmt);
 }
 
+#define by_id_db(db, ...) _by_id_db(db, __VA_ARGS__, NULL)
+
 int
-by_id_db(db_t * db, const blob_t * sql, s64 id, ...)
+_by_id_db(db_t * db, const blob_t * sql, s64 id, ...)
 {
     assert(id > 0);
 
@@ -1148,7 +1150,7 @@ by_id_db(db_t * db, const blob_t * sql, s64 id, ...)
 }
 
 
-#define by_id_fields_db(db, ...) _select_fields_db(db, __VA_ARGS__, 0)
+#define by_id_fields_db(db, ...) _by_id_fields_db(db, __VA_ARGS__, 0)
 
 int
 _by_id_fields_db(db_t * db, const blob_t * table, s64 rowid, ...)

@@ -13,6 +13,18 @@ size_file_fu(int fd, size_t * size)
 }
 
 int
+add_path_file_fu(blob_t * path, const blob_t * name)
+{
+    assert_not_null(path);
+    assert_not_null(name);
+
+    write_blob(path, "/", 1);
+    add_blob(path, name);
+
+    return path->error;
+}
+
+int
 path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
 {
     assert_not_null(path);
@@ -20,10 +32,7 @@ path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
     assert_not_null(file);
 
     add_blob(path, dir);
-    write_blob(path, "/", 1);
-    add_blob(path, file);
-
-    return 0;
+    return add_path_file_fu(path, file);
 }
 
 int
@@ -31,6 +40,18 @@ mkdir_file_fu(const blob_t * path, mode_t mode)
 {
     if (mkdir(cstr_blob(path), mode)) {
         return -1;
+    }
+
+    return 0;
+}
+
+int
+ensure_dir_file_fu(const blob_t * path, mode_t mode)
+{
+    if (mkdir_file_fu(path, mode)) {
+        if (errno != EEXIST) {
+            return -1;
+        }
     }
 
     return 0;
