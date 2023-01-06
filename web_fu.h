@@ -1467,12 +1467,28 @@ resize_ffmpeg_web(const blob_t * input, const blob_t * output, s64 width)
     return _ffmpeg_call_web(input, output, filter);
 }
 
+int
+resize_webp_web(const blob_t * input, const blob_t * output, s64 width)
+{
+    blob_t * filter = stk_blob(1024);
+    add_blob(filter, B("-y -vf scale="));
+    add_s64_blob(filter, width);
+    add_blob(filter, B(":-1"));
+
+    log_var_blob(filter);
+
+    return _ffmpeg_call_web(input, output, filter);
+}
+
 // TODO(jason): don't like calling an external prog.  eventually replace with header code
 int
 resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
 {
-    return resize_ffmpeg_web(input, output, width);
-    /*
+    // TODO(jason): this doesn't work for some jpegs I have.  possibly
+    // switching to webp for everything anyway so not going to research why
+    // ffmpeg doesn't work.
+    //return resize_ffmpeg_web(input, output, width);
+
     char * fmt_cmd = "convert-im6 -resize %dx %s %s";
 
     char cmd[MAX_CMD_WEB];
@@ -1490,7 +1506,6 @@ resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
     }
 
     return 0;
-    */
 }
 
 int
