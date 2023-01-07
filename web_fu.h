@@ -1043,7 +1043,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
     blob_t * file_path = local_blob(255);
     path_file_fu(file_path, dir, path);
 
-    debug_blob(file_path);
+    //debug_blob(file_path);
 
     int fd = open_read_file_fu(file_path);
     if (fd == -1) {
@@ -1511,7 +1511,15 @@ resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
 int
 resize_gif_web(const blob_t * input, const blob_t * output, s64 width)
 {
-    return resize_ffmpeg_web(input, output, width);
+    blob_t * filter = stk_blob(1024);
+    add_blob(filter, B("-y -vf \"scale="));
+    add_s64_blob(filter, width);
+    add_blob(filter, B(":-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse\" -loop 0"));
+
+    log_var_blob(filter);
+
+    return _ffmpeg_call_web(input, output, filter);
+    //return resize_ffmpeg_web(input, output, width);
 }
 
 int
@@ -1588,31 +1596,30 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
     blob_t * output = stk_blob(255);
     path_upload_web(output, media_path);
 
-    debug_blob(input);
-    debug_blob(output);
+    //debug_blob(input);
+    //debug_blob(output);
 
     if (video_content_type(type)) {
         if (target_type == jpeg_content_type) {
-            debug("XXXXX extract poster XXXX");
+            //debug("XXXXX extract poster XXXX");
             return extract_poster_web(input, output, width);
         }
         else {
-            debug("XXXXX transcode video XXXX");
+            //debug("XXXXX transcode video XXXX");
             return transcode_video_web(input, output, width);
         }
     }
     else if (gif_content_type == type) {
-        debug("XXXXX resize gif XXXX");
+        //debug("XXXXX resize gif XXXX");
         return resize_gif_web(input, output, width);
     }
     else if (png_content_type == type) {
-        debug("XXXXX resize png XXXX");
+        //debug("XXXXX resize png XXXX");
         return resize_png_web(input, output, width);
     }
     else if (jpeg_content_type == type) {
-        debug("XXXXX resize jpg XXXX");
+        //debug("XXXXX resize jpg XXXX");
         // remove exif and other identifying info
-        //debug("XXXXX resizing static image XXXX");
         return resize_jpeg_web(input, output, width);
     }
 
