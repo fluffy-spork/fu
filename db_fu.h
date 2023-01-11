@@ -33,6 +33,27 @@ init_db()
     return sqlite3_initialize();
 }
 
+#define MAX_BUSY_TIMEOUT_MS_DB 3000
+
+// delays a random number of microseconds between 0 and 1s
+int
+busy_handler_db(void * ptr, int count)
+{
+    UNUSED(ptr);
+
+    if (count > 5) return 0;
+
+    // one_us = 1000000;
+    s64 delay_us = random_range_s64_fu(0, 1000000);
+    //debug_s64(delay_us);
+    if (delay_us) {
+        usleep(delay_us);
+        return 1;
+    }
+
+    return 0;
+}
+
 int
 open_db(blob_t * file, db_t ** db)
 {
@@ -44,13 +65,20 @@ open_db(blob_t * file, db_t ** db)
         return -1;
     }
 
+    sqlite3_extended_result_codes(*db, 1);
+
     // NOTE(jason): somewhat shockingly, there isn't a default timeout.  this
     // caused a bunch of wasted time trying to figure out a concurrency issue
     // that was 3 inserts.  mistaking SQLITE_LOCKED for SQLITE_BUSY didn't
     // help:(  The message is "database is locked" for SQLITE_BUSY which seems
     // misleading.  1 second easily fixes the problem.
     // the time is in "milliseconds" not seconds as I initially thought.
-    sqlite3_busy_timeout(*db, 10000);
+    //sqlite3_busy_timeout(*db, 3000);
+    // NOTE(jason): this avoids the thundering herd problem with multiple
+    // processes on shutdown and probably other cases.  Just does a random
+    // sleep in the range as the sqlite default is deterministic and all
+    // processes do the same delay algo.  Seems odd this is the default.
+    sqlite3_busy_handler(*db, busy_handler_db, NULL);
 
     return 0;
 }
@@ -731,7 +759,7 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
 }
 
 int
-update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t * id_field, s64 id)
+update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t * id_field, s64 id, field_id_t ignore_field)
 {
     blob_t * sql = local_blob(255);
 
@@ -743,6 +771,8 @@ update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t
     add_blob(sql, B("=unixepoch()"));
 
     for (int i = 0; i < n_params; i++) {
+        if (params[i].field->id == ignore_field) continue;
+
         write_blob(sql, ",", 1);
         add_blob(sql, params[i].field->name);
         write_blob(sql, "=?", 2);
@@ -772,6 +802,8 @@ update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t
     }
 
     for (int i = 0; i < n_params; i++) {
+        if (params[i].field->id == ignore_field) continue;
+
         param_t * p = &params[i];
         result = text_bind_db(stmt, p->field->id, p->value);
         if (result != SQLITE_OK) {
