@@ -27,6 +27,8 @@ typedef int64_t s64;
 typedef float f32;
 typedef double f64;
 
+#define MAX_U64 UINT64_MAX
+
 typedef enum {
     U8_DATA_TYPE,
     U16_DATA_TYPE,
@@ -254,5 +256,22 @@ random_alpha_fu()
     ssize_t result = getrandom(&num, sizeof(num), 0);
     RARE_FAIL(result  == sizeof(num));
     return 'a' + num % 26;
+}
+
+// random between 0 and 1
+f64
+random_f64_fu()
+{
+    u64 r = random_u64_fu();
+
+    return (f64)r/(f64)MAX_U64;
+}
+
+// https://c-faq.com/lib/randrange.html
+// M + rand() / (RAND_MAX / (N - M + 1) + 1);
+s64
+random_range_s64_fu(s64 min, s64 max)
+{
+    return min + random_u64_fu() / (MAX_U64 / (max - min + 1) + 1);
 }
 
