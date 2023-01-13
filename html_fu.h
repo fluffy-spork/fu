@@ -720,6 +720,15 @@ select_values_html(blob_t * html, param_t * param, blob_t ** values, blob_t ** l
     end_tag_html(html, res_html.select);
 }
 
+void
+param_html(blob_t * html, param_t * param)
+{
+    start_div_class(res_html.field);
+    div_class(res_html.field_value, param->value);
+    label(param->field->label, param->field->name);
+    end_div();
+}
+
 // NOTE(jason): could be improved.  maybe other input types?
 void
 param_input_html(blob_t * html, param_t * param, bool autofocus)
