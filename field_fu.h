@@ -13,6 +13,7 @@
     E(timestamp, "timestamp", var) \
     E(password, "password", var) \
     E(select_integer, "select_integer", var) \
+    E(file_multiple, "file_multiple", var) \
 
 ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 
@@ -62,6 +63,8 @@ max_size_field_type(field_type_t type, s32 req_size)
             return 20;
         case integer_field_type:
             return 19 + 1 + 6; // 1 for '-', 6 for separators
+        case file_multiple_field_type:
+            return req_size;
         case text_field_type:
         case hidden_field_type:
         case password_field_type:
