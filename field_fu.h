@@ -156,6 +156,8 @@ typedef struct {
 // It shouldn't have issues with pointers in blocks since it isn't a pointer.
 // we'll see.
 #define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
+// prefer stk_param and remove local_param
+#define stk_param(f) (param_t){ .field = f, .value = stk_blob(f->max_size), .error = stk_blob(256) }
 
 #define def_param(field) param_t field = local_param(fields.field);
 
@@ -230,5 +232,21 @@ value_by_id_param(param_t * params, int n_params, field_id_t field_id)
     }
 
     return NULL;
+}
+
+// TODO(jason): untested/unused
+int
+copy_params(param_t * dest, int n_dest, param_t * src, int n_src)
+{
+    for (int i = 0; i < n_src; i++) {
+        param_t * s = &src[i];
+
+        param_t * d = by_id_param(dest, n_dest, s->field->id);
+        if (d) {
+            set_blob(s->value, d->value);
+        }
+    }
+
+    return 0;
 }
 

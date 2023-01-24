@@ -123,6 +123,7 @@
     E(file_class, "file", var) \
     E(file_input_class, "file visually-hidden", var) \
     E(file_upload_class, "file-upload hidden", var) \
+    E(multiple, "multiple", var) \
     E(data_max_size_upload, "data-max-size-upload", var) \
     E(data_max_size_upload_msg, "data-max-size-upload-msg", var) \
     E(accept, "accept", var) \
@@ -626,7 +627,7 @@ hidden_post_form_html(blob_t * html, blob_t * action, field_t * field, blob_t * 
 {
     start_post_form(action, off_autocomplete);
     hidden_input(field->name, value);
-    submit_input(res_html.action, label);
+    submit_input(res_html.button, label);
     end_form();
 }
 
@@ -638,7 +639,7 @@ hidden_submit_get_form_html(blob_t * html, blob_t * action, field_t * field, blo
 {
     start_get_form(action, off_autocomplete);
     hidden_input(field->name, value);
-    submit_input(res_html.action, label);
+    submit_input(res_html.button, label);
     end_form();
 }
 */
@@ -752,7 +753,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         label(field->label, field->name);
         end_div();
     }
-    else if (field->type == file_field_type) {
+    else if (field->type == file_field_type || field->type == file_multiple_field_type) {
         start_div_class(res_html.field);
         open_tag_html(html, res_html.input);
         attr_html(html, res_html.type, res_html.file_type);
@@ -763,6 +764,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         // until multipart/form-data is implemented.  most people will have JS
         // anyway
         empty_attr_html(html, res_html.disabled);
+        if (field->type == file_multiple_field_type) empty_attr_html(html, res_html.multiple);
         // NOTE(jason): file input field itself doesn't have an id or name as
         // it shouldn't send a value directly to the server.
         //attr_html(html, res_html.id, field->name);
