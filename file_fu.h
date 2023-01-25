@@ -58,9 +58,32 @@ ensure_dir_file_fu(const blob_t * path, mode_t mode)
 }
 
 int
+open_file_fu(const blob_t * path, int flags, int mode)
+{
+    int rc = open(cstr_blob(path), flags, mode);
+    if (rc == -1) {
+        log_errno(cstr_blob(path));
+    }
+
+    return rc;
+}
+
+int
 open_read_file_fu(const blob_t * path)
 {
-    return open(cstr_blob(path), O_RDONLY);
+    return open_file_fu(path, O_RDONLY, 0);
+}
+
+int
+open_write_file_fu(const blob_t * path)
+{
+    return open_file_fu(path, O_WRONLY|O_CREAT, S_IWUSR);
+}
+
+int
+open_read_write_file_fu(const blob_t * path)
+{
+    return open_file_fu(path, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
 }
 
 ssize_t
@@ -108,7 +131,7 @@ write_full_file_fu(int fd, const blob_t * b)
 }
 
 ssize_t
-copy_file_fu(int out_fd, int in_fd, size_t len)
+copy_fd_file_fu(int out_fd, int in_fd, size_t len)
 {
     // NOTE(jason): from https://stackoverflow.com/questions/7463689/most-efficient-way-to-copy-a-file-in-linux
 
@@ -131,6 +154,33 @@ copy_file_fu(int out_fd, int in_fd, size_t len)
     }
 
     return ret;
+}
+
+ssize_t
+copy_file_fu(const blob_t * out, const blob_t * in)
+{
+    int out_fd = open_read_write_file_fu(out);
+    if (out_fd == -1) {
+        return -1;
+    }
+
+    debug_blob(in);
+    int in_fd = open_read_file_fu(in);
+    if (in_fd == -1) {
+        return -1;
+    }
+
+    size_t len = 0;
+    if (size_file_fu(in_fd, &len)) {
+        return -1;
+    }
+
+    ssize_t rc = copy_fd_file_fu(out_fd, in_fd, len);
+    if (rc == -1) {
+        log_errno("copy_fd_file_fu");
+    }
+
+    return rc;
 }
 
 /* none of this is tested and may be unused
@@ -173,7 +223,7 @@ write_prefix_file_fu(const blob_t * path, const blob_t * prefix, int in_fd, size
 
     total += result;
 
-    result = copy_file_fu(out_fd, in_fd, count - prefix->size);
+    result = copy_fd_file_fu(out_fd, in_fd, count - prefix->size);
     if (result == -1) goto end;
 
     total += result;
