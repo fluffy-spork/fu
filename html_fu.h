@@ -95,6 +95,7 @@
     E(alt, "alt", var) \
     E(video, "video", var) \
     E(controls, "controls", var) \
+    E(autoplay, "autoplay", var) \
     E(preload, "preload", var) \
     E(preload_none, "none", var) \
     E(preload_metadata, "metadata", var) \
@@ -391,7 +392,7 @@ img_html(blob_t * html, const blob_t * src, const blob_t * alt)
 }
 
 void
-video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob_t * poster)
+video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob_t * poster, bool autoplay)
 {
     open_tag_html(html, res_html.video);
     attr_html(html, res_html.src, src);
@@ -400,6 +401,7 @@ video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob
     //attr_html(html, res_html.preload, res_html.preload_none);
     attr_html(html, res_html.preload, preload);
     if (valid_blob(poster)) attr_html(html, res_html.poster, poster);
+    if (autoplay) empty_attr_html(html, res_html.autoplay);
     empty_attr_html(html, res_html.controls);
     //if (alt) attr_html(html, res_html.alt, alt);
     close_tag_html(html);
