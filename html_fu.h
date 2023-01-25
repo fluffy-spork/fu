@@ -122,7 +122,7 @@
     E(file_type, "file", var) \
     E(file_class, "file", var) \
     E(file_input_class, "file visually-hidden", var) \
-    E(file_upload_class, "file-upload hidden", var) \
+    E(uploads_class, "uploads hidden", var) \
     E(multiple, "multiple", var) \
     E(data_max_size_upload, "data-max-size-upload", var) \
     E(data_max_size_upload_msg, "data-max-size-upload-msg", var) \
@@ -788,7 +788,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         hidden_input(field->name, res_html.zero);
         div_class(res_html.error, NULL);
         button(res_html.file_class, field->label, true);
-        div_class(res_html.file_upload_class, NULL);
+        div_class(res_html.uploads_class, NULL);
         end_div();
     }
     else if (field->type == hidden_field_type) {
