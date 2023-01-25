@@ -1087,8 +1087,8 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
         return log_errno("write_file_fu head");
     }
 
-    if (copy_file_fu(req->fd, fd, len) == -1) {
-        return log_errno("copy_file_fu");
+    if (copy_fd_file_fu(req->fd, fd, len) == -1) {
+        return log_errno("copy_fd_file_fu");
     }
 
     return req->content_length;
@@ -1488,14 +1488,31 @@ resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
     // TODO(jason): this doesn't work for some jpegs I have.  possibly
     // switching to webp for everything anyway so not going to research why
     // ffmpeg doesn't work.
+    // at least one of the problems is orientation data getting lost and the
+    // image being the wrong orientation
+    // I think there was also an issue with reading some file
     //return resize_ffmpeg_web(input, output, width);
 
-    char * fmt_cmd = "convert-im6 -resize %dx %s %s";
-
     char cmd[MAX_CMD_WEB];
-    if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, width, cstr_blob(input), cstr_blob(output)) < 0) {
-        log_errno("imagemagick convert cmd format failed");
-        return -1;
+
+    if (width > 0) {
+        char * fmt_cmd = "convert-im6 -auto-orient +profile exif -resize %dx %s %s";
+
+        if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, width, cstr_blob(input), cstr_blob(output)) < 0) {
+            log_errno("imagemagick convert cmd format failed");
+            return -1;
+        }
+    }
+    else {
+        // NOTE(jason): this is for the width == 0 case mainly.  still want to
+        // process the image and not just send out the uploaded version so that
+        // eventually the exif data, etc is stripped.
+        char * fmt_cmd = "convert-im6 -auto-orient +profile exif %s %s";
+
+        if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(input), cstr_blob(output)) < 0) {
+            log_errno("imagemagick convert cmd format failed");
+            return -1;
+        }
     }
 
     info_log(cmd);
@@ -1548,7 +1565,7 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
     blob_t * filter = stk_blob(1024);
     add_blob(filter, B("-y -vf scale="));
     add_s64_blob(filter, width);
-    add_blob(filter, B(":-1 -c:v libx264 -preset ultrafast -crf 18 -an -pix_fmt yuv420p -movflags +faststart"));
+    add_blob(filter, B(":-1 -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p -movflags +faststart"));
 
     log_var_blob(filter);
 
