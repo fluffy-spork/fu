@@ -1565,7 +1565,37 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
     blob_t * filter = stk_blob(1024);
     add_blob(filter, B("-y -vf scale="));
     add_s64_blob(filter, width);
-    add_blob(filter, B(":-1 -c:v libx264 -preset ultrafast -crf 18 -pix_fmt yuv420p -movflags +faststart"));
+
+    s64 crf = 23;
+    s64 maxrate = 1024;
+
+    if (width == 0) {
+        // highest quality at source resolution
+        crf = 18;
+        maxrate = 8192;
+    }
+    else if (width == 640) {
+        crf = 23;
+        maxrate = 1024;
+    }
+    else if (width == 1280) {
+        crf = 23;
+        maxrate = 4096;
+    }
+    else if (width == 1920) {
+        crf = 23;
+        maxrate = 8192;
+    }
+
+    s64 bufsize = maxrate;
+
+    add_blob(filter, B(":-1 -c:v libx264 -preset medium -crf "));
+    add_s64_blob(filter, crf);
+    add_blob(filter, B(" -maxrate "));
+    add_s64_blob(filter, maxrate);
+    add_blob(filter, B("k -bufsize "));
+    add_s64_blob(filter, bufsize);
+    add_blob(filter, B("k -pix_fmt yuv420p -movflags +faststart"));
 
     log_var_blob(filter);
 
@@ -1731,11 +1761,11 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     if (video_content_type(type) || image_content_type(type)) {
         req->after_task = process_media_task_web;
         // NOTE(jason): need to set keep_alive before response headers are sent
-        // so connection: close is sent.
-        // works, but then the redirect is fast and the file hasn't been
-        // processed.  still probably the right choice.  need to improve the
-        // media processing and can get a faster vm.
-        //req->keep_alive = false;
+        // so connection: close is sent.  without connection close, the browser
+        // still hangs assuming it can make another request on the connection.
+        // chrome wouldn't open a new connection which seems a little weird.
+        // doesn't matter.
+        req->keep_alive = false;
         req->id_task = file_id;
     }
 

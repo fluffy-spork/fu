@@ -802,6 +802,18 @@ fill_random_blob(blob_t * b)
     return 0;
 }
 
+int
+alpha_numeric_hyphen_blob(const blob_t * b)
+{
+    for (size_t i = 0; i < b->size; i++) {
+        u8 c = b->data[i];
+        if (!isalnum(c) && c != '-') return 0;
+    }
+
+    return 1;
+}
+
+
 // TODO(jason): would be good if var_name didn't have to be passed around when
 // defining enum table
 
