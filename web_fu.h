@@ -1765,7 +1765,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         // still hangs assuming it can make another request on the connection.
         // chrome wouldn't open a new connection which seems a little weird.
         // doesn't matter.
-        req->keep_alive = false;
+        //req->keep_alive = false;
         req->id_task = file_id;
     }
 
