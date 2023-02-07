@@ -1573,6 +1573,8 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
     s64 maxrate = 1024;
     bool reduce_fps = false;
 
+    // NOTE(jason): some of these values are from apple's author guide for HLS
+    // https://developer.apple.com/documentation/http_live_streaming/http_live_streaming_hls_authoring_specification_for_apple_devices
     if (width == 0) {
         // highest quality at source resolution
         crf = 18;
@@ -1580,18 +1582,17 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
     }
     else if (width == 640) {
         crf = 23;
-        maxrate = 350;
+        maxrate = 365;
         reduce_fps = true;
     }
     else if (width == 1280) {
         crf = 23;
-        maxrate = 4096;
+        maxrate = 3000;
         reduce_fps = true;
     }
     else if (width == 1920) {
         crf = 23;
-        // probably should be lower
-        maxrate = 8192;
+        maxrate = 6000;
     }
 
     s64 bufsize = maxrate;
