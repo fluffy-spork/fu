@@ -3,9 +3,10 @@
 #define MAX_REQUEST_BODY 4096
 #define MAX_RESPONSE_BODY 16384
 
+#define MIN_RESOLUTION 640
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
 
-// TODO(jason): possibly should call this http_server (seems to long), httpd
+// TODO(jason): possibly should call this http_server (seems too long), httpd
 // (daemon?), or something.  doesn't really matter and "web" is short.
 // should possibly combine with http client methods
 
@@ -69,6 +70,7 @@ typedef struct {
     s64 port;
     blob_t * res_dir;
     blob_t * upload_dir;
+    blob_t * ffmpeg_path;
     int n_children;
     int (* after_fork_f)();
 } config_web_t;
@@ -253,6 +255,8 @@ log_endpoint(endpoint_t * ep)
 const blob_t * res_dir_web;
 // where file uploads are stored defaults to "uploads" with "uploads/<randomid>"
 const blob_t * upload_dir_web;
+
+const blob_t * ffmpeg_path_web;
 
 #define RES_WEB(var, E) \
     E(space," ", var) \
@@ -453,10 +457,11 @@ clear_params(param_t * params, size_t n_params)
 }
 
 void
-init_web(const blob_t * res_dir, const blob_t * upload_dir)
+init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpeg_path)
 {
     res_dir_web = res_dir;
     upload_dir_web = upload_dir;
+    ffmpeg_path_web = ffmpeg_path ? ffmpeg_path : const_blob("ffmpeg");
 
     if (ensure_dir_file_fu(upload_dir_web, S_IRWXU)) {
         log_errno("make upload dir");
@@ -1436,10 +1441,10 @@ path_upload_web(blob_t * path, const blob_t * name)
 int
 _ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * filter)
 {
-    char * fmt_cmd = "ffmpeg -hide_banner -loglevel error -nostdin -i %s %s %s";
+    char * fmt_cmd = "%s -hide_banner -loglevel error -nostdin -i %s %s %s";
 
     char cmd[MAX_CMD_WEB];
-    if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(input), cstr_blob(filter), cstr_blob(output)) < 0) {
+    if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(ffmpeg_path_web), cstr_blob(input), cstr_blob(filter), cstr_blob(output)) < 0) {
         log_errno("ffmpeg cmd format failed");
         return -1;
     }
@@ -1563,11 +1568,10 @@ int
 transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
 {
     blob_t * filter = stk_blob(1024);
-    add_blob(filter, B("-y -vf scale="));
-    add_s64_blob(filter, width);
 
     s64 crf = 23;
     s64 maxrate = 1024;
+    bool reduce_fps = false;
 
     if (width == 0) {
         // highest quality at source resolution
@@ -1576,20 +1580,32 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
     }
     else if (width == 640) {
         crf = 23;
-        maxrate = 1024;
+        maxrate = 350;
+        reduce_fps = true;
     }
     else if (width == 1280) {
         crf = 23;
         maxrate = 4096;
+        reduce_fps = true;
     }
     else if (width == 1920) {
         crf = 23;
+        // probably should be lower
         maxrate = 8192;
     }
 
     s64 bufsize = maxrate;
 
-    add_blob(filter, B(":-1 -c:v libx264 -preset medium -crf "));
+    add_blob(filter, B("-y -vf \""));
+    if (reduce_fps) {
+        add_blob(filter, B("fps='source_fps/2',"));
+    }
+
+    add_blob(filter, B("scale="));
+    add_s64_blob(filter, width);
+    add_blob(filter, B(":-1\""));
+
+    add_blob(filter, B(" -c:v libx264 -preset medium -crf "));
     add_s64_blob(filter, crf);
     add_blob(filter, B(" -maxrate "));
     add_s64_blob(filter, maxrate);
@@ -1689,7 +1705,7 @@ process_media_task_web(request_t * req)
     def_param(file_id);
     add_s64_blob(file_id.value, id);
 
-    return process_media_web(&file_id, 640, none_content_type);
+    return process_media_web(&file_id, MIN_RESOLUTION, none_content_type);
 }
 
 // TODO(jason): can still upload a file of an invalid/unknown file type
@@ -2098,7 +2114,7 @@ main_web(config_web_t * config)
     // no idea what this should be
     const int backlog = 20;
 
-    init_web(config->res_dir, config->upload_dir);
+    init_web(config->res_dir, config->upload_dir, config->ffmpeg_path);
 
     // setup server socket to listen for requests
     int srv_fd = -1;
