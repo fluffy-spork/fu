@@ -1571,7 +1571,7 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
 
     s64 crf = 23;
     s64 maxrate = 1024;
-    bool reduce_fps = false;
+    s64 fpsmax = 0;
 
     // NOTE(jason): some of these values are from apple's author guide for HLS
     // https://developer.apple.com/documentation/http_live_streaming/http_live_streaming_hls_authoring_specification_for_apple_devices
@@ -1583,12 +1583,12 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
     else if (width == 640) {
         crf = 23;
         maxrate = 365;
-        reduce_fps = true;
+        fpsmax = 30;
     }
     else if (width == 1280) {
         crf = 23;
         maxrate = 3000;
-        reduce_fps = true;
+        fpsmax = 30;
     }
     else if (width == 1920) {
         crf = 23;
@@ -1597,17 +1597,17 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
 
     s64 bufsize = maxrate;
 
-    add_blob(filter, B("-y -vf \""));
-    if (reduce_fps) {
-        add_blob(filter, B("fps='source_fps/2',"));
-    }
-
+    add_blob(filter, B(" -vf \""));
     add_blob(filter, B("scale="));
     add_s64_blob(filter, width);
     add_blob(filter, B(":-1\""));
 
     add_blob(filter, B(" -c:v libx264 -preset medium -crf "));
     add_s64_blob(filter, crf);
+    if (fpsmax) {
+        add_blob(filter, B(" -fpsmax "));
+        add_s64_blob(filter, fpsmax);
+    }
     add_blob(filter, B(" -maxrate "));
     add_s64_blob(filter, maxrate);
     add_blob(filter, B("k -bufsize "));
