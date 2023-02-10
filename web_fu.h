@@ -1706,7 +1706,14 @@ process_media_task_web(request_t * req)
     def_param(file_id);
     add_s64_blob(file_id.value, id);
 
-    return process_media_web(&file_id, MIN_RESOLUTION, none_content_type);
+    if (process_media_web(&file_id, MIN_RESOLUTION, none_content_type)
+            || process_media_web(&file_id, 2*MIN_RESOLUTION, none_content_type)
+            || process_media_web(&file_id, 0, none_content_type))
+    {
+        return -1;
+    }
+
+    return 0;
 }
 
 // TODO(jason): can still upload a file of an invalid/unknown file type
