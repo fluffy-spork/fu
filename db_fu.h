@@ -150,10 +150,29 @@ finalize_db(sqlite3_stmt * stmt)
     return rc;
 }
 
+bool
+in_txn_db(db_t * db)
+{
+    return !sqlite3_get_autocommit(db);
+}
+
 int
 begin_db(db_t * db)
 {
     return ddl_db(db, B("begin"));
+}
+
+// use for a db function that's meant to be called by other functions and needs
+// to be in a transaction.  tried using savepoints as nested transactions, but
+// that created problems when not called with a transaction.  in most cases
+// nested transactions are probably a bad idea.  most cases should be all or
+// nothing anyway and don't need parts of the transaction to commit.
+int
+require_txn_db(db_t * db)
+{
+    if (in_txn_db(db)) return 0;
+
+    dev_error("transaction required");
 }
 
 int
@@ -169,8 +188,7 @@ commit_db(db_t * db)
 int
 rollback_db(db_t * db)
 {
-    // NOTE(jason): not in a transaction
-    if (sqlite3_get_autocommit(db)) return 0;
+    if (!in_txn_db(db)) return 0;
 
     return ddl_db(db, B("rollback"));
 }
@@ -178,6 +196,11 @@ rollback_db(db_t * db)
 // TODO(jason): i think for my usage, this shouldn't be used and should just
 // have ensure_transaction or something that will only start a new transaction
 // if there isn't one instead of nested transactions.
+//
+// NOTE(jason): this just doesn't work.  rollback of the last savepoint doesn't
+// rollback the auto transaction.  seems kind of dumb, but I don't think I
+// understand the point of savepoints and nested transactions
+/*
 int
 savepoint_db(db_t * db, const blob_t * name)
 {
@@ -201,6 +224,7 @@ rollback_to_db(db_t * db, const blob_t * name)
     vadd_blob(sql, B("rollback to "), name);
     return ddl_db(db, sql);
 }
+*/
 
 // 1 based index
 int
