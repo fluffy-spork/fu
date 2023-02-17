@@ -35,6 +35,8 @@ ENUM_BLOB(method, METHOD)
     E(gif, "image/gif", var) \
     E(mp4, "video/mp4", var) \
     E(mov, "video/quicktime", var) \
+    E(m3u8, "application/vnd.apple.mpegurl", var) \
+    E(ts, "video/mp2t", var) \
     E(image_any, "image/*", var) \
     E(video_any, "video/*", var) \
 
@@ -303,10 +305,16 @@ const blob_t * ffmpeg_path_web;
     E(res_path_suffix,"?v=", var) \
     E(file_table,"file", var) \
     E(poster_kind,"poster", var) \
+    E(dot_txt,".txt", var) \
+    E(dot_html,".html", var) \
+    E(dot_css,".css", var) \
+    E(dot_js,".js", var) \
     E(dot_gif,".gif", var) \
     E(dot_jpg,".jpg", var) \
     E(dot_png,".png", var) \
     E(dot_mp4,".mp4", var) \
+    E(dot_m3u8,".m3u8", var) \
+    E(dot_ts,".ts", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -515,41 +523,31 @@ content_type_magic(const blob_t * data)
 }
 
 content_type_t
-content_type_for_path(const blob_t * path)
+content_type_path(const blob_t * path)
 {
-    //debug_blob(path);
-    char * dot = rindex(cstr_blob(path), '.');
-    //char * dot = NULL;
-    if (dot) {
-        char first_char = *(dot + 1);
-
-        // TODO(jason): since limited content types are supported, just assume
-        // based on the first char for now.  will really figure out the types on
-        // resource load at startup
-        switch (first_char) {
-            case 'p':
-                return png_content_type;
-            case 'c':
-                return css_content_type;
-            case 'j':
-                {
-                    char second = *(dot + 2);
-                    if (second == 'p') {
-                        return jpeg_content_type;
-                    } else if (second == 's') {
-                        return javascript_content_type;
-                    }
-                }
-                break;
-            case 'g':
-                return gif_content_type;
-            case 'h':
-                return html_content_type;
-            case 't':
-                return text_content_type;
-            default:
-                return binary_content_type;
-        }
+    if (ends_with_blob(path, res_web.dot_css)) {
+        return css_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_js)) {
+        return javascript_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_png)) {
+        return png_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_jpg)) {
+        return jpeg_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_gif)) {
+        return gif_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_txt)) {
+        return text_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_m3u8)) {
+        return m3u8_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_ts)) {
+        return ts_content_type;
     }
 
     // if there's no extension, attempt to identify based on magic number
@@ -580,6 +578,10 @@ suffix_content_type(content_type_t type)
             return res_web.dot_png;
         case gif_content_type: 
             return res_web.dot_gif;
+        case m3u8_content_type: 
+            return res_web.dot_m3u8;
+        case ts_content_type: 
+            return res_web.dot_ts;
         default:
             log_var_s64(type);
             dev_error("invalid content type");
@@ -1068,7 +1070,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
     size_t len = st.st_size;
 
     if (content_type == 0) {
-        content_type = content_type_for_path(file_path);
+        content_type = content_type_path(file_path);
     }
 
     //debug_s64(len);

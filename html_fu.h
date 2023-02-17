@@ -399,7 +399,7 @@ video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob
     // NOTE(jason): preload can make pages slow if there's a lot of videos.
     // really need preload_none and posters
     //attr_html(html, res_html.preload, res_html.preload_none);
-    attr_html(html, res_html.preload, preload);
+    if (valid_blob(preload)) attr_html(html, res_html.preload, preload);
     if (valid_blob(poster)) attr_html(html, res_html.poster, poster);
     if (autoplay) empty_attr_html(html, res_html.autoplay);
     empty_attr_html(html, res_html.controls);

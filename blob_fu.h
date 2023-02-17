@@ -603,6 +603,14 @@ ends_with_char_blob(blob_t * b, char c)
 }
 
 bool
+ends_with_blob(const blob_t * b, const blob_t * suffix)
+{
+    if (b->size < suffix->size) return false;
+
+    return memcmp(b->data + (b->size - suffix->size), suffix->data, suffix->size) == 0;
+}
+
+bool
 begins_with_blob(const blob_t * b, const blob_t * prefix)
 {
     if (prefix->size > b->size) return false;
