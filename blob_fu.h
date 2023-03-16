@@ -218,6 +218,38 @@ trim_tail_blob(blob_t * b)
 }
 
 void
+trim_head_blob(blob_t * b)
+{
+    size_t n_spaces = 0;
+    for (size_t i = 0; i < b->size; i++) {
+        if (isspace(b->data[i])) {
+            n_spaces++;
+        }
+        else {
+            break;
+        }
+    }
+
+    if (n_spaces == 0) return;
+
+    if (n_spaces == b->size) {
+        reset_blob(b);
+        return;
+    }
+
+    size_t new_size = b->size - n_spaces;
+    memmove(b->data, b->data + n_spaces, new_size);
+    b->size = new_size;
+}
+
+void
+trim_blob(blob_t * b)
+{
+    trim_head_blob(b);
+    trim_tail_blob(b);
+}
+
+void
 replace_blob(blob_t * b, u8 c, u8 replacement)
 {
     for (size_t i = 0; i < b->size; i++) {
