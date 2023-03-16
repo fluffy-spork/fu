@@ -245,8 +245,8 @@ trim_head_blob(blob_t * b)
 void
 trim_blob(blob_t * b)
 {
-    trim_head_blob(b);
     trim_tail_blob(b);
+    trim_head_blob(b);
 }
 
 void
