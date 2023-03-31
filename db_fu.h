@@ -113,6 +113,7 @@ prepare_db(db_t * db, sqlite3_stmt **stmt, const blob_t * sql)
     //debug_blob(sql);
 
     if (sqlite3_prepare_v2(db, cstr_blob(sql), -1, stmt, NULL)) {
+        log_var_blob(sql);
         log_error_db(db, "sqlite3_prepare_v2");
         return -1;
     }
@@ -811,7 +812,7 @@ update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t
     add_blob(sql, B(" returning "));
     add_blob(sql, id_field->name);
 
-    log_var_blob(sql);
+    //log_var_blob(sql);
 
     int result;
     sqlite3_stmt * stmt;

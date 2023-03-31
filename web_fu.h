@@ -6,6 +6,10 @@
 #define MIN_RESOLUTION 640
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
 
+#define ENCODE_FILE_STATUS 1
+#define PROCESSING_FILE_STATUS 2
+#define ENCODE_ERROR_FILE_STATUS 3
+
 // TODO(jason): possibly should call this http_server (seems too long), httpd
 // (daemon?), or something.  doesn't really matter and "web" is short.
 // should possibly combine with http client methods
@@ -43,6 +47,7 @@ ENUM_BLOB(method, METHOD)
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
 typedef enum {
+    UNKNOWN_CACHE_CONTROL,
     NO_STORE_CACHE_CONTROL,
     STATIC_ASSET_CACHE_CONTROL,
     USER_FILE_CACHE_CONTROL
@@ -1409,20 +1414,15 @@ insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * name, s64 size, s64 
             name_field, name,
             size_field, size,
             content_type_field, content_type);
+}
 
-    /*
-    param_t params[] = {
-        local_param(fields.name),
-        local_param(fields.size),
-        local_param(fields.content_type),
-    };
+int
+set_status_file(db_t * db, s64 file_id, int file_status)
+{
+    def_param(status);
+    add_s64_blob(status.value, file_status);
 
-    add_blob(params[0].value, name);
-    add_s64_blob(params[1].value, size);
-    add_s64_blob(params[2].value, content_type);
-
-    return insert_params(db, res_web.file_table, file_id, user_id, params, array_size_fu(params), 0);
-    */
+    return update_params(db, res_web.file_table, &status, 1, fields.file_id, file_id, 0);
 }
 
 int
@@ -1599,7 +1599,7 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
 
     s64 bufsize = maxrate;
 
-    add_blob(filter, B(" -vf \""));
+    add_blob(filter, B(" -y -vf \""));
     add_blob(filter, B("scale="));
     add_s64_blob(filter, width);
     add_blob(filter, B(":-1\""));
@@ -1675,6 +1675,10 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
             return extract_poster_web(input, output, width);
         }
         else {
+            if (process_media_web(file_id, width, jpeg_content_type)) {
+                log_errno("failed to generate video poster");
+            }
+
             //debug("XXXXX transcode video XXXX");
             return transcode_video_web(input, output, width);
         }
@@ -1696,24 +1700,83 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
     return 0;
 }
 
+// minimal processing to fast as possible for during response
+// full processing is done in the background
 int
-process_media_task_web(request_t * req)
+fast_process_media_web(param_t * file_id)
 {
-    s64 id = req->id_task;
+    return process_media_web(file_id, MIN_RESOLUTION, none_content_type);
+}
 
-    if (id < 1) {
-        error_log("missing id_task for file_id", "web_fu", 1);
-    }
-
+int
+full_process_media_web(s64 id)
+{
     def_param(file_id);
     add_s64_blob(file_id.value, id);
 
-    if (process_media_web(&file_id, MIN_RESOLUTION, none_content_type)
+    if (fast_process_media_web(&file_id)
             || process_media_web(&file_id, 2*MIN_RESOLUTION, none_content_type)
             || process_media_web(&file_id, 0, none_content_type))
     {
         return -1;
     }
+
+    return 0;
+}
+
+// file_id is set to 0 when no files need encoding
+int
+next_process_media_web(s64 * file_id)
+{
+    *file_id = 0;
+
+    //blob_t * sql = B("update file set status = 2 where status = 1 and (select count(*) from file where status = 2) = 0 returning file_id limit 1");
+    blob_t * sql = B("update file set status = 2 where file_id = (select file_id from file where status = 1 and (select count(*) from file where status = 2) = 0) returning file_id");
+    return exec_s64_db(db, sql, file_id) == 0 && *file_id > 0;
+}
+
+int
+process_media_task_web(request_t * req)
+{
+    // TODO(jason): this probably should flush the long in the loop as otherwise it just keeps building up
+    UNUSED(req);
+
+    // process files as long as more to process and no other threads processing
+    s64 file_id = 0;
+    debug("process media task");
+    while (next_process_media_web(&file_id)) {
+        debug_s64(file_id);
+
+        if (full_process_media_web(file_id)) {
+            if (set_status_file(db, file_id, ENCODE_ERROR_FILE_STATUS)) {
+                // assume everything is just borked.  crash??
+                log_error_db(db, "failure reseting file to encode status");
+                return -1;
+            }
+
+            continue;
+        }
+
+        if (set_status_file(db, file_id, 0)) {
+            // assume everything is just borked.  crash??
+            log_error_db(db, "failure setting file to 0 status");
+            return -1;
+        }
+    }
+
+    return 0;
+}
+
+int
+files_process_media_task_handler(endpoint_t * ep, request_t * req)
+{
+    UNUSED(ep);
+
+    html_response(req);
+    add_blob(req->body, B("ok"));
+
+    req->after_task = process_media_task_web;
+    req->keep_alive = false;
 
     return 0;
 }
@@ -1784,15 +1847,25 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         return -1;
     }
 
-    if (video_content_type(type) || image_content_type(type)) {
+    if (image_content_type(type)) {
+        full_process_media_web(file_id);
+    }
+    else if (video_content_type(type)) {
+        param_t file_id_p = local_param(fields.file_id);
+        add_s64_blob(file_id_p.value, file_id);
+
+        set_status_file(db, file_id, ENCODE_FILE_STATUS);
+
+        fast_process_media_web(&file_id_p);
+
         req->after_task = process_media_task_web;
+        //req->id_task = file_id;
         // NOTE(jason): need to set keep_alive before response headers are sent
         // so connection: close is sent.  without connection close, the browser
         // still hangs assuming it can make another request on the connection.
         // chrome wouldn't open a new connection which seems a little weird.
         // doesn't matter.
-        //req->keep_alive = false;
-        req->id_task = file_id;
+        req->keep_alive = false;
     }
 
     blob_t * location = local_blob(255);
