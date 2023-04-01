@@ -40,7 +40,18 @@ int clamp255(int n)
     return clamp(n, 0, 255);
 }
 
-double cum_mov_avg(double cma, double x, size_t n)
+int clamp_int(int a, int min, int max) {
+    if (a < min) return min;
+    if (a > max) return max;
+    return a;
+}
+
+double cum_mov_avg(double cma, double x, int n)
+{
+    return cma + (x - cma)/(n + 1);
+}
+
+float cum_mov_avg_f(float cma, float x, int n)
 {
     return cma + (x - cma)/(n + 1);
 }

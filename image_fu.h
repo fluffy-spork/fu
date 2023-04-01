@@ -1777,6 +1777,8 @@ void draw_rect(image_t *img, int x, int y, int width, int height, const color_t 
 {
     int x2 = clamp(x + width - 1, 0, img->width - 1);
     int y2 = clamp(y + height - 1, 0, img->height - 1);
+    x = clamp(x, 0, img->width - 1);
+    y = clamp(y, 0, img->height - 1);
     draw_line(img, x, y, x2, y, fg);
     draw_line(img, x, y, x, y2, fg);
     draw_line(img, x2, y, x2, y2, fg);
@@ -2260,13 +2262,13 @@ dilate_image(const image_t *in, image_t *out, const u8 value)
             if (in->data[i] != value
                     && (
                         in->data[i - in->width] == value
-                        || in->data[i - in->width - 1] == value
-                        || in->data[i - in->width + 1] == value
                         || in->data[i + in->width] == value
-                        || in->data[i + in->width - 1] == value
-                        || in->data[i + in->width + 1] == value
                         || in->data[i - 1] == value
                         || in->data[i + 1] == value
+                        || in->data[i - in->width - 1] == value
+                        || in->data[i - in->width + 1] == value
+                        || in->data[i + in->width - 1] == value
+                        || in->data[i + in->width + 1] == value
                        )
                )
             {
@@ -2288,6 +2290,44 @@ dilate_image(const image_t *in, image_t *out, const u8 value)
     return 0;
 }
 
+// dilate only vertically to keep vertical lines
+int
+vert_dilate_image(const image_t *in, image_t *out, const u8 value)
+{
+    assert(in->channels == 1);
+    assert(in->channels == out->channels);
+
+    //const int size = 3;
+    const int inset = 1;
+
+    image_t * map = like_image(in);
+
+    for (int y = inset; y < in->height - inset; y++) {
+        for (int x = inset; x < in->width - inset; x++) {
+            int i = y*in->width + x;
+            if (in->data[i] != value
+                    && (
+                        in->data[i - in->width] == value
+                        && in->data[i + in->width] == value
+                       )
+               )
+            {
+                set_pixel(map, x, y, &WHITE);
+            }
+        }
+    }
+
+    for (int y = 0; y < map->height; y++) {
+        for (int x = 0; x < map->width; x++) {
+            int i = y*map->width + x;
+            out->data[i] = map->data[i] == 255 ? value : in->data[i];
+        }
+    }
+
+    free_image(map);
+
+    return 0;
+}
 u8
 avg_array_u8(u8 *array, size_t n, size_t stride, size_t offset)
 {
@@ -2336,6 +2376,39 @@ avg_decimate_image(image_t *in, image_t *out)
     }
 
     free_image(box);
+
+    return 0;
+}
+
+int
+threshold_decimate_image(const image_t *in, image_t *out, u8 max_value, s64 sum_threshold)
+{
+    assert(in->channels == 1);
+    assert(in->channels == out->channels);
+
+    int x_stride = in->width/out->width;
+    int y_stride = in->height/out->height;
+    assert(x_stride > 0);
+    assert(y_stride > 0);
+
+    for (int y = 0; y < out->height; y++) {
+        for (int x = 0; x < out->width; x++) {
+            s64 sum = 0;
+            int xt_off = x*x_stride;
+            int yt_off = y*y_stride;
+            int xt_max = xt_off + x_stride;
+            int yt_max = yt_off + y_stride;
+
+            for (int yt = yt_off; yt < yt_max; yt++) {
+                for (int xt = xt_off; xt < xt_max; xt++) {
+                    sum += get_gray(in, xt, yt) < max_value;
+                }
+            }
+
+            //debugf("sum: %zd", sum);
+            out->data[y*out->width + x] = (sum > sum_threshold) ? 255 : 0;
+        }
+    }
 
     return 0;
 }
@@ -2459,6 +2532,17 @@ conv2d_u8_image(u8 *out, u8 *in, size_t width, size_t height, int *kernel, size_
             out[y*width + x] = clamp255(sum/ksum);
         }
     }
+}
+
+void
+conv2d_image(image_t * out, image_t * in, int * kernel, size_t size_kernel)
+{
+    assert(out->width == in->width);
+    assert(out->height == in->height);
+    assert(out->channels == 1);
+    assert(out->channels == in->channels);
+
+    conv2d_u8_image(out->data, in->data, in->width, in->height, kernel, size_kernel);
 }
 
 void
