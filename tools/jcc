@@ -53,7 +53,7 @@ debug() {
 
 profile() {
     log 'profile'
-    build '-fprofile-arcs -pg' && "./$name" "$(pwd)" $run_args
+    build '-fprofile-arcs -pg' && "./$name" $run_args
     gprof --brief "$name" gmon.out > "$name.profile"
 }
 
@@ -64,7 +64,7 @@ run() {
     fi
 
     log 'run'
-    build '-Og' && "$prog_name" "$(pwd)" $run_args
+    build '-Og' && "$prog_name" $run_args
 }
 
 # currently directly saving images here, but should it be possible to delete
@@ -96,7 +96,7 @@ run_appimage() {
     export FU_DEV="$USER"
 
     log 'run_appimage'
-    appimage && "$app_name" "$(pwd)" $run_args
+    appimage && "$app_name" $run_args
 }
 
 # eventually should download the latest and build a static lib
