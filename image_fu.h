@@ -1953,7 +1953,7 @@ index2rgba_image(const image_t *index, image_t *rgba, color_t *palette, size_t n
     for (size_t i = 0, j = 0; i < n_pixels; i++) {
         u8 v = index->data[i];
         if (v >= n) {
-            log_u64(plog, v, "palette index out of bounds");
+            log_u64(v, "palette index out of bounds");
             return;
         }
         color_t *c = &palette[v];
