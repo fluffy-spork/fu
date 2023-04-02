@@ -1,0 +1,140 @@
+#!/bin/sh
+
+#    DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+#                    Version 2, December 2004
+#
+# Copyright (C) 2004 Sam Hocevar <sam@hocevar.net>
+#
+# Everyone is permitted to copy and distribute verbatim or modified
+# copies of this license document, and changing it is allowed as long
+# as the name is changed.
+#
+#            DO WHAT THE FUCK YOU WANT TO PUBLIC LICENSE
+#   TERMS AND CONDITIONS FOR COPYING, DISTRIBUTION AND MODIFICATION
+#
+#  0. You just DO WHAT THE FUCK YOU WANT TO.
+
+
+# Builds with gcc.  Could work with others, but IDK if they provide the
+# profiler and debugging info.
+
+name=$(basename "$PWD")
+
+CFLAGS="-Wall -Wextra -Werror -rdynamic $CFLAGS"
+
+if [ -f jcc.env ]; then
+    . $PWD/jcc.env
+fi
+
+src_file='main.c'
+
+cmd="$1"
+if [ -z "$cmd" ]; then
+    #cmd='run'
+    cmd='run_appimage'
+fi
+
+log() {
+    [ -z "$LOG" ] || echo "LOG: $1" >&2
+}
+
+build() {
+    extra_flags="$1"
+    log "extra_flags: $extra_flags"
+
+    log 'build'
+    time -f 'compile: %e seconds' gcc $CFLAGS $extra_flags -o "$name" "$src_file" $lib_flags
+}
+
+debug() {
+    log 'debug'
+    build '-Og -g' && gdb "$name"
+}
+
+profile() {
+    log 'profile'
+    build '-fprofile-arcs -pg' && "./$name" "$(pwd)" $run_args
+    gprof --brief "$name" gmon.out > "$name.profile"
+}
+
+run() {
+    local prog_name="$1"
+    if [ -z "$prog_name" ]; then
+        prog_name="./$name"
+    fi
+
+    log 'run'
+    build '-Og' && "$prog_name" "$(pwd)" $run_args
+}
+
+# currently directly saving images here, but should it be possible to delete
+# the AppDir and have it rebuilt?  If an image atlas is used that would need to
+# be generated, etc as part of the build?  generating multiple resolutions
+# of a high res source?
+appimage() {
+    local prog_name="$1"
+    if [ -z "$prog_name" ]; then
+        prog_name="./$name"
+    fi
+
+    app_name="$prog_name-x86_64.AppImage"
+
+    log 'appimage'
+    build '-Og' &&
+        cp "$prog_name" AppDir/ &&
+        ./fu/tools/appimagetool-x86_64.AppImage AppDir/
+}
+
+run_appimage() {
+    local prog_name="$1"
+    if [ -z "$prog_name" ]; then
+        prog_name="./$name"
+    fi
+
+    app_name="$prog_name-x86_64.AppImage"
+
+    export FU_DEV="$USER"
+
+    log 'run_appimage'
+    appimage && "$app_name" "$(pwd)" $run_args
+}
+
+# eventually should download the latest and build a static lib
+# needs -pthread -ldl for lib_flags
+update_sqlite() {
+    gcc -c -DSQLITE_ENABLE_RTREE=1 -o sqlite3.o sqlite3.c
+    ar rcs libsqlite3.a sqlite3.o
+}
+
+clean() {
+    log 'clean'
+    [ ! -e "$name" ] || rm "$name"
+    rm -f gmon.out "$name.profile" main.gcda
+
+    exit 0
+}
+
+if [ "$cmd" = 'build' ]; then
+    build
+elif [ "$cmd" = 'appimage' ]; then
+    appimage
+elif [ "$cmd" = 'run_appimage' ]; then
+    run_appimage
+elif [ "$cmd" = 'clean' ]; then
+    clean
+elif [ "$cmd" = 'debug' ]; then
+    debug
+elif [ "$cmd" = 'profile' ]; then
+    profile
+elif [ "$cmd" = 'run' ]; then
+    run
+elif [ "$cmd" = 'update-sqlite' ]; then
+    update_sqlite
+else
+    # build to /tmp
+    name=$(mktemp)
+    src_file="$cmd"
+    run "$name"
+    rm "$name"
+fi
+
