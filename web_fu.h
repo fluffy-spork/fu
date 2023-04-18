@@ -1,5 +1,13 @@
 #pragma once
 
+#include <netdb.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/uio.h>
+#include <sys/wait.h>
+
+#include "file_fu.h"
+
 #define MAX_REQUEST_BODY 4096
 #define MAX_RESPONSE_BODY 16384
 
@@ -78,7 +86,8 @@ typedef struct {
     blob_t * res_dir;
     blob_t * upload_dir;
     blob_t * ffmpeg_path;
-    int n_children;
+    int n_workers;
+    int n_dev_workers;
     int (* after_fork_f)();
 } config_web_t;
 
@@ -93,7 +102,7 @@ struct request_s {
     s64 session_id;
     blob_t * session_cookie;
     s64 user_id;
-    blob_t * user_name;
+    blob_t * user_alias;
 
     // maybe anonymize/mask the ip (hash?)  mainly not for having the actual ip
     // I would think
@@ -308,6 +317,7 @@ const blob_t * ffmpeg_path_web;
     E(user_file_cache_control,"private, max-age=2592000, immutable", var) \
     E(res_path,"/res/", var) \
     E(res_path_suffix,"?v=", var) \
+    E(favicon_path, "/res/logo.png", var) \
     E(file_table,"file", var) \
     E(poster_kind,"poster", var) \
     E(dot_txt,".txt", var) \
@@ -469,27 +479,6 @@ clear_params(param_t * params, size_t n_params)
     }
 }
 
-void
-init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpeg_path)
-{
-    res_dir_web = res_dir;
-    upload_dir_web = upload_dir;
-    ffmpeg_path_web = ffmpeg_path ? ffmpeg_path : const_blob("ffmpeg");
-
-    if (ensure_dir_file_fu(upload_dir_web, S_IRWXU)) {
-        log_errno("make upload dir");
-        exit(EXIT_FAILURE);
-    }
-
-    init_res_web();
-
-    init_method();
-    init_content_type();
-    init_http_status();
-
-    init_endpoints();
-}
-
 content_type_t
 content_type_magic(const blob_t * data)
 {
@@ -646,7 +635,7 @@ reuse_request(request_t * req)
 
     req->session_id = 0;
     req->user_id = 0;
-    erase_blob(req->user_name);
+    erase_blob(req->user_alias);
 
     req->status = 0;
 
@@ -680,7 +669,7 @@ new_request()
     req->session_cookie = blob(256);
     // TODO(jason): how big should this actually be?  should be fairly short
     // and limited so page layout can be consistent
-    req->user_name = blob(32);
+    req->user_alias = blob(32);
 
     req->head = blob(1024);
     req->body = blob(MAX_RESPONSE_BODY);
@@ -1268,7 +1257,7 @@ require_session_web(request_t * req, bool create)
     if (valid_blob(req->session_cookie)) {
         sqlite3_stmt * stmt;
 
-        if (prepare_db(db, &stmt, B("select session_id, u.user_id, u.name from session s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()"))) {
+        if (prepare_db(app.db, &stmt, B("select session_id, u.user_id, u.alias from session s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()"))) {
             internal_server_error_response(req);
             return -1;
         }
@@ -1278,11 +1267,11 @@ require_session_web(request_t * req, bool create)
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             req->session_id = s64_db(stmt, 0);
             req->user_id = s64_db(stmt, 1);
-            if (req->user_id) blob_db(stmt, 2, req->user_name);
+            if (req->user_id) blob_db(stmt, 2, req->user_alias);
 
             log_var_s64(req->session_id);
             log_var_s64(req->user_id);
-            log_var_blob(req->user_name);
+            log_var_blob(req->user_alias);
         }
 
         if (finalize_db(stmt) != SQLITE_OK) {
@@ -1305,7 +1294,7 @@ require_session_web(request_t * req, bool create)
         log_var_blob(cookie);
 
         sqlite3_stmt * stmt;
-        if (prepare_db(db, &stmt, B("insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
+        if (prepare_db(app.db, &stmt, B("insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
             internal_server_error_response(req);
             return -1;
         }
@@ -1351,7 +1340,7 @@ end_session_web(request_t * req)
     // it will be invalid the next request anyway.
 
     blob_t * sql = B("update session set expires = unixepoch(), modified = unixepoch() where session_id = ?1");
-    return exec_s64_pi_db(db, sql, NULL, req->session_id);
+    return exec_s64_pi_db(app.db, sql, NULL, req->session_id);
 }
 
 int
@@ -1369,7 +1358,7 @@ require_user_web(request_t * req, const endpoint_t * auth)
     }
 
     sqlite3_stmt * stmt;
-    if (prepare_db(db, &stmt, B("update session set redirect_url = ?, modified = unixepoch() where session_id = ?"))) {
+    if (prepare_db(app.db, &stmt, B("update session set redirect_url = ?, modified = unixepoch() where session_id = ?"))) {
         internal_server_error_response(req);
         return -1;
     }
@@ -1406,12 +1395,42 @@ res_handler(endpoint_t * ep, request_t * req)
     return file_response(req, res_dir_web, req->path, 0, 0);
 }
 
+// TODO(jason): this works.  ultimately, I think it's unfortunately required to
+// have something at /favicon.ico
 int
-insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * name, s64 size, s64 content_type)
+favicon_handler(endpoint_t * ep, request_t * req)
+{
+    UNUSED(ep);
+
+    return permanent_redirect_web(req, res_web.favicon_path);
+}
+
+// XXX(jason): since not targeting using a load balancer by default this
+// probably isn't necessary anymore.
+int
+health_handler(endpoint_t * ep, request_t * req)
+{
+    // minimum number of non-crashed workers?  Needs a load component too, but
+    // maybe the compute engine cpu load works
+    static bool healthy_web = true;
+
+    UNUSED(ep);
+
+    if (healthy_web) {
+        error_response(req, ok_http_status, res_web.ok_health);
+    } else {
+        error_response(req, service_unavailable_http_status, res_web.service_unavailable);
+    }
+
+    return 0;
+}
+
+int
+insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * alias, s64 size, s64 content_type)
 {
     return insert_fields_db(db, res_web.file_table, file_id,
             user_id_field, user_id,
-            name_field, name,
+            alias_field, alias,
             size_field, size,
             content_type_field, content_type);
 }
@@ -1426,9 +1445,9 @@ set_status_file(db_t * db, s64 file_id, int file_status)
 }
 
 int
-file_info(db_t * db, param_t * file_id, param_t * name, param_t * content_type)
+file_info(db_t * db, param_t * file_id, param_t * path, param_t * content_type)
 {
-    return by_id_db(db, B("select name, content_type from file where file_id = ?"), s64_blob(file_id->value, 0), name, content_type);
+    return by_id_db(db, B("select path, content_type from file where file_id = ?"), s64_blob(file_id->value, 0), path, content_type);
 }
 
 #define MAX_CMD_WEB 1024
@@ -1639,11 +1658,11 @@ media_path_web(blob_t * path, s64 width, const blob_t * name, content_type_t typ
 int
 process_media_web(param_t * file_id, s64 width, content_type_t target_type)
 {
-    def_param(name);
+    def_param(path);
     def_param(content_type);
 
-    if (file_info(db, file_id, &name, &content_type)) {
-        log_error_db(db, "failed to get file info");
+    if (file_info(app.db, file_id, &path, &content_type)) {
+        log_error_db(app.db, "failed to get file info");
         return -1;
     }
 
@@ -1653,11 +1672,11 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
     }
 
     blob_t * input = stk_blob(255);
-    path_upload_web(input, name.value);
+    path_upload_web(input, path.value);
 
     // TODO(jason): this path building seems a little wonky
     blob_t * media_path = stk_blob(255);
-    media_path_web(media_path, width, name.value, target_type);
+    media_path_web(media_path, width, path.value, target_type);
 
     blob_t * dir = stk_blob(255);
     path_upload_web(dir, stk_s64_blob(width));
@@ -1732,7 +1751,7 @@ next_process_media_web(s64 * file_id)
 
     //blob_t * sql = B("update file set status = 2 where status = 1 and (select count(*) from file where status = 2) = 0 returning file_id limit 1");
     blob_t * sql = B("update file set status = 2 where file_id = (select file_id from file where status = 1 and (select count(*) from file where status = 2) = 0) returning file_id");
-    return exec_s64_db(db, sql, file_id) == 0 && *file_id > 0;
+    return exec_s64_db(app.db, sql, file_id) == 0 && *file_id > 0;
 }
 
 int
@@ -1748,18 +1767,18 @@ process_media_task_web(request_t * req)
         debug_s64(file_id);
 
         if (full_process_media_web(file_id)) {
-            if (set_status_file(db, file_id, ENCODE_ERROR_FILE_STATUS)) {
+            if (set_status_file(app.db, file_id, ENCODE_ERROR_FILE_STATUS)) {
                 // assume everything is just borked.  crash??
-                log_error_db(db, "failure reseting file to encode status");
+                log_error_db(app.db, "failure reseting file to encode status");
                 return -1;
             }
 
             continue;
         }
 
-        if (set_status_file(db, file_id, 0)) {
+        if (set_status_file(app.db, file_id, 0)) {
             // assume everything is just borked.  crash??
-            log_error_db(db, "failure setting file to 0 status");
+            log_error_db(app.db, "failure setting file to 0 status");
             return -1;
         }
     }
@@ -1833,7 +1852,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     path_upload_web(path, file_key);
 
     s64 file_id;
-    if (insert_file(db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
+    if (insert_file(app.db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
         internal_server_error_response(req);
         return -1;
     }
@@ -1854,7 +1873,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         param_t file_id_p = local_param(fields.file_id);
         add_s64_blob(file_id_p.value, file_id);
 
-        set_status_file(db, file_id, ENCODE_FILE_STATUS);
+        set_status_file(app.db, file_id, ENCODE_FILE_STATUS);
 
         fast_process_media_web(&file_id_p);
 
@@ -1892,10 +1911,10 @@ files_handler(endpoint_t * ep, request_t * req)
         return -1;
     }
 
-    def_param(name);
+    def_param(path);
     def_param(content_type);
 
-    if (file_info(db, file_id, &name, &content_type)) {
+    if (file_info(app.db, file_id, &path, &content_type)) {
         not_found_response(req);
         return -1;
     }
@@ -1907,8 +1926,8 @@ files_handler(endpoint_t * ep, request_t * req)
         type = jpeg_content_type;
     }
 
-    blob_t * filename = local_blob(name.value->capacity + 4);
-    vadd_blob(filename, name.value, suffix_content_type(type));
+    blob_t * filename = local_blob(path.value->capacity + 4);
+    vadd_blob(filename, path.value, suffix_content_type(type));
 
     //debug_blob(filename);
 
@@ -2101,9 +2120,10 @@ respond:
     //debug_s64(result);
     if (result == -1) log_errno("write response");
 
-    if (!sqlite3_get_autocommit(db)) {
+    // XXX: this shouldn't be here
+    if (app.db && !sqlite3_get_autocommit(app.db)) {
         // NOTE(jason): the rollback is here just so the db won't be borked
-        rollback_db(db);
+        rollback_db(app.db);
         dev_error("sqlite transaction open");
     }
 
@@ -2115,16 +2135,13 @@ respond:
 pid_t
 fork_worker_web(int srv_fd, int (* after_fork_f)())
 {
-    // clear the logs before forking
-    flush_log();
-
-    pid_t pid = fork();
+    pid_t pid = fork_app_fu();
 
     if (pid != 0) {
         return pid;
     }
 
-    // child
+    // worker
     struct sockaddr_in6 client_addr;
     socklen_t client_addr_len = sizeof(client_addr);
 
@@ -2137,7 +2154,7 @@ fork_worker_web(int srv_fd, int (* after_fork_f)())
 
     // NOTE(jason): callback so application can open db connections,
     // etc
-    after_fork_f();
+    if (after_fork_f) after_fork_f();
 
     flush_log();
 
@@ -2184,20 +2201,67 @@ handle_request:
     return pid;
 }
 
-#define MAX_CHILDREN_WEB 1000
+int
+upgrade_db_web(const blob_t * db_file)
+{
+    version_sql_t versions[] = {
+        { 1, "create table user (user_id integer primary key autoincrement, email text unique not null, alias text unique not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
+        , { 2, "create table session (session_id integer primary key, user_id integer, expires integer not null, cookie text, redirect_url text, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
+        , { 3, "create table file (file_id integer primary key autoincrement, path text not null unique, size integer not null, content_type integer not null default 1, md5 blob, user_id integer not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch()), status integer not null default 0) strict" }
+    };
+
+    return upgrade_db(db_file, versions);
+}
+
+int
+init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpeg_path)
+{
+    res_dir_web = res_dir;
+    upload_dir_web = upload_dir;
+    ffmpeg_path_web = ffmpeg_path ? ffmpeg_path : const_blob("ffmpeg");
+
+    if (ensure_dir_file_fu(upload_dir_web, S_IRWXU)) {
+        log_errno("make upload dir");
+        exit(EXIT_FAILURE);
+    }
+
+    init_res_web();
+
+    init_method();
+    init_content_type();
+    init_http_status();
+
+    init_endpoints();
+
+    return upgrade_db_web(app.main_db_file);
+}
+
+// TODO(jason): calculate the max workers based on the amount of RAM in prod mode.
+// use a small fixed amount in dev_mode.  if using some amount of memory may
+// have to just create new workers until that amount and then save the number
+// of workers.  Can't really know the exact amount of memory a worker will use
+// some it could require monitoring the amount of available memory and
+// adding/removing workers as necessary to keep below max memory usage.
+#define MAX_WORKERS_WEB 100
+#define DEV_WORKERS_WEB 10
 
 // doesn't return.  calls exit() on failure
 int
-//main_web(const char * srv_port, const blob_t * res_dir, const blob_t * upload_dir, int n_children, int (* after_fork_f)())
 main_web(config_web_t * config)
 {
     assert_not_null(config->res_dir);
-    assert(config->n_children <= MAX_CHILDREN_WEB);
 
     // no idea what this should be
     const int backlog = 20;
 
-    init_web(config->res_dir, config->upload_dir, config->ffmpeg_path);
+    if (config->n_dev_workers < 1) config->n_dev_workers = DEV_WORKERS_WEB;
+    if (config->n_workers < 1) config->n_workers = MAX_WORKERS_WEB;
+
+    const int n_workers = dev_mode() ? config->n_dev_workers : config->n_workers;
+
+    if (init_web(config->res_dir, config->upload_dir, config->ffmpeg_path)) {
+        return -1;
+    }
 
     // setup server socket to listen for requests
     int srv_fd = -1;
@@ -2270,21 +2334,21 @@ main_web(config_web_t * config)
         exit(EXIT_FAILURE);
     }
 
-    pid_t pids[MAX_CHILDREN_WEB] = {};
+    pid_t pids[MAX_WORKERS_WEB] = {};
 
     // XXX(jason): for unknown reason these lines don't get printed.  if
-    // they're below the flush_logs() call the print out in every child????
+    // they're below the flush_logs() call the print out in every worker????
     //log_var_u64(enum_res_web(wrap_blob("service unavailable"), 0)); 
     //log_var_blob(res_web.service_unavailable);
 
-    for (int i = 0; i < config->n_children; i++)
+    for (int i = 0; i < n_workers; i++)
     {
         pid_t pid = fork_worker_web(srv_fd, config->after_fork_f);
         if (pid > 0) {
             pids[i] = pid;
         }
         else if (pid == -1) {
-            // this should kill all children before exiting?
+            // this should kill all workers before exiting?
             // atexit callback
             log_errno("fork_worker_web");
             exit(EXIT_FAILURE);
@@ -2313,7 +2377,7 @@ main_web(config_web_t * config)
                 debugf("exit signaled %d", WTERMSIG(wstatus));
             }
 
-            for (int i = 0; i < config->n_children; i++) {
+            for (int i = 0; i < n_workers; i++) {
                 if (pids[i] == wpid) {
                     debugf("found pid index: %d", i);
 
@@ -2335,6 +2399,8 @@ main_web(config_web_t * config)
             }
         }
     }
+
+    flush_log();
 
     return 0;
 }

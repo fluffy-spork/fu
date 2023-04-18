@@ -1,11 +1,14 @@
 #pragma once
 
-typedef sqlite3 db_t;
+#include "file_fu.h"
 
-db_t * db = NULL;
+typedef sqlite3 db_t;
 
 #define log_error_db(db, label) \
     error_log(sqlite3_errmsg(db), label, sqlite3_extended_errcode(db))
+#define log_error_stmt_db(stmt, label) \
+    log_error_db(sqlite3_db_handle(stmt), label)
+
 
 // these are a bad idea since asserts could be disabled and the code wouldn't
 // be run at all.  oops!
@@ -55,7 +58,7 @@ busy_handler_db(void * ptr, int count)
 }
 
 int
-open_db(blob_t * file, db_t ** db)
+open_db(const blob_t * file, db_t ** db)
 {
     assert_not_null(file);
     assert(file->size < 256);
@@ -145,7 +148,7 @@ finalize_db(sqlite3_stmt * stmt)
 {
     int rc = sqlite3_finalize(stmt);
     if (rc) {
-        log_error_db(db, sqlite3_sql(stmt));
+        log_error_stmt_db(stmt, sqlite3_sql(stmt));
     }
 
     return rc;
@@ -241,7 +244,7 @@ cstr_bind_db(sqlite3_stmt * stmt, int index, const char * value)
     }
 
     if (rc) {
-        log_error_db(db, "cstr bind failed");
+        log_error_stmt_db(stmt, "cstr bind failed");
         return -1;
     }
 
@@ -254,7 +257,7 @@ text_bind_db(sqlite3_stmt * stmt, int index, const blob_t * value)
 {
     int rc = sqlite3_bind_text(stmt, index, (char *)value->data, value->size, SQLITE_STATIC);
     if (rc) {
-        log_error_db(db, "text bind failed");
+        log_error_stmt_db(stmt, "text bind failed");
         return -1;
     }
         
@@ -267,8 +270,7 @@ s64_bind_db(sqlite3_stmt * stmt, int index, s64 value)
 {
     int rc = sqlite3_bind_int64(stmt, index, value);
     if (rc) {
-        // TODO(jason): dev_error?
-        log_error_db(db, "s64 bind failed");
+        log_error_stmt_db(stmt, "s64 bind failed");
         return -1;
     }
 
@@ -330,7 +332,10 @@ set_blob_pragma_db(db_t * db, const blob_t * pragma, const blob_t * value)
         return -1;
     }
 
-    if (sqlite3_step(stmt) != SQLITE_DONE) {
+    // NOTE(jason): this returns a row unlike s64 case for user_version.  at
+    // least for locking_mode and journal_mode.
+    // TODO(jason): should this be checking the value is the set value?
+    if (sqlite3_step(stmt) != SQLITE_ROW) {
         log_error_db(db, "sqlite3_step");
     }
 
@@ -418,6 +423,12 @@ set_wal_mode_db(db_t * db)
 }
 
 int
+set_exclusive_locking_mode_db(db_t * db)
+{
+    return set_blob_pragma_db(db, B("locking_mode"), B("exclusive"));
+}
+
+int
 exec_s64_db(db_t * db, blob_t * sql, s64 * value)
 {
     sqlite3_stmt * stmt;
@@ -440,7 +451,8 @@ exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, const blob_t * p1)
             || text_bind_db(stmt, 1, p1)
        )
     {
-        return finalize_db(stmt);
+        finalize_db(stmt);
+        return -1;
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -997,6 +1009,12 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
 }
 
 int
+rows_db(db_t * db, const blob_t * sql, row_handler_db_t * handler)
+{
+    return rows_params_db(db, sql, handler, NULL, 0);
+}
+
+int
 sql_type_param(param_t * p)
 {
     switch (p->field->type) {
@@ -1252,4 +1270,81 @@ delete_db(int sql_id, s64 id)
     return -1;
 }
 */
+
+int
+create_db_version_table_db(db_t * db)
+{
+    return ddl_db(db, B("create table if not exists db_version (src_file text primary key, version integer not null default 0) without rowid, strict"));
+}
+
+int
+version_db(db_t * db, const blob_t * src_file, s64 * version)
+{
+    return exec_s64_pb_db(db, B("select version from db_version where src_file = ?1"), version, src_file);
+}
+
+int
+set_version_db(db_t * db, const blob_t * src_file, s64 version)
+{
+    return exec_s64_pbi_db(db, B("insert or replace into db_version (src_file, version) values (?1, ?2) returning version"), NULL, src_file, version);
+}
+
+typedef struct {
+    int version;
+    char * sql;
+} version_sql_t;
+
+#define upgrade_db(file, versions) _upgrade_db(file, B(__FILE__), versions, array_size_fu(versions))
+
+int
+_upgrade_db(const blob_t * db_file, const blob_t * src_file, version_sql_t * versions, int n_versions)
+{
+    //debug_blob(src_file);
+    //debug_blob(db_file);
+
+    db_t * db;
+
+    if (open_db(db_file, &db)) {
+        return -1;
+    }
+
+    int rc = 0;
+    s64 version = 0;
+
+    // NOTE(jason): exclusive lock on whole db.  However, upgrades should
+    // normally happen in main before other process/threads are created.
+    // This would also, I assume, avoid any issues from other programs
+    if (set_exclusive_locking_mode_db(db)
+            || create_db_version_table_db(db)
+            || version_db(db, src_file, &version))
+    {
+        rc = -1;
+        goto error;
+    }
+
+    s64 new_version = version;
+    for (int i = 0; i < n_versions; i++) {
+        if (versions[i].version <= new_version) continue;
+
+        rc = ddl_db(db, B(versions[i].sql));
+        if (rc) goto error;
+
+        new_version = versions[i].version;
+    }
+
+    if (new_version > version) {
+        rc = set_version_db(db, src_file, new_version);
+        if (rc == 0) {
+            log_var_blob(db_file);
+            log_var_blob(src_file);
+            log_var_s64(new_version);
+        }
+    }
+
+error:
+    // NOTE(jason): closing the db releases the pragma locking_mode exclusive lock
+    close_db(db);
+
+    return rc;
+}
 

@@ -1,5 +1,8 @@
 #pragma once
 
+#include <fcntl.h>
+#include <sys/stat.h>
+
 int
 size_file_fu(int fd, size_t * size)
 {
@@ -33,6 +36,18 @@ path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
 
     add_blob(path, dir);
     return add_path_file_fu(path, file);
+}
+
+blob_t *
+new_path_file_fu(const blob_t * dir, const blob_t * file)
+{
+    blob_t * path = blob(256);
+    if (path_file_fu(path, dir, file)) {
+        free_blob(path);
+        return NULL;
+    }
+
+    return path;
 }
 
 int

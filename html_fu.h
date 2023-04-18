@@ -2,18 +2,9 @@
 
 #include <math.h>
 
-// form inputs default to making the id and name the same.  this could cause
-// problems if there are mutliple forms on the same page with fields with the
-// same field names.  this generally shouldn't be happening though.  not sure
-// how it fails though.
-
 // NOTE(jason): not doing single character method names so there's "para()"
 // instead of "p()" for making a paragraph.  Using "link" instead of "anchor"
 // since it's more meaningful
-
-// NOTE(jason): checks for a variable named "html" in the current context
-// TODO(jason): does this have a point?  doesn't seem like it
-#define assert_html() assert(html != NULL);
 
 // TODO(jason): could these be defined as a macro at the definition?
 // html_gen(img) that defines the macro then the function?  I would prefer to
@@ -62,6 +53,14 @@
 #define start_list() start_list_html(html)
 #define end_list() end_list_html(html)
 #define list_item(...) list_item_html(html, __VA_ARGS__)
+
+#define AUTOCOMPLETE_ENUM(var, E) \
+    E(off, "off", var) \
+    E(on, "on", var) \
+    E(email, "email", var) \
+    E(name, "name", var) \
+
+ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
 
 #define RES_HTML(var, E) \
     E(space, " ", var) \
@@ -186,6 +185,7 @@ res_url(blob_t * b, blob_t * name)
 void
 init_html(config_html_t * config)
 {
+    init_autocomplete();
     init_res_html();
 
     config_html = *config;
@@ -249,8 +249,6 @@ head_html(blob_t * html, const blob_t * title)
 void
 page_begin_html(blob_t * html, const blob_t * title)
 {
-    assert_html();
-
     add_blob(html, res_html.doctype);
 
     head_html(html, title);
@@ -261,8 +259,6 @@ page_begin_html(blob_t * html, const blob_t * title)
 void
 page_end_html(blob_t * html)
 {
-    assert_html();
-
     add_blob(html, res_html.end_page);
 }
 
@@ -286,8 +282,6 @@ attr_html(blob_t * html, const blob_t * name, const blob_t * value)
 void
 start_element_html(blob_t * html, const blob_t * name)
 {
-    assert_html();
-
     add_blob(html, res_html.start_tag);
     add_blob(html, name);
     add_blob(html, res_html.close_tag);
@@ -369,16 +363,12 @@ empty_attr_html(blob_t * html, const blob_t * name)
 void
 src_attr_html(blob_t * html, const blob_t * src)
 {
-    assert_html();
-
     attr_html(html, res_html.src, src);
 }
 
 void
 h1_html(blob_t * html, const blob_t * content)
 {
-    assert_html();
-
     element_html(html, res_html.h1, content);
 }
 
@@ -507,8 +497,7 @@ end_para_html(blob_t * html)
 void
 _start_form_html(blob_t * html, const blob_t * action, const blob_t * method, const blob_t * enctype, autocomplete_t autocomplete)
 {
-    assert_html();
-    assert(action != NULL);
+    assert_not_null(action);
 
     open_tag_html(html, res_html.form);
     attr_html(html, res_html.method, method);
@@ -654,7 +643,7 @@ textarea_html(blob_t * html, param_t * param, bool autofocus)
 
     open_tag_html(html, res_html.textarea);
     attr_html(html, res_html.name, f->name);
-    attr_html(html, res_html.autocomplete, blob_autocomplete(f->autocomplete));
+    //attr_html(html, res_html.autocomplete, blob_autocomplete(f->autocomplete));
     if (autofocus) empty_attr_html(html, res_html.autofocus);
     // TODO(jason): setting rows and cols conflicts with setting the size in
     // css.  particularly the width.  it may be ok to set rows.  my general
@@ -802,7 +791,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         attr_html(html, res_html.type, res_html.text_type);
         attr_html(html, res_html.id, field->name);
         attr_html(html, res_html.name, field->name);
-        attr_html(html, res_html.autocomplete, blob_autocomplete(field->autocomplete));
+        //attr_html(html, res_html.autocomplete, blob_autocomplete(field->autocomplete));
         if (autofocus) empty_attr_html(html, res_html.autofocus);
         s64_attr_html(html, res_html.maxlength, param->field->max_size);
         if (valid_blob(value)) attr_html(html, res_html.value, value);

@@ -17,22 +17,11 @@
 
 ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 
-// NOTE(jason): still not sure if autocomplete should be part of the field.
-// seems like it might be sitation/usage dependent
-// is autocomplete desirable for stuff other than address and payment info?
-#define AUTOCOMPLETE_ENUM(var, E) \
-    E(off, "off", var) \
-    E(on, "on", var) \
-    E(email, "email", var) \
-    E(name, "name", var) \
-
-ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
-
 #define EXTRACT_AS_ENUM_FIELD(name, ...) name##_field,
 #define EXTRACT_AS_STRUCT_FIELD(name, ...) field_t * name;
 
-#define EXTRACT_AS_INIT_FIELD(name, label, type, min_size, max_size, autocomplete) \
-    fields.name = field(name##_field, const_blob(#name), const_blob(label), type, min_size, max_size, autocomplete); \
+#define EXTRACT_AS_INIT_FIELD(name, label, type, min_size, max_size) \
+    fields.name = field(name##_field, const_blob(#name), const_blob(label), type, min_size, max_size); \
     fields.list[name##_field] = fields.name; \
 
 typedef enum {
@@ -45,7 +34,6 @@ typedef struct {
     field_type_t type;
     blob_t * name;
     blob_t * label;
-    autocomplete_t  autocomplete;
     s32 min_size;
     s32 max_size;
 } field_t;
@@ -78,7 +66,7 @@ max_size_field_type(field_type_t type, s32 req_size)
 }
 
 field_t *
-field(u64 id, blob_t * name, blob_t * label, field_type_t type, s32 req_min_size, s32 req_max_size, autocomplete_t autocomplete)
+field(u64 id, blob_t * name, blob_t * label, field_type_t type, s32 req_min_size, s32 req_max_size)
 {
     field_t * field = malloc(sizeof(field_t));
     if (field) {
@@ -92,7 +80,6 @@ field(u64 id, blob_t * name, blob_t * label, field_type_t type, s32 req_min_size
             .label = label,
             .min_size = min_size,
             .max_size = max_size,
-            .autocomplete = autocomplete
         };
     }
 
@@ -110,7 +97,6 @@ void
 init_fields()
 {
     init_field_type();
-    init_autocomplete();
 
     FIELD_TABLE(EXTRACT_AS_INIT_FIELD)
 

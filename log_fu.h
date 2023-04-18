@@ -65,6 +65,16 @@ typedef struct {
 // log is a C standard function for logarithm
 log_t * plog = &(log_t){};
 
+void (* _flush_log_f)();
+
+int
+init_log(void (* flush_log_f)())
+{
+    _flush_log_f = flush_log_f;
+
+    return 0;
+}
+
 // TODO(jason): maybe make this for default plog?
 void
 erase_log(log_t * log)
@@ -178,5 +188,25 @@ write_log(log_t * log, int fd)
         ssize_t written = write(fd, msg, size);
         assert(written != -1);
     }
+}
+
+void
+stderr_flush_log()
+{
+    if (plog->size < 1) return;
+
+    write_log(plog, 2); // stderr
+    erase_log(plog);
+}
+
+void
+flush_log()
+{
+    if (_flush_log_f) {
+        _flush_log_f();
+        return;
+    }
+
+    stderr_flush_log();
 }
 

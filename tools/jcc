@@ -79,6 +79,16 @@ appimage() {
 
     app_name="$prog_name-x86_64.AppImage"
 
+    if [ ! -d AppDir ]; then
+        mkdir AppDir \
+            && echo "[Desktop Entry]\nName=$name\nExec=$name\nIcon=$name\nType=Application\nCategories=Network;\nTerminal=true\n\nX-AppImage-Version=0.1\n" > "AppDir/$name.desktop" \
+            && cp fu/tools/default-logo.png "AppDir/$name.png" \
+            && ln -s "$name" AppDir/AppRun \
+            && mkdir AppDir/res \
+            && touch AppDir/res/main.css \
+            && touch AppDir/res/main.js
+    fi
+
     log 'appimage'
     build '-Og' &&
         cp "$prog_name" AppDir/ &&

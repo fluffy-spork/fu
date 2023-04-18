@@ -1,15 +1,21 @@
 #pragma once
 
 #ifndef SKIP_DEFAULT_INCLUDES_FU
+// TODO(jason): replace assert with something better, maybe dev_error
 #include <assert.h>
 #include <errno.h>
 #include <signal.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
-#include <time.h>
 #include <sys/random.h>
+#include <time.h>
+#include <unistd.h>
+
+#include <libgen.h>
 
 #include <execinfo.h>
 #endif
