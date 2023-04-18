@@ -58,35 +58,6 @@ busy_handler_db(void * ptr, int count)
 }
 
 int
-open_db(const blob_t * file, db_t ** db)
-{
-    assert_not_null(file);
-    assert(file->size < 256);
-
-    if (sqlite3_open(cstr_blob(file), db)) {
-        log_error_db(*db, "sqlite3_open");
-        return -1;
-    }
-
-    sqlite3_extended_result_codes(*db, 1);
-
-    // NOTE(jason): somewhat shockingly, there isn't a default timeout.  this
-    // caused a bunch of wasted time trying to figure out a concurrency issue
-    // that was 3 inserts.  mistaking SQLITE_LOCKED for SQLITE_BUSY didn't
-    // help:(  The message is "database is locked" for SQLITE_BUSY which seems
-    // misleading.  1 second easily fixes the problem.
-    // the time is in "milliseconds" not seconds as I initially thought.
-    //sqlite3_busy_timeout(*db, 3000);
-    // NOTE(jason): this avoids the thundering herd problem with multiple
-    // processes on shutdown and probably other cases.  Just does a random
-    // sleep in the range as the sqlite default is deterministic and all
-    // processes do the same delay algo.  Seems odd this is the default.
-    sqlite3_busy_handler(*db, busy_handler_db, NULL);
-
-    return 0;
-}
-
-int
 close_db(db_t * db)
 {
     sqlite3_close(db);
@@ -426,6 +397,42 @@ int
 set_exclusive_locking_mode_db(db_t * db)
 {
     return set_blob_pragma_db(db, B("locking_mode"), B("exclusive"));
+}
+
+int
+open_db(const blob_t * file, db_t ** db)
+{
+    assert_not_null(file);
+    assert(file->size < 256);
+
+    if (sqlite3_open(cstr_blob(file), db)) {
+        log_error_db(*db, "sqlite3_open");
+        return -1;
+    }
+
+    sqlite3_extended_result_codes(*db, 1);
+
+    // NOTE(jason): somewhat shockingly, there isn't a default timeout.  this
+    // caused a bunch of wasted time trying to figure out a concurrency issue
+    // that was 3 inserts.  mistaking SQLITE_LOCKED for SQLITE_BUSY didn't
+    // help:(  The message is "database is locked" for SQLITE_BUSY which seems
+    // misleading.  1 second easily fixes the problem.
+    // the time is in "milliseconds" not seconds as I initially thought.
+    //sqlite3_busy_timeout(*db, 3000);
+    // NOTE(jason): this avoids the thundering herd problem with multiple
+    // processes on shutdown and probably other cases.  Just does a random
+    // sleep in the range as the sqlite default is deterministic and all
+    // processes do the same delay algo.  Seems odd this is the default
+    // assuming this is all correct.
+    sqlite3_busy_handler(*db, busy_handler_db, NULL);
+
+    // NOTE(jason): does anyone use anything other than wal mode?  With a web
+    // server this seems like the only way to go.
+    if (set_wal_mode_db(*db)) {
+        log_error_db(*db, "failed to set wal mode");
+    }
+
+    return 0;
 }
 
 int
