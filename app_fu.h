@@ -20,6 +20,11 @@ typedef struct {
 
 app_fu_t app = {};
 
+#define RES_APP(var, E) \
+    E(user_table, "user", var) \
+
+ENUM_BLOB(res_app, RES_APP)
+
 // get the directory of the AppImage AppDir for accessing resource files, etc
 // in the AppImage
 blob_t *
@@ -242,18 +247,17 @@ set_default_sigaction_handlers()
 }
 
 
-/*
 int
 upgrade_db_app(const blob_t * db_file)
 {
-    // TODO(jason): originally, put the user table here, but then moved to web_fu.h
-    // Not sure if this is necessary or what tables would be added here.
+    // TODO(jason): does the user table really need to be user_app?
+    // I feel like it's ok since it's at the base app level
     version_sql_t versions[] = {
+        { 1, "create table user (user_id integer primary key autoincrement, email text unique not null, alias text unique not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
     };
 
     return upgrade_db(db_file, versions);
 }
-*/
 
 
 void
@@ -280,7 +284,7 @@ init_app_fu(int argc, char *argv[], void (* flush_log_f)())
         debug("XXXXX running in DEV MODE XXXXX");
     }
 
-    // NOTE(jason): according to the main page, this should be the default
+    // NOTE(jason): according to the man page, this should be the default
     setbuf(stderr, NULL);
 
     if (set_default_sigaction_handlers()) {
@@ -290,11 +294,11 @@ init_app_fu(int argc, char *argv[], void (* flush_log_f)())
 
     init_log(flush_log_f);
 
-    /*
+    init_res_app();
+
     if (upgrade_db_app(app.main_db_file)) {
         return -1;
     }
-    */
 
     flush_log();
 

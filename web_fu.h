@@ -1257,7 +1257,7 @@ require_session_web(request_t * req, bool create)
     if (valid_blob(req->session_cookie)) {
         sqlite3_stmt * stmt;
 
-        if (prepare_db(app.db, &stmt, B("select session_id, u.user_id, u.alias from session s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()"))) {
+        if (prepare_db(app.db, &stmt, B("select session_id, u.user_id, u.alias from session_web s left join user u on u.user_id = s.user_id where s.cookie = ? and s.expires > unixepoch()"))) {
             internal_server_error_response(req);
             return -1;
         }
@@ -1294,7 +1294,7 @@ require_session_web(request_t * req, bool create)
         log_var_blob(cookie);
 
         sqlite3_stmt * stmt;
-        if (prepare_db(app.db, &stmt, B("insert into session (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
+        if (prepare_db(app.db, &stmt, B("insert into session_web (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
             internal_server_error_response(req);
             return -1;
         }
@@ -1339,7 +1339,7 @@ end_session_web(request_t * req)
     // NOTE(jason): set session id cookie to blank?  probably doesn't matter as
     // it will be invalid the next request anyway.
 
-    blob_t * sql = B("update session set expires = unixepoch(), modified = unixepoch() where session_id = ?1");
+    blob_t * sql = B("update session_web set expires = unixepoch(), modified = unixepoch() where session_id = ?1");
     return exec_s64_pi_db(app.db, sql, NULL, req->session_id);
 }
 
@@ -1358,7 +1358,7 @@ require_user_web(request_t * req, const endpoint_t * auth)
     }
 
     sqlite3_stmt * stmt;
-    if (prepare_db(app.db, &stmt, B("update session set redirect_url = ?, modified = unixepoch() where session_id = ?"))) {
+    if (prepare_db(app.db, &stmt, B("update session_web set redirect_url = ?, modified = unixepoch() where session_id = ?"))) {
         internal_server_error_response(req);
         return -1;
     }
@@ -1447,7 +1447,7 @@ set_status_file(db_t * db, s64 file_id, int file_status)
 int
 file_info(db_t * db, param_t * file_id, param_t * path, param_t * content_type)
 {
-    return by_id_db(db, B("select path, content_type from file where file_id = ?"), s64_blob(file_id->value, 0), path, content_type);
+    return by_id_db(db, B("select path, content_type from file_web where file_id = ?"), s64_blob(file_id->value, 0), path, content_type);
 }
 
 #define MAX_CMD_WEB 1024
@@ -1749,8 +1749,7 @@ next_process_media_web(s64 * file_id)
 {
     *file_id = 0;
 
-    //blob_t * sql = B("update file set status = 2 where status = 1 and (select count(*) from file where status = 2) = 0 returning file_id limit 1");
-    blob_t * sql = B("update file set status = 2 where file_id = (select file_id from file where status = 1 and (select count(*) from file where status = 2) = 0) returning file_id");
+    blob_t * sql = B("update file_web set status = 2 where file_id = (select file_id from file_web where status = 1 and (select count(*) from file_web where status = 2) = 0) returning file_id");
     return exec_s64_db(app.db, sql, file_id) == 0 && *file_id > 0;
 }
 
@@ -2205,9 +2204,8 @@ int
 upgrade_db_web(const blob_t * db_file)
 {
     version_sql_t versions[] = {
-        { 1, "create table user (user_id integer primary key autoincrement, email text unique not null, alias text unique not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
-        , { 2, "create table session (session_id integer primary key, user_id integer, expires integer not null, cookie text, redirect_url text, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
-        , { 3, "create table file (file_id integer primary key autoincrement, path text not null unique, size integer not null, content_type integer not null default 1, md5 blob, user_id integer not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch()), status integer not null default 0) strict" }
+        { 1, "create table session_web (session_id integer primary key, user_id integer, expires integer not null, cookie text, redirect_url text, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
+        , { 2, "create table file_web (file_id integer primary key autoincrement, path text not null unique, size integer not null, content_type integer not null default 1, md5 blob, user_id integer not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch()), status integer not null default 0) strict" }
     };
 
     return upgrade_db(db_file, versions);
