@@ -145,11 +145,29 @@ incr_ns_timespec(struct timespec *ts, long ns)
     }
 }
 
+s64
+ns_timespec(struct timespec ts)
+{
+    return ts.tv_sec * 1000000000 + ts.tv_nsec;
+}
+
+s64
+elapsed_ns(struct timespec start)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+
+    struct timespec elapsed;
+    sub_timespec(&now, &start, &elapsed);
+
+    return ns_timespec(elapsed);
+}
+
 void
 elapsed_debug(struct timespec *last, struct timespec *elapsed, const char *label)
 {
     struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
+    clock_gettime(CLOCK_REALTIME, &now);
 
     if (last->tv_sec > 0 && elapsed) {
         sub_timespec(&now, last, elapsed);

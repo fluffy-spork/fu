@@ -686,7 +686,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
         if (!id) break;
 
         field_t * f = by_id_field(id);
-        params[i] = local_param(f);
+        params[i] = stk_param(f);
 
         //log_var_field(params[i].field);
         //debug_s64(params[i].value->capacity);
@@ -717,7 +717,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
 
     // TODO(jason): somehow test for extra params over the max_params
 
-    blob_t * sql = local_blob(4096);
+    blob_t * sql = stk_blob(4096);
     insert_sql_db(sql, table, params, n_params);
     add_blob(sql, B(" returning rowid"));
 

@@ -97,6 +97,8 @@ typedef int (* request_task_f)(request_t *);
 struct request_s {
     int fd;
 
+    struct timespec received;
+
     // sqlite uses s64 for rowid so... in theory could use negative ids to mark
     // for deletion
     s64 session_id;
@@ -104,9 +106,10 @@ struct request_s {
     s64 user_id;
     blob_t * user_alias;
 
-    // maybe anonymize/mask the ip (hash?)  mainly not for having the actual ip
-    // I would think
-    //add client ip
+    // TODO(jason): maybe anonymize/mask the ip
+    // for right now, any IP blocking, etc can be done in haproxy since it's
+    // being used for https
+    // blob_t * client_ip;
 
     method_t method;
     blob_t * uri;
@@ -330,6 +333,7 @@ const blob_t * ffmpeg_path_web;
     E(dot_mp4,".mp4", var) \
     E(dot_m3u8,".m3u8", var) \
     E(dot_ts,".ts", var) \
+    E(access_log_table, "access_log_web", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -340,6 +344,27 @@ hex_char(u8 c)
         ? c
         : 0;
 }
+
+int
+insert_access_log_web(request_t * req)
+{
+    s64 elapsed = elapsed_ns(req->received);
+    s64 received = req->received.tv_sec;
+
+    return insert_fields_db(app.db, res_web.access_log_table, NULL
+            , request_method_field, req->method
+            , request_path_field, req->path
+            , http_status_field, req->status
+            , session_id_field, req->session_id
+            , user_id_field, req->user_id
+            , received_field, received
+            , elapsed_ns_field, elapsed
+            , request_content_length_field, req->request_body->size
+            , response_content_length_field, req->content_length 
+            );
+
+}
+
 
 ssize_t
 percent_decode_blob(blob_t * dest, const blob_t * src)
@@ -858,6 +883,7 @@ add_response_headers(request_t *req)
         u64_header(t, res_web.content_length, req->content_length);
     }
     else {
+        req->content_length = req->body->size;
         u64_header(t, res_web.content_length, (u64)req->body->size);
     }
 
@@ -1269,9 +1295,9 @@ require_session_web(request_t * req, bool create)
             req->user_id = s64_db(stmt, 1);
             if (req->user_id) blob_db(stmt, 2, req->user_alias);
 
-            log_var_s64(req->session_id);
-            log_var_s64(req->user_id);
-            log_var_blob(req->user_alias);
+            //log_var_s64(req->session_id);
+            //log_var_s64(req->user_id);
+            //log_var_blob(req->user_alias);
         }
 
         if (finalize_db(stmt) != SQLITE_OK) {
@@ -1291,7 +1317,7 @@ require_session_web(request_t * req, bool create)
         blob_t * cookie = local_blob(32);
         add_random_blob(cookie, 16);
 
-        log_var_blob(cookie);
+        //log_var_blob(cookie);
 
         sqlite3_stmt * stmt;
         if (prepare_db(app.db, &stmt, B("insert into session_web (session_id, created, modified, expires, cookie) values (?, unixepoch(), unixepoch(), unixepoch() + ?, ?)"))) {
@@ -1984,12 +2010,11 @@ handle_request(request_t *req)
         return -1;
     }
 
-    struct timespec start;
     // NOTE(jason): have to get the start time for a request after the request
     // line has been read.  Also, chrome will reconnect and not send a request
     // if the connection is closed without a "connection: close" header.  would
     // be required for supporting multiple requests on a connection too.
-    timestamp_log(&start);
+    timestamp_log(&req->received);
 
     //debug_blob(input);
 
@@ -2023,7 +2048,7 @@ handle_request(request_t *req)
 
     split_blob(req->uri, '?', req->path, req->query);
 
-    log_var_blob(req->uri);
+    //log_var_blob(req->uri);
     //log_var_blob(req->path);
     //log_var_blob(req->query);
 
@@ -2082,7 +2107,8 @@ handle_request(request_t *req)
         default:
             // should be > 0
             // the handler already wrote the full response
-            elapsed_log(start, "request-time");
+            //elapsed_log(start, "request-time");
+            insert_access_log_web(req);
             return 0;
     }
 
@@ -2126,7 +2152,9 @@ respond:
         dev_error("sqlite transaction open");
     }
 
-    elapsed_log(start, "request-time");
+    insert_access_log_web(req);
+
+    //elapsed_log(start, "request-time");
 
     return 0;
 }
@@ -2206,6 +2234,7 @@ upgrade_db_web(const blob_t * db_file)
     version_sql_t versions[] = {
         { 1, "create table session_web (session_id integer primary key, user_id integer, expires integer not null, cookie text, redirect_url text, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
         , { 2, "create table file_web (file_id integer primary key autoincrement, path text not null unique, size integer not null, content_type integer not null default 1, md5 blob, user_id integer not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch()), status integer not null default 0) strict" }
+        , { 3, "create table access_log_web (access_log_id integer primary key autoincrement, created integer not null default (unixepoch()), request_method integer not null , request_path text not null, http_status integer not null, session_id integer not null, user_id integer not null, received integer not null, elapsed_ns integer not null, request_content_length integer not null, response_content_length integer not null)" }
     };
 
     return upgrade_db(db_file, versions);
