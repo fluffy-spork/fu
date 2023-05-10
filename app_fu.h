@@ -32,9 +32,24 @@ new_app_dir_fu()
 {
     char exe[256];
     ssize_t len = readlink("/proc/self/exe", exe, 256);
+    if (len == -1) return NULL;
+
     exe[len] = '\0';
 
-    return const_blob(dirname(exe));
+    blob_t * dir = const_blob(dirname(exe));
+    blob_t * app_dir = new_path_file_fu(dir, B("AppDir"));
+
+    if (read_access_file_fu(app_dir)) {
+        // app image
+        free_blob(app_dir);
+        return dir;
+    }
+    else {
+        // file system
+        dir->constant = false;
+        free_blob(dir);
+        return app_dir;
+    }
 }
 
 // close sqlite db, etc

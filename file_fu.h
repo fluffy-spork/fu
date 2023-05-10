@@ -51,6 +51,12 @@ new_path_file_fu(const blob_t * dir, const blob_t * file)
 }
 
 int
+read_access_file_fu(const blob_t * path)
+{
+    return access(cstr_blob(path), R_OK);
+}
+
+int
 mkdir_file_fu(const blob_t * path, mode_t mode)
 {
     if (mkdir(cstr_blob(path), mode)) {
