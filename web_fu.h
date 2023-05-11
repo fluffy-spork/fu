@@ -688,7 +688,7 @@ new_request()
     req->path = blob(512);
     req->query = blob(512);
 
-    req->request_head = blob(1024);
+    req->request_head = blob(2048);
     req->request_body = blob(MAX_REQUEST_BODY);
 
     req->session_cookie = blob(256);
@@ -2069,6 +2069,7 @@ handle_request(request_t *req)
     // copy the headers from input to req->request_headers(?) and req->request_body
 
     if (scan_blob_blob(req->request_head, input, res_web.crlfcrlf, &offset) == -1) {
+        log_var_s64(req->request_head->error);
         bad_request_response(req);
 
         goto respond;
