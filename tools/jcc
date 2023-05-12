@@ -67,6 +67,11 @@ run() {
     build '-Og' && "$prog_name" $run_args
 }
 
+gup()
+{
+    git pull && git submodule sync && git submodule update --init --recursive
+}
+
 # currently directly saving images here, but should it be possible to delete
 # the AppDir and have it rebuilt?  If an image atlas is used that would need to
 # be generated, etc as part of the build?  generating multiple resolutions
@@ -138,6 +143,8 @@ elif [ "$cmd" = 'profile' ]; then
     profile
 elif [ "$cmd" = 'run' ]; then
     run
+elif [ "$cmd" = 'gup' ]; then
+    gup
 elif [ "$cmd" = 'update-sqlite' ]; then
     update_sqlite
 else
