@@ -295,6 +295,12 @@ init_app_fu(int argc, char *argv[], void (* flush_log_f)())
     app.state_dir = const_blob(argv[1]);
     app.main_db_file = new_path_file_fu(app.state_dir, B(MAIN_DB_FILE_APP));
 
+    if (read_access_file_fu(app.state_dir)) {
+        log_var_blob(app.state_dir);
+        error_log("state dir does not exist", "app", 2);
+        return -1;
+    }
+
     if (dev_mode()) {
         debug("XXXXX running in DEV MODE XXXXX");
     }
