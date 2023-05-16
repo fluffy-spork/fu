@@ -51,6 +51,7 @@ ENUM_BLOB(method, METHOD)
     E(ts, "video/mp2t", var) \
     E(image_any, "image/*", var) \
     E(video_any, "video/*", var) \
+    E(webp, "image/webp", var) \
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
@@ -334,6 +335,7 @@ const blob_t * ffmpeg_path_web;
     E(dot_m3u8,".m3u8", var) \
     E(dot_ts,".ts", var) \
     E(access_log_table, "access_log_web", var) \
+    E(dot_webp,".webp", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -507,8 +509,12 @@ clear_params(param_t * params, size_t n_params)
 content_type_t
 content_type_magic(const blob_t * data)
 {
-    // this could all be way better
+    // XXX: this could all be way better.
+    //
+    // really need to fix this to remove wrap_array and get this into the
+    // content type enum
     static char jpeg_magic[] = { 0xFF, 0xD8, 0xFF };
+    static char webp_magic[] = { 57, 45, 42, 50, 56, 50, 38 };
     static char png_magic[] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
     static char gif_magic[] = { 0x47, 0x49, 0x46, 0x38 };
     //static char mp4_magic[] = { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
@@ -527,6 +533,9 @@ content_type_magic(const blob_t * data)
     }
     else if (begins_with_blob(data, wrap_array_blob(gif_magic))) {
         return gif_content_type;
+    }
+    else if (first_contains_blob(data, wrap_array_blob(webp_magic))) {
+        return webp_content_type;
     }
     else if (first_contains_blob(data, wrap_array_blob(mp4_magic))) {
         return mp4_content_type;
@@ -555,6 +564,9 @@ content_type_path(const blob_t * path)
     }
     else if (ends_with_blob(path, res_web.dot_jpg)) {
         return jpeg_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_webp)) {
+        return webp_content_type;
     }
     else if (ends_with_blob(path, res_web.dot_gif)) {
         return gif_content_type;
@@ -593,6 +605,8 @@ suffix_content_type(content_type_t type)
             return res_web.dot_jpg;
         case mp4_content_type: 
             return res_web.dot_mp4;
+        case webp_content_type: 
+            return res_web.dot_webp;
         case png_content_type: 
             return res_web.dot_png;
         case gif_content_type: 
@@ -1866,8 +1880,10 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     if (type == binary_content_type) {
         // TODO(jason): this change doesn't seem right.  I'm not sure what's
         // going on?
-        type = mp4_content_type;
-        //return bad_request_response(req);
+        //
+        // was this because of chrome ignoring accept jpg and sending webp?
+        //type = mp4_content_type;
+        return bad_request_response(req);
     }
 
     blob_t * file_key = local_blob(32);
