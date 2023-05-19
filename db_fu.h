@@ -231,7 +231,7 @@ text_bind_db(sqlite3_stmt * stmt, int index, const blob_t * value)
         log_error_stmt_db(stmt, "text bind failed");
         return -1;
     }
-        
+
     return 0;
 }
 
@@ -499,7 +499,12 @@ exec_s64_pbi_db(db_t * db, const blob_t * sql, s64 * value, const blob_t * p1, c
             || text_bind_db(stmt, 1, p1)
             || s64_bind_db(stmt, 2, p2))
     {
-        return finalize_db(stmt);
+        int rc = sqlite3_errcode(db);
+        if (stmt) {
+            finalize_db(stmt);
+        }
+
+        return rc;
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {

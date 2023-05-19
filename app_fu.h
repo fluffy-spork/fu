@@ -268,7 +268,7 @@ upgrade_db_app(const blob_t * db_file)
     // TODO(jason): does the user table really need to be user_app?
     // I feel like it's ok since it's at the base app level
     version_sql_t versions[] = {
-        { 1, "create table user (user_id integer primary key autoincrement, email text unique not null, alias text unique not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
+        { 1, "create table if not exists user (user_id integer primary key autoincrement, email text unique not null, alias text unique not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
     };
 
     return upgrade_db(db_file, versions);
@@ -310,6 +310,8 @@ init_app_fu(int argc, char *argv[], void (* flush_log_f)())
     init_log(flush_log_f);
 
     init_res_app();
+
+    init_db();
 
     if (upgrade_db_app(app.main_db_file)) {
         return -1;
