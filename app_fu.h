@@ -314,6 +314,7 @@ init_app_fu(int argc, char *argv[], void (* flush_log_f)())
     init_db();
 
     if (upgrade_db_app(app.main_db_file)) {
+        error_log("db upgrade failed", "app", 1);
         return -1;
     }
 
