@@ -125,6 +125,14 @@ finalize_db(sqlite3_stmt * stmt)
     return rc;
 }
 
+int
+finally_stmt_db(db_t * db, sqlite3_stmt * stmt)
+{
+    int rc = sqlite3_errcode(db);
+    sqlite3_finalize(stmt);
+    return rc;
+}
+
 bool
 in_txn_db(db_t * db)
 {
@@ -458,8 +466,7 @@ exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, const blob_t * p1)
             || text_bind_db(stmt, 1, p1)
        )
     {
-        finalize_db(stmt);
-        return -1;
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -480,7 +487,7 @@ exec_s64_pbb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, blob_t * p2)
             || text_bind_db(stmt, 1, p1)
             || text_bind_db(stmt, 2, p2))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -499,12 +506,7 @@ exec_s64_pbi_db(db_t * db, const blob_t * sql, s64 * value, const blob_t * p1, c
             || text_bind_db(stmt, 1, p1)
             || s64_bind_db(stmt, 2, p2))
     {
-        int rc = sqlite3_errcode(db);
-        if (stmt) {
-            finalize_db(stmt);
-        }
-
-        return rc;
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -522,7 +524,7 @@ exec_s64_pi_db(db_t * db, blob_t * sql, s64 * value, s64 p1)
     if (prepare_db(db, &stmt, sql)
             || s64_bind_db(stmt, 1, p1))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -541,7 +543,7 @@ exec_s64_pii_db(db_t * db, const blob_t * sql, s64 * value, s64 p1, s64 p2)
             || s64_bind_db(stmt, 1, p1)
             || s64_bind_db(stmt, 2, p2))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -575,7 +577,7 @@ exec_blob_pb_db(db_t * db, blob_t * sql, blob_t * value, const blob_t * p1)
     if (prepare_db(db, &stmt, sql)
             || text_bind_db(stmt, 1, p1))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -593,7 +595,7 @@ exec_blob_pi_db(db_t * db, blob_t * sql, blob_t * value, s64 p1)
     if (prepare_db(db, &stmt, sql)
             || s64_bind_db(stmt, 1, p1))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -612,7 +614,7 @@ exec_blob_pbb_db(db_t * db, blob_t * sql, blob_t * value, const blob_t * p1, con
             || text_bind_db(stmt, 1, p1)
             || text_bind_db(stmt, 2, p2))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -632,7 +634,7 @@ exec_blob_pibb_db(db_t * db, blob_t * sql, blob_t * value, s64 i1, blob_t * b1, 
             || text_bind_db(stmt, 2, b1)
             || text_bind_db(stmt, 3, b2))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     if (sqlite3_step(stmt) == SQLITE_ROW) {
@@ -737,7 +739,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
     for (int i = 0; i < n_params; i++) {
         param_t p = params[i];
         if (text_bind_db(stmt, p.field->id, p.value)) {
-            return finalize_db(stmt);
+            return finally_stmt_db(db, stmt);
         }
     }
 
@@ -788,7 +790,7 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
     if (prepare_db(db, &stmt, sql)
             || s64_bind_db(stmt, fields.user_id->id, user_id))
     {
-        return finalize_db(stmt);
+        return finally_stmt_db(db, stmt);
     }
 
     for (int i = 0; i < n_params; i++) {
@@ -796,7 +798,7 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
 
         param_t * p = &params[i];
         if (text_bind_db(stmt, p->field->id, p->value)) {
-            return finalize_db(stmt);
+            return finally_stmt_db(db, stmt);
         }
     }
 
