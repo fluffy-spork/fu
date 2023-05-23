@@ -19,14 +19,15 @@
 # profiler and debugging info.
 
 name=$(basename "$PWD")
+src_file='main.c'
+binary_file='main'
+app_image_file="$name-$(uname -m).AppImage"
 
 CFLAGS="-Wall -Wextra -Werror -rdynamic $CFLAGS"
 
 if [ -f jcc.env ]; then
     . $PWD/jcc.env
 fi
-
-src_file='main.c'
 
 cmd="$1"
 if [ -z "$cmd" ]; then
@@ -43,28 +44,23 @@ build() {
     log "extra_flags: $extra_flags"
 
     log 'build'
-    time -f 'compile: %e seconds' gcc $CFLAGS $extra_flags -o "$name" "$src_file" $lib_flags
+    time -f 'compile: %e seconds' gcc $CFLAGS $extra_flags -o "$binary_file" "$src_file" $lib_flags
 }
 
 debug() {
     log 'debug'
-    build '-Og -g' && gdb "$name"
+    build '-Og -g' && gdb "$binary_file"
 }
 
 profile() {
     log 'profile'
-    build '-fprofile-arcs -pg' && "./$name" $run_args
-    gprof --brief "$name" gmon.out > "$name.profile"
+    build '-fprofile-arcs -pg' && "./$binary_file" $run_args
+    gprof --brief "$binary_file" gmon.out > "$binary_file.profile"
 }
 
 run() {
-    local prog_name="$1"
-    if [ -z "$prog_name" ]; then
-        prog_name="./$name"
-    fi
-
     log 'run'
-    build '-Og' && "$prog_name" $run_args
+    build '-Og' && ./"$binary_file" $run_args
 }
 
 gup()
@@ -72,62 +68,53 @@ gup()
     git pull && git submodule sync && git submodule update --init --recursive
 }
 
+check_app_dir()
+{
+    if [ ! -f AppDir/res ]; then
+        mkdir -p AppDir/res \
+            && echo "[Desktop Entry]\nName=$name\nExec=AppRun\nIcon=app\nType=Application\nCategories=Network;\nTerminal=true\n\nX-AppImage-Version=0.1\n" > "AppDir/app.desktop" \
+            && cp fu/tools/default-logo.png AppDir/app.png \
+            && touch AppDir/res/main.css \
+            && touch AppDir/res/main.js
+    fi
+}
+
 # currently directly saving images here, but should it be possible to delete
 # the AppDir and have it rebuilt?  If an image atlas is used that would need to
 # be generated, etc as part of the build?  generating multiple resolutions
 # of a high res source?
 appimage() {
-    local prog_name="$1"
-    if [ -z "$prog_name" ]; then
-        prog_name="./$name"
-    fi
-
-    app_name="$prog_name-x86_64.AppImage"
-
-    if [ ! -d AppDir ]; then
-        mkdir AppDir \
-            && echo "[Desktop Entry]\nName=$name\nExec=$name\nIcon=$name\nType=Application\nCategories=Network;\nTerminal=true\n\nX-AppImage-Version=0.1\n" > "AppDir/$name.desktop" \
-            && cp fu/tools/default-logo.png "AppDir/$name.png" \
-            && ln -s "$name" AppDir/AppRun \
-            && mkdir AppDir/res \
-            && touch AppDir/res/main.css \
-            && touch AppDir/res/main.js
-    fi
-
     log 'appimage'
     build '-Og' &&
-        cp "$prog_name" AppDir/ &&
+        cp "$binary_file" AppDir/AppRun &&
         ./fu/tools/appimagetool-x86_64.AppImage AppDir/
 }
 
 run_appimage() {
-    local prog_name="$1"
-    if [ -z "$prog_name" ]; then
-        prog_name="./$name"
-    fi
-
-    app_name="$prog_name-x86_64.AppImage"
-
     export FU_DEV="$USER"
 
     log 'run_appimage'
-    appimage && "$app_name" $run_args
+    appimage && ./"$app_image_file" $run_args
 }
 
 # eventually should download the latest and build a static lib
 # needs -pthread -ldl for lib_flags
 update_sqlite() {
     gcc -c -DSQLITE_ENABLE_RTREE=1 -o sqlite3.o sqlite3.c
+    # TODO(jason): I think this is probably unnecessary and the sqlite3.o could
+    # be provided the same way instead
     ar rcs libsqlite3.a sqlite3.o
 }
 
 clean() {
     log 'clean'
-    [ ! -e "$name" ] || rm "$name"
-    rm -f gmon.out "$name.profile" main.gcda
+    [ ! -e "$binary_file" ] || rm "$binary_file"
+    rm -f gmon.out "$binary_file.profile" main.gcda
 
     exit 0
 }
+
+check_app_dir
 
 if [ "$cmd" = 'build' ]; then
     build
