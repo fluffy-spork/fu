@@ -336,6 +336,7 @@ const blob_t * ffmpeg_path_web;
     E(dot_ts,".ts", var) \
     E(access_log_table, "access_log_web", var) \
     E(dot_webp,".webp", var) \
+    E(app_png, "app.png", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -1442,7 +1443,11 @@ favicon_handler(endpoint_t * ep, request_t * req)
 {
     UNUSED(ep);
 
-    return permanent_redirect_web(req, res_web.favicon_path);
+    // Use the AppImage AppDir app.png as the favicon
+    // may need to change later if we need different resolutions
+    return file_response(req, app.dir, res_web.app_png, 0, 0);
+
+    //return permanent_redirect_web(req, res_web.favicon_path);
 }
 
 // XXX(jason): since not targeting using a load balancer by default this
