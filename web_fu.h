@@ -322,7 +322,7 @@ const blob_t * ffmpeg_path_web;
     E(res_path,"/res/", var) \
     E(res_path_suffix,"?v=", var) \
     E(favicon_path, "/res/logo.png", var) \
-    E(file_table,"file", var) \
+    E(file_table,"file_web", var) \
     E(poster_kind,"poster", var) \
     E(dot_txt,".txt", var) \
     E(dot_html,".html", var) \
@@ -1466,11 +1466,11 @@ health_handler(endpoint_t * ep, request_t * req)
 }
 
 int
-insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * alias, s64 size, s64 content_type)
+insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * path, s64 size, s64 content_type)
 {
     return insert_fields_db(db, res_web.file_table, file_id,
             user_id_field, user_id,
-            alias_field, alias,
+            path_field, path,
             size_field, size,
             content_type_field, content_type);
 }
@@ -1894,6 +1894,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
 
     s64 file_id;
     if (insert_file(app.db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
+        log_error_db(app.db, "insert_file");
         internal_server_error_response(req);
         return -1;
     }
@@ -1903,6 +1904,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     // could potentially avoid uploads if the digest header is used with
     // requests or some other method to avoid even uploading dupes.
     if (write_prefix_file_fu(path, req->request_body, req->fd, req->request_content_length) == -1) {
+        log_error_db(app.db, "write_prefix_file");
         internal_server_error_response(req);
         return -1;
     }
