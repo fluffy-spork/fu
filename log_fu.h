@@ -14,8 +14,8 @@
 #define log_var_cstr(cstr) \
     _log(plog, cstr, strlen(cstr), #cstr, strlen(#cstr), 0, __FILE__, __func__, __LINE__);
 
-#define log_errno(label) \
-    _log_errno(plog, label, strlen(label), __FILE__, __func__, __LINE__);
+#define log_errno(msg) \
+    _log_errno(plog, msg, strlen(msg), __FILE__, __func__, __LINE__);
 
 #define log_s64(value, label) \
     _log_s64(plog, value, label, strlen(label), __FILE__, __func__, __LINE__);
@@ -120,11 +120,14 @@ _log(log_t * log, const void * msg, size_t size_msg, const char * label, size_t 
 
 // Usage: return log_errno("open");
 int
-_log_errno(log_t * log, const char * label, size_t size_label, const char * file, const char * function, s64 line)
+_log_errno(log_t * log, const char * msg, size_t size_msg, const char * file, const char * function, s64 line)
 {
     char * s = strerror(errno);
+    // NOTE(jason): I think I would prefer this, but it's a GNU extension and
+    // isn't working for me for some reason.
+    //char * s = strerrorname_np(errno);
 
-    _log(log, s, strlen(s), label, size_label, errno, file, function, line);
+    _log(log, msg, size_msg, s, strlen(s), errno, file, function, line);
 
     return -1;
 }
