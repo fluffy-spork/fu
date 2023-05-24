@@ -660,12 +660,15 @@ index_blob(const blob_t * b, u8 c, size_t offset)
     return -1;
 }
 
+// TODO(jason): why is this "first_contains" instead of "contains"?
 bool
 first_contains_blob(const blob_t * b, const blob_t * target)
 {
     ssize_t off = index_blob(b, target->data[0], 0);
     if (off >= 0 && (size_t)remaining_blob(b, off) >= target->size) {
-        return memcmp(&b->data[off], target->data, target->size) == 0;
+        if (memcmp(&b->data[off], target->data, target->size) == 0) {
+            return true;
+        }
     }
 
     return false;
@@ -726,6 +729,7 @@ c_escape_blob(blob_t * b, const blob_t * value)
     if (!value) return 0;
 
     char * escape[256] = {};
+    escape[0] = "\\0";
     escape['\\'] = "\\\\";
     escape['\"'] = "\\\"";
     escape['\b'] = "\\b";
