@@ -1344,15 +1344,19 @@ _upgrade_db(const blob_t * db_file, const blob_t * src_file, version_sql_t * ver
         if (rc) goto error;
 
         new_version = versions[i].version;
-    }
 
-    if (new_version > version) {
+        // NOTE(jason): have to set the version after every statement.
+        // otherwise, if there's an error the version wasn't being updated and
+        // all prior statements would be run on the next upgrade attempt
+        // This still doesn't handle the, hopefully exceptionally rare, case of
+        // the ddl succeeding and the version update failing
+        // I don't think sqlite can do ddl in a transaction.
         rc = set_version_db(db, src_file, new_version);
-        if (rc == 0) {
-            log_var_blob(db_file);
-            log_var_blob(src_file);
-            log_var_s64(new_version);
-        }
+        if (rc) goto error;
+
+        log_var_blob(db_file);
+        log_var_blob(src_file);
+        log_var_s64(new_version);
     }
 
 error:
