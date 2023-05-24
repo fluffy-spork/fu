@@ -515,7 +515,7 @@ content_type_magic(const blob_t * data)
     // really need to fix this to remove wrap_array and get this into the
     // content type enum
     static char jpeg_magic[] = { 0xFF, 0xD8, 0xFF };
-    static char webp_magic[] = { 57, 45, 42, 50, 56, 50, 38 };
+    static char webp_magic[] = { 0x57, 0x45, 0x42, 0x50, 0x56, 0x50, 0x38 };
     static char png_magic[] = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
     static char gif_magic[] = { 0x47, 0x49, 0x46, 0x38 };
     //static char mp4_magic[] = { 0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
@@ -642,6 +642,7 @@ image_content_type(content_type_t type)
         case jpeg_content_type:
         case png_content_type:
         case gif_content_type:
+        case webp_content_type:
         case image_any_content_type:
             return true;
         default:
@@ -1760,6 +1761,11 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
         // remove exif and other identifying info
         return resize_jpeg_web(input, output, width);
     }
+    else if (webp_content_type == type) {
+        //debug("XXXXX resize jpg XXXX");
+        // remove exif and other identifying info
+        return resize_webp_web(input, output, width);
+    }
 
     return 0;
 }
@@ -1855,6 +1861,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     if (require_user_web(req, NULL)) return -1;
 
     if (req->request_content_length == 0) {
+        log_var_s64(req->request_content_length);
         return bad_request_response(req);
     }
 
@@ -1888,6 +1895,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         //
         // was this because of chrome ignoring accept jpg and sending webp?
         //type = mp4_content_type;
+        log_var_s64(type);
         return bad_request_response(req);
     }
 
@@ -2054,6 +2062,9 @@ handle_request(request_t *req)
 
     req->method = enum_method(tmp, 0);
     if (req->method == none_method) {
+        // NOTE(jason): this happens when using http and chrome gives the
+        // warning page requiring a continue button. tmp is blank.  Probably
+        // doesn't matter since https will always be used in production.
         method_not_implemented_response(req);
 
         goto respond;
