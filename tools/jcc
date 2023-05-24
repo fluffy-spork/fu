@@ -70,7 +70,7 @@ gup()
 
 check_app_dir()
 {
-    if [ ! -f AppDir/res ]; then
+    if [ ! -d AppDir/res ]; then
         mkdir -p AppDir/res \
             && echo "[Desktop Entry]\nName=$name\nExec=AppRun\nIcon=app\nType=Application\nCategories=Network;\nTerminal=true\n\nX-AppImage-Version=0.1\n" > "AppDir/app.desktop" \
             && cp fu/tools/default-logo.png AppDir/app.png \
