@@ -30,6 +30,22 @@ A new C library without using existing conventions or standards.
     get https working.  Will initially link to standard linux library like
     openssl, but eventually include from scratch only https support in fu
   * Currently use haproxy for https and http redirect to https
+  * file upload by direct POST from javascript.  avoids encoding, etc.
+
+* generate HTML with function calls
+  * No templating
+  * easy to create pages that look similar
+  * don't have to learn another language
+  * methods are type checked, etc at build
+  * normal usage won't requiring typing any HTML
+  * don't necessarily have to even know HTML is most cases
+  * (TODO) integrate more standard HTML gen functions from fluffy
+
+* (TODO) generate CSS with function calls
+  * integrate existing CSS styles from fluffy
+
+* Minimal javascript
+  * (TODO) integrate javascript for file upload from fluffy
 
 * Build to AppImage for deploy
   * everything is included like web resources that are directly served from the
