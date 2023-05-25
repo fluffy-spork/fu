@@ -1,14 +1,66 @@
-# fu
+# EXPERIMENTAL Unconventional C Library and SQLite Web/App Framework
 
-Experimental Unconventional C Library and Web/App Framework
+A new C library without using existing conventions or standards.
 
-Goal
-Write a new C library without requiring the use of existing conventions or
-standards.
+## Goals
 
-See [fu-web-template](https://github.com/fluffy-spork/fu-web-template) for an example.
+* Linux ONLY
+  * cross platform just adds pointless complexity.  If people want to use non-linux that
+    can use Windows Subsystem for Linux or a VM
 
-Conventions (incomplete)
+* Make it easy to create a new app
+
+* Build and run in under 1 second
+  * building the AppImage can take a few seconds longer on slow machines, but
+    isn't required during dev
+
+* Startup fast and kill fast.  Assume non-clean shutdown in all cases.  You
+  have to support it anyway.
+  * should be able to run on a cheaper spot instance and have the app restarted
+    every night or something.  There's a lot of cases where this is fine as
+    long as it restarts when killed.
+
+* Have all the source code available and build everything always
+  * makes it easy to try changes/fix bugs in framework.
+
+* embedded pre-fork web server
+  * only implements what's needed which is relatively small
+  * forked processes mean each request is isolated for user data and crashing
+  * (TODO) include https support and letsencrypt so there's no manual work to
+    get https working.  Will initially link to standard linux library like
+    openssl, but eventually include from scratch only https support in fu
+  * Currently use haproxy for https and http redirect to https
+
+* Build to AppImage for deploy
+  * everything is included like web resources that are directly served from the
+    AppImage
+  * Probably primarily for running "desktop apps" that use a web browser for UI
+
+* (TODO) Build to docker for multi-instance SaaS deployment
+
+* No load balancing or failover
+  * From my experience it has been a lot of effort, overhead, and comlexity for
+    almost never being used
+  * targetting multi-instance SaaS instead of multi-tenant monolith for load
+  * machines are now huge!!!  Just don't worry about fluctuating load.
+
+* BYOS: Bring Your Own SQLite
+  * SQLite is required, but is built at the app level so the dev can always use
+    the version they need.
+  * exception to the build everything always goal as SQLite is infrequently
+    changed and slow to build
+
+* (TODO) real time SQLite backup off server
+
+* Easy DB interface
+  * currently there are many different experiments.  Some will be removed/changed
+  * easy db upgrades in normal cases
+  * likely move to external sql files that are all compiled to prepared
+    statements at startup.  Allows checking syntax and table/column names
+    without having to run the actual page, etc.
+
+
+## Conventions (incomplete)
 * conventions are not pervasively used and some things need to be updated
 
 * Format code with the most important information the first thing on
