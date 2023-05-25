@@ -65,7 +65,7 @@ run() {
 
 gup()
 {
-    git pull --rebase && git submodule sync --recursive && git submodule update --init --recursive --remote --rebase
+    git pull --rebase --recurse-submodules && git submodule sync --recursive && git submodule update --init --recursive --remote --rebase
 }
 
 gpush()
