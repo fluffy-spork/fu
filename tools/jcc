@@ -32,14 +32,14 @@ fi
 cmd="$1"
 if [ -z "$cmd" ]; then
     #cmd='run'
-    cmd='run_appimage'
+    cmd='run-appimage'
 fi
 
 log() {
     [ -z "$LOG" ] || echo "LOG: $1" >&2
 }
 
-build() {
+sending build() {
     extra_flags="$1"
     log "extra_flags: $extra_flags"
 
@@ -120,7 +120,7 @@ if [ "$cmd" = 'build' ]; then
     build
 elif [ "$cmd" = 'appimage' ]; then
     appimage
-elif [ "$cmd" = 'run_appimage' ]; then
+elif [ "$cmd" = 'run-appimage' ]; then
     run_appimage
 elif [ "$cmd" = 'clean' ]; then
     clean
