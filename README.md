@@ -8,7 +8,7 @@ A new C library without using existing conventions or standards.
   * cross platform just adds pointless complexity.  If people want to use non-linux that
     can use Windows Subsystem for Linux or a VM
 
-* Make it easy to create a new app
+* (IN PROGRESS) Make it easy to create a new app
 
 * Build and run in under 1 second
   * building the AppImage can take a few seconds longer on slow machines, but
@@ -31,6 +31,7 @@ A new C library without using existing conventions or standards.
     openssl, but eventually include from scratch only https support in fu
   * Currently use haproxy for https and http redirect to https
   * file upload by direct POST from javascript.  avoids encoding, etc.
+    currently depends on ffmpeg for media processing.
 
 * generate HTML with function calls
   * No templating
@@ -51,6 +52,8 @@ A new C library without using existing conventions or standards.
   * everything is included like web resources that are directly served from the
     AppImage
   * Probably primarily for running "desktop apps" that use a web browser for UI
+  * (TODO) implement the AppImage creation instead of depending on an included
+    binary
 
 * (TODO) Build to docker for multi-instance SaaS deployment
 
