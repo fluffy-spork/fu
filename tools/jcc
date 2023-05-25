@@ -65,7 +65,12 @@ run() {
 
 gup()
 {
-    git pull && git submodule sync && git submodule update --init --recursive
+    git pull --rebase && git submodule sync --recursive && git submodule update --init --recursive --remote --rebase
+}
+
+gpush()
+{
+    git push --recurse-submodules=on-demand
 }
 
 check_app_dir()
@@ -132,6 +137,8 @@ elif [ "$cmd" = 'run' ]; then
     run
 elif [ "$cmd" = 'gup' ]; then
     gup
+elif [ "$cmd" = 'gpush' ]; then
+    gpush
 elif [ "$cmd" = 'update-sqlite' ]; then
     update_sqlite
 else
