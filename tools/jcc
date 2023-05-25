@@ -39,7 +39,7 @@ log() {
     [ -z "$LOG" ] || echo "LOG: $1" >&2
 }
 
-sending build() {
+build() {
     extra_flags="$1"
     log "extra_flags: $extra_flags"
 
