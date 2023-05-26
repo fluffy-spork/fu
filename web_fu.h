@@ -650,6 +650,16 @@ image_content_type(content_type_t type)
     }
 }
 
+content_type_t
+preferred_image_type(content_type_t type)
+{
+    if (type == webp_content_type) {
+        return jpeg_content_type;
+    }
+
+    return type;
+}
+
 bool
 post_request(request_t * req)
 {
@@ -1714,7 +1724,7 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
 
     content_type_t type = s64_blob(content_type.value, 0);
     if (target_type == none_content_type) {
-        target_type = type;
+        target_type = preferred_image_type(type);
     }
 
     blob_t * input = stk_blob(255);
