@@ -1679,6 +1679,9 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
     add_s64_blob(filter, width);
     add_blob(filter, B(":-1\""));
 
+    // remove audio from video uploads
+    // TODO(jason): probably make this a config option
+    add_blob(filter, B(" -an"));
     add_blob(filter, B(" -c:v libx264 -preset medium -crf "));
     add_s64_blob(filter, crf);
     if (fpsmax) {
