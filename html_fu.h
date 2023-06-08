@@ -538,6 +538,8 @@ button_html(blob_t * html, const blob_t * class_name, const blob_t * content, bo
     end_element_html(html, res_html.button);
 }
 
+// TODO(jason): in the fluffy CSS this is flexbox and has some extra styles in
+// certain places to get wrap, etc.  still might be better to just make it a table
 void
 start_button_bar_html(blob_t * html)
 {
