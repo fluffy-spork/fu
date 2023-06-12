@@ -556,8 +556,21 @@ _vadd_blob(blob_t * b, ...)
     return 0;
 }
 
-// TODO(jason): is there a point now?  just using B("cstr")  instead does the
-// same thing right?  either way using strlen.
+blob_t *
+copy_blob(blob_t * src)
+{
+    // TODO(jason): is this a good idea?
+    if (!src) return NULL;
+
+    // NOTE(jason): errors other than allocation seem unlikely (impossible?)
+    blob_t * b = blob(src->size);
+    if (b) add_blob(b, src);
+    return b;
+}
+
+// TODO(jason): implement this to copy the cstr chars until a NUL and not use
+// strlen so the advantage would be not iterating the chars twice.
+// Only update the size after all chars copied.  handle overrun correctly.
 ssize_t
 add_cstr_blob(blob_t * b, const char * cstr)
 {
