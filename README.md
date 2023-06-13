@@ -89,14 +89,17 @@ A new C library without using existing conventions or standards.
 
 * Names should have the most important part first with the namespace a suffix
 
-    add_blob() instead of blob_add()
+    for blob_t use add_blob() instead of blob_add()
 
 * function definitions have the return value above the name so the name is first
 
+```
     int
     add_blob(blob_t * b)
     {
+        return 0;
     }
+```
 
 * try not to use macros
 
@@ -111,6 +114,7 @@ A new C library without using existing conventions or standards.
   Not sure how good of an idea this is, but makes code shorter.  requires functions to
   log their own errors which seems generally useful
 
+```
     if (foo()
         || bar()
         || baz())
@@ -118,4 +122,5 @@ A new C library without using existing conventions or standards.
         log error
         return -1;
     }
+```
 
