@@ -73,17 +73,6 @@ gpush()
     git push --recurse-submodules=on-demand
 }
 
-check_app_dir()
-{
-    if [ ! -d AppDir/res ]; then
-        mkdir -p AppDir/res \
-            && echo "[Desktop Entry]\nName=$name\nExec=AppRun\nIcon=app\nType=Application\nCategories=Network;\nTerminal=true\n\nX-AppImage-Version=0.1\n" > "AppDir/app.desktop" \
-            && cp fu/tools/default-logo.png AppDir/app.png \
-            && touch AppDir/res/main.css \
-            && touch AppDir/res/main.js
-    fi
-}
-
 init_web()
 {
     echo init web app
@@ -112,6 +101,7 @@ run_appimage() {
 # eventually should download the latest and build a static lib
 # needs -pthread -ldl for lib_flags
 update_sqlite() {
+    echo 'updating sqlite' >&2
     gcc -c -DSQLITE_ENABLE_RTREE=1 -o sqlite3.o sqlite3.c
     # TODO(jason): I think this is probably unnecessary and the sqlite3.o could
     # be provided the same way instead
@@ -133,7 +123,9 @@ elif [ ! -d AppDir ]; then
     exit 2
 fi
 
-#check_app_dir
+if [ ! -e libsqlite3.a ]; then
+    update_sqlite
+fi
 
 if [ "$cmd" = 'build' ]; then
     build
