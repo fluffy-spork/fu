@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=change-app-name
+Exec=AppRun
+Icon=app
+Type=Application
+Categories=Network;
+Terminal=true
+
+X-AppImage-Version=0.1
+

@@ -1,0 +1,12 @@
+*.swp
+*.o
+
+/main
+/fluffy-*.AppImage
+
+/AppDir/.DirIcon
+/AppDir/AppRun
+
+/sqlite3
+/data
+

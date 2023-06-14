@@ -84,6 +84,13 @@ check_app_dir()
     fi
 }
 
+init_web()
+{
+    echo init web app
+    cp -avn fu/tools/templates/web/. ./
+    exit
+}
+
 # currently directly saving images here, but should it be possible to delete
 # the AppDir and have it rebuilt?  If an image atlas is used that would need to
 # be generated, etc as part of the build?  generating multiple resolutions
@@ -92,7 +99,7 @@ appimage() {
     log 'appimage'
     build '-Og' &&
         cp "$binary_file" AppDir/AppRun &&
-        ./fu/tools/appimagetool-x86_64.AppImage AppDir/
+        ./fu/tools/appimagetool-x86_64.AppImage AppDir/ "$app_image_file"
 }
 
 run_appimage() {
@@ -119,7 +126,14 @@ clean() {
     exit 0
 }
 
-check_app_dir
+if [ "$cmd" = 'init-web' ]; then
+    init_web "$2"
+elif [ ! -d AppDir ]; then
+    echo "missing AppDir.  run ./jcc init-web" >&2
+    exit 2
+fi
+
+#check_app_dir
 
 if [ "$cmd" = 'build' ]; then
     build
