@@ -2,13 +2,51 @@
 
 A new C library without using existing conventions or standards.
 
+Nothing is sacred.
+
+## Getting Started
+
+Documentation is extremely poor.
+
+
+```
+mkdir new-web-project && cd new-web-project
+git init
+git submodule add https://github.com/fluffy-spork/fu
+# basic hello world
+./fu/tools/jcc init-web
+# builds appimage and runs in dev mode
+./jcc
+
+curl http://localhost:8080
+```
+
+In the project I'm building with fu, it runs with systemd as a service
+
+/etc/systemd/system/<app>.server
+```
+[Unit]
+Description=app
+After=network.target auditd.service
+
+[Service]
+ExecStart=/usr/local/sbin/app-x86_64.AppImage $STATE_DIRECTORY
+User=app-user
+Group=app-user
+StateDirectory=app
+StateDirectoryMode=0700
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## Goals
 
 * Linux ONLY
   * cross platform just adds pointless complexity.  If people want to use non-linux that
     can use Windows Subsystem for Linux or a VM
 
-* (IN PROGRESS) Make it easy to create a new app
+* Make it easy to create a new app
 
 * Build and run in under 1 second
   * building the AppImage can take a few seconds longer on slow machines, but
