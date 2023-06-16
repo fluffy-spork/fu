@@ -4,6 +4,8 @@ A new C library without using existing conventions or standards.
 
 Nothing is sacred.
 
+A lot of work to do.
+
 ## Getting Started
 
 Documentation is extremely poor.
