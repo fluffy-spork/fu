@@ -673,6 +673,16 @@ index_blob(const blob_t * b, u8 c, size_t offset)
     return -1;
 }
 
+ssize_t
+rindex_blob(const blob_t * b, u8 c, size_t offset)
+{
+    for (ssize_t i = b->size - 1 - offset; i >= 0; i--) {
+        if (b->data[i] == c) return i;
+    }
+
+    return -1;
+}
+
 // TODO(jason): why is this "first_contains" instead of "contains"?
 bool
 first_contains_blob(const blob_t * b, const blob_t * target)
@@ -688,6 +698,7 @@ first_contains_blob(const blob_t * b, const blob_t * target)
 }
 
 // XXX: reconsider the ssize_t and -1 to get end of src
+// returns the amount written or -1
 ssize_t
 sub_blob(blob_t * dest, const blob_t * src, size_t offset, ssize_t size)
 {
