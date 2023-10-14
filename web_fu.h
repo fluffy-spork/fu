@@ -9,7 +9,7 @@
 #include "file_fu.h"
 
 #define MAX_REQUEST_BODY 4096
-#define MAX_RESPONSE_BODY 16384
+#define MAX_RESPONSE_BODY 8*16384
 
 #define MIN_RESOLUTION 640
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
@@ -83,6 +83,7 @@ typedef enum {
 ENUM_BLOB(http_status, HTTP_STATUS)
 
 typedef struct {
+    blob_t * hostname;
     s64 port;
     blob_t * res_dir;
     blob_t * upload_dir;
@@ -2335,7 +2336,7 @@ main_web(config_web_t * config)
     const int n_workers = dev_mode() ? config->n_dev_workers : config->n_workers;
 
     if (init_web(config->res_dir, config->upload_dir, config->ffmpeg_path)) {
-        return -1;
+        exit(EXIT_FAILURE);
     }
 
     // setup server socket to listen for requests
