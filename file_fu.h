@@ -50,6 +50,30 @@ new_path_file_fu(const blob_t * dir, const blob_t * file)
     return path;
 }
 
+// what should happen if there's no '/'
+int
+dirname_file_fu(const blob_t * path, blob_t * dirname)
+{
+    ssize_t index = rindex_blob(path, '/', 0);
+    if (index == -1) {
+        return -1;
+    }
+
+    return sub_blob(dirname, path, 0, index) >= 0 ? 0 : dirname->error;
+}
+
+// what should happen if there's no '/'
+int
+basename_file_fu(const blob_t * path, blob_t * basename)
+{
+    ssize_t index = rindex_blob(path, '/', 0);
+    if (index == -1) {
+        return -1;
+    }
+
+    return sub_blob(basename, path, index + 1, -1) >= 0 ? 0 : basename->error;
+}
+
 int
 read_access_file_fu(const blob_t * path)
 {
