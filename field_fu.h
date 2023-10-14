@@ -20,6 +20,9 @@ ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
 #define EXTRACT_AS_ENUM_FIELD(name, ...) name##_field,
 #define EXTRACT_AS_STRUCT_FIELD(name, ...) field_t * name;
 
+// TODO(jason): make the field name and the name used for a parameter separate
+// can have to parameters that are conceptually different that need to use the
+// same name for html forms, etc
 #define EXTRACT_AS_INIT_FIELD(name, label, type, min_size, max_size) \
     fields.name = field(name##_field, const_blob(#name), const_blob(label), type, min_size, max_size); \
     fields.list[name##_field] = fields.name; \
