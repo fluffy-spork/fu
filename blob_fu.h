@@ -50,6 +50,8 @@ typedef struct {
 
 #define B(cstr) wrap_blob(cstr)
 // GCC specific syntax for multiple statements as an expression
+// wrap_blob should be a function to wrap an existing array with a specified
+// size/len and B() should directly do this behavior
 #define wrap_blob(cstr) \
     ({ blob_t * b = alloca(sizeof(blob_t)); _init_local_blob(b, (u8 *)cstr, strlen(cstr), -1); })
 #define wrap_array_blob(array) \
@@ -723,6 +725,30 @@ split_blob(const blob_t * src, u8 c, blob_t * b1, blob_t * b2)
     }
 
     return 0;
+}
+
+u8
+min_blob(const blob_t * b)
+{
+    u8 min = 255;
+    for (size_t i = 0; i < b->size; i++) {
+        u8 v = b->data[i];
+        if (v < min) min = v;
+    }
+
+    return min;
+}
+
+u8
+max_blob(const blob_t * b)
+{
+    u8 max = 0;
+    for (size_t i = 0; i < b->size; i++) {
+        u8 v = b->data[i];
+        if (v > max) max = v;
+    }
+
+    return max;
 }
 
 // XXX: maybe this should be called add_replaced_blob or something???
