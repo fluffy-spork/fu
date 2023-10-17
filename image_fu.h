@@ -16,7 +16,7 @@ typedef struct {
     int height;
     int channels;
     int stride;
-    int n_pixels;
+    int n_pixels; // TODO(jason): I don't think this is actually useful and possibly encourages bad behavior ignoring stride?
     u8 *data;
 } image_t;
 
@@ -451,6 +451,18 @@ wrap_image(image_t * img, u8 * data, int width, int height, int channels)
     img->stride = img->width*channels;
 }
 
+/*
+int
+view_image(image_t * view, const image_t * src, int x, int y)
+{
+    view->data = src->data[y*src->stride + x];
+    view->channels = src->channels;
+    view->stride = src->stride;
+
+    return 0;
+}
+*/
+
 image_t *
 like_image(const image_t *in)
 {
@@ -753,7 +765,6 @@ roi_image(image_t *roi, const image_t *img, int x, int y)
     copy_rect_image(roi->width, roi->height, img, x, y, roi, 0, 0);
 }
 
-
 // flut is size 256
 void
 flut_image(image_t *img, float *flut)
@@ -884,6 +895,7 @@ sad_image(image_t *img1, image_t *img2)
     return sad;
 }
 
+#define debug_int_array(a, n) debug_array(a, n, #a)
 
 void
 debug_array(int a[], int n, char *label)
@@ -893,7 +905,7 @@ debug_array(int a[], int n, char *label)
     }
 
     for (int i = 0; i < n; i++) {
-        printf("%d:%d ", i, a[i]);
+        printf("%d:%d\n", i, a[i]);
     }
     printf("\n");
 }
@@ -906,7 +918,7 @@ debug_u8_array(u8 a[], int n, char *label)
     }
 
     for (int i = 0; i < n; i++) {
-        printf("%u ", a[i]);
+        printf("%d: %u\n", i, a[i]);
     }
     printf("\n");
 }
@@ -1464,6 +1476,17 @@ min_sum_index_histogram(const int * hist, size_t size_hist, s64 target_sum)
     return 255;
 }
 
+size_t
+first_nonzero_index_histogram(const int * hist, size_t size_hist, size_t default_index)
+{
+    for (size_t i = 0; i < size_hist; i++) {
+        if (hist[i]) return i;
+    }
+
+    return default_index;
+}
+
+
 // count how many values are non-zero
 u64
 count_histogram_image(int hist[], size_t size_hist, size_t offset)
@@ -1477,16 +1500,16 @@ count_histogram_image(int hist[], size_t size_hist, size_t offset)
 }
 
 int
-mean_histogram(int a[], int n)
+mean_histogram(int hist[], int size_hist)
 {
-    assert(n <= 256);
+    assert(size_hist <= 256);
 
     u64 sum = 0;
     u64 total = 0;
-    for (int i = 0; i < n; i++)
+    for (int i = 0; i < size_hist; i++)
     {
-        total += a[i];
-        sum += i*a[i];
+        total += hist[i];
+        sum += i*hist[i];
     }
 
     if (total > 0) {
@@ -1660,8 +1683,9 @@ smooth_index_image(image_t *img)
     }
 }
 
+// TODO(jason): old and new are bad names
 int
-mix_images(image_t *old, image_t *new, const int weight)
+mix_image(image_t *old, image_t *new, const int weight)
 {
     assert(old->n_pixels == new->n_pixels);
     assert(old->channels == new->channels);
@@ -2215,8 +2239,116 @@ draw_hbar(image_t *img, const int x, const int y, const int w, const int h, cons
     fill_rect(img, x, y, pw, h, fg);
 }
 
+// NOTE(jason): this doesn't appear to be faster than map_window_image that copies
+// maybe if it was doing a full image row at a time in windows?
 int
-max_decimate_image(const image_t *in, image_t *out)
+map_window_row_image(image_t * out, const image_t * in, u8 map_blob_f(const blob_t * blob), int size)
+{
+    assert(out != in);
+    assert(in->channels == 1);
+    assert(in->channels == out->channels);
+
+    // get stride working for min_decimate_image
+    //int y_stride = out->height/in->height;
+    //int x_stride = out->width/in->width;
+
+    int y_offset = size/2 + 1;
+    int x_offset = size/2 + 1;
+    int y_max = in->height - size;
+    int x_max = in->width - size;
+
+    blob_t row;
+    blob_t * inter = stk_blob(size);
+
+    for (int y = 0; y < y_max; y++) {
+        for (int x = 0; x < x_max; x++) {
+            int stride = out->width;
+
+            for (int y2 = 0; y2 < size; y2++) {
+                _init_local_blob(&row, &in->data[(y + y2)*stride], size, -1);
+                inter->data[y2] = map_blob_f(&row);
+            }
+
+            out->data[(y + y_offset)*stride + x + x_offset] = map_blob_f(inter);
+        }
+    }
+
+    return 0;
+}
+
+// super slow, ignores border
+int
+map_window_image(const image_t * in, image_t * out, u8 map_f(const image_t * window), image_t * window)
+{
+    assert(out != in);
+    assert(in->channels == 1);
+    assert(in->channels == out->channels);
+    assert(in->channels == window->channels);
+
+    int y_offset = window->height/2 + 1;
+    int x_offset = window->width/2 + 1;
+    int y_max = in->height - window->height;
+    int x_max = in->width - window->width;
+
+    for (int y = 0; y < y_max; y++) {
+        for (int x = 0; x < x_max; x++) {
+            roi_image(window, in, x, y);
+            out->data[(y + y_offset)*out->width + x + x_offset] = map_f(window);
+        }
+    }
+
+    return 0;
+}
+
+u8
+max_image(const image_t * img)
+{
+    u8 max = 0;
+    for (int i = 0; i < img->n_pixels; i++) {
+        u8 v = img->data[i];
+        if (v > max) max = v;
+    }
+
+    return max;
+}
+
+u8
+min_image(const image_t * img)
+{
+    u8 min = 255;
+    for (int i = 0; i < img->n_pixels; i++) {
+        u8 v = img->data[i];
+        if (v < min) min = v;
+    }
+
+    return min;
+}
+
+void
+max_window_image(const image_t * in, image_t * out, u8 size_window)
+{
+    image_t * window = new_image(size_window, size_window, in->channels);
+
+    //map_window_row_image(out, in, max_blob, size_window);
+    map_window_image(in, out, max_image, window);
+
+    free_image(window);
+}
+
+void
+min_window_image(const image_t * in, image_t * out, u8 size_window)
+{
+    image_t * window = new_image(size_window, size_window, in->channels);
+
+    //map_window_row_image(out, in, min_blob, size_window);
+    map_window_image(in, out, min_image, window);
+
+    free_image(window);
+}
+
+// pick the most frequent value in the histogram window as the out pixel value
+int
+max_histogram_decimate_image(const image_t *in, image_t *out)
 {
     assert(in->channels == 1);
     assert(in->channels == out->channels);
@@ -2259,21 +2391,20 @@ dilate_image(const image_t *in, image_t *out, const u8 value)
     for (int y = inset; y < in->height - inset; y++) {
         for (int x = inset; x < in->width - inset; x++) {
             int i = y*in->width + x;
-            if (in->data[i] != value
-                    && (
-                        in->data[i - in->width] == value
-                        || in->data[i + in->width] == value
-                        || in->data[i - 1] == value
-                        || in->data[i + 1] == value
-                        || in->data[i - in->width - 1] == value
-                        || in->data[i - in->width + 1] == value
-                        || in->data[i + in->width - 1] == value
-                        || in->data[i + in->width + 1] == value
-                       )
-               )
-            {
+
+            if (in->data[i] == value) continue;
+
+            int n = (in->data[i - in->width] == value)
+                + (in->data[i + in->width] == value)
+                + (in->data[i - 1] == value)
+                + (in->data[i + 1] == value);
+                //+ (in->data[i - in->width - 1] == value)
+                //+ (in->data[i - in->width + 1] == value)
+                //+ (in->data[i + in->width - 1] == value)
+                //+ (in->data[i + in->width + 1] == value);
+
+            if (n > 0) {
                 set_pixel(map, x, y, &WHITE);
-                //fill_square_center(map, x, y, size, &WHITE);
             }
         }
     }
@@ -2519,6 +2650,7 @@ conv2d_u8_image(u8 *out, u8 *in, size_t width, size_t height, int *kernel, size_
             //debugf("pixel: %zdx%zd", x, y);
             size_t kxmax = x + offset + 1;
             size_t kymax = y + offset + 1;
+            // XXX(jason): I don't think this is correct
             // start at end of kernel and decrease to flip kernel horz and vert
             size_t k = size_kernel*size_kernel - 1;
             int sum = 0;
@@ -2620,8 +2752,6 @@ label_connected_components_image(const image_t * img, image_t * labels)
 
     const u8 max_label = 255;
     u8 next_label = 1;
-
-    u8 min_u8(u8 a, u8 b) { return a < b ? a : b; }
 
     // ignoring the first line which should end up all black
     for (int y = 1; y < labels->height; y++) {
