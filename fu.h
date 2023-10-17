@@ -34,6 +34,7 @@ typedef float f32;
 typedef double f64;
 
 #define MAX_U64 UINT64_MAX
+#define MAX_S64 INT64_MAX
 
 typedef enum {
     U8_DATA_TYPE,
@@ -86,6 +87,8 @@ typedef enum {
 
 #define debug_s64(var) debugf("%s: %ld", #var, (s64)var);
 #define debug_u64(var) debugf("%s: %lu", #var, (u64)var);
+
+#define debug_f64(var) debugf("%s: %f", #var, (f64)var);
 
 #define kilobytes(n_bytes) round((double)n_bytes/1024)
 #define megabytes(n_bytes) round((double)n_bytes/1024/1024)
@@ -177,6 +180,13 @@ elapsed_debug(struct timespec *last, struct timespec *elapsed, const char *label
     *last = now;
 }
 
+f64
+f64_sec_timespec(const struct timespec ts)
+{
+    const f64 nsec_per_sec = 1000 * 1000 * 1000;
+    return (f64)ts.tv_sec + ((f64)ts.tv_nsec)/nsec_per_sec;
+}
+
 /*
 bool
 gt_timespec(struct timespec *a, struct timespec *b)
@@ -204,6 +214,30 @@ min_size(size_t a, size_t b)
 
 size_t
 max_size(size_t a, size_t b)
+{
+    return a > b ? a : b;
+}
+
+u8
+min_u8(u8 a, u8 b)
+{
+    return a < b ? a : b;
+}
+
+u8
+max_u8(u8 a, u8 b)
+{
+    return a > b ? a : b;
+}
+
+s8
+min_s8(s8 a, s8 b)
+{
+    return a < b ? a : b;
+}
+
+s8
+max_s8(s8 a, s8 b)
 {
     return a > b ? a : b;
 }
@@ -297,5 +331,18 @@ s64
 random_range_s64_fu(s64 min, s64 max)
 {
     return min + random_u64_fu() / (MAX_U64 / (max - min + 1) + 1);
+}
+
+s16
+abs_s16(s16 a)
+{
+    return abs(a);
+}
+
+// TODO(jason): should this return u64?
+s64
+abs_s64(s64 a)
+{
+    return llabs(a);
 }
 
