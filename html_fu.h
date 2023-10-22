@@ -217,7 +217,7 @@ init_html(config_html_t * config)
     res_url(b, B("main.js"));
     AB(b, "\"></script>");
     AB(b, "<link rel=\"manifest\" href=\"");
-    AB(b, "/manifest.json");
+    AB(b, "/manifest.json crossorigin=\"use-credentials\"");
     add_blob(b, _res_suffix_html);
     AB(b, "\">");
     _page_res_html = b;
