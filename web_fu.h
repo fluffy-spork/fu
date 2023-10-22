@@ -52,6 +52,7 @@ ENUM_BLOB(method, METHOD)
     E(image_any, "image/*", var) \
     E(video_any, "video/*", var) \
     E(webp, "image/webp", var) \
+    E(json, "application/json", var) \
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
@@ -82,8 +83,10 @@ typedef enum {
 
 ENUM_BLOB(http_status, HTTP_STATUS)
 
+// TODO(jason): add init function?  all blobs would be correct size
 typedef struct {
     blob_t * hostname;
+    blob_t * base_url;
     s64 port;
     blob_t * res_dir;
     blob_t * upload_dir;
@@ -965,7 +968,15 @@ html_response(request_t * req)
     return ok_response(req, html_content_type);
 }
 
+// TODO(jason): maybe this should be a macro that sets the blob_t * html.
+int
+json_response(request_t * req)
+{
+    return ok_response(req, json_content_type);
+}
+
 // generate an error response that formats a body with html about the error 
+// TODO(jason): make a macro to pass file and line of caller
 int
 error_response(request_t * req, http_status_t status, blob_t * reason)
 {
@@ -983,6 +994,7 @@ error_response(request_t * req, http_status_t status, blob_t * reason)
     h1(reason);
     page_end();
 
+    // needs to include the request path
     error_log(cstr_blob(reason), "http", status);
 
     return -1;
@@ -1295,6 +1307,11 @@ redirect_next_endpoint(request_t * req, endpoint_t * ep, endpoint_t * default_ep
 // sessions seem to need to be created is the email_login_code_handler.
 // everywhere else is only read.  until maybe there's a shopping cart or
 // something.  that could also directly create a session if necessary too.
+//
+// TODO(jason): I don't like this name and create parameter.
+// require_session_web should always create as "require".  but another function
+// can be added like optional_session_web that doesn't create.  Also removes
+// the blind true/false parameter in calls.  see optional_user_web
 //
 // TODO(jason): is another random value cookie needed that's only sent to the
 // login path or something that helps security?  i'm not sure what i'm talking about.
@@ -2289,6 +2306,33 @@ upgrade_db_web(const blob_t * db_file)
     return upgrade_db(db_file, versions);
 }
 
+// NOTE(jason): prod uses https and no port, dev_mode uses http and port
+int
+url_dev_web(blob_t * url, const blob_t * hostname, const s64 port, const blob_t * path)
+{
+    if (dev_mode()) {
+        add_blob(url, B("http://"));
+        add_blob(url, hostname);
+        if (port > 0) {
+            write_blob(url, ":", 1);
+            add_s64_blob(url, port);
+        }
+    }
+    else {
+        add_blob(url, B("https://"));
+        add_blob(url, hostname);
+    }
+
+    if (valid_blob(path)) {
+        if (path->data[0] != '/') {
+            write_blob(url, "/", 1);
+        }
+        add_blob(url, path);
+    }
+
+    return 0;
+}
+
 int
 init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpeg_path)
 {
@@ -2326,6 +2370,12 @@ int
 main_web(config_web_t * config)
 {
     assert_not_null(config->res_dir);
+
+    if (valid_blob(config->hostname) && empty_blob(config->base_url)) {
+        url_dev_web(config->base_url, config->hostname, config->port, NULL);
+
+        //debug_blob(config->base_url);
+    }
 
     // no idea what this should be
     const int backlog = 20;

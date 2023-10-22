@@ -1170,9 +1170,9 @@ rows_ids_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, s64 * ids
             break;
         }
 
-        for (int i = 0; i < n_outputs; i++) {
-            reset_blob(outputs[i].value);
-            blob_db(stmt, i, outputs[i].value);
+        for (int j = 0; j < n_outputs; j++) {
+            reset_blob(outputs[j].value);
+            blob_db(stmt, j, outputs[j].value);
         }
 
         handler->func(handler);

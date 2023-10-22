@@ -50,6 +50,12 @@
 #define th(content) th_html(html, content)
 #define th_start() th_start_html(html)
 #define th_end() th_end_html(html)
+#define thtd(th, td) thtd_html(html, th, td)
+#define trthtd(th, td) trthtd_html(html, th, td)
+// NOTE(jason): not sure about the B() usage.  probably only used for debug
+// maybe debug_html or something?
+#define trthtd_var(var) trthtd_html(html, B(#var), var)
+#define trthtd_var_s64(var) trthtd_html(html, B(#var), stk_s64_blob(var))
 #define start_list() start_list_html(html)
 #define end_list() end_list_html(html)
 #define list_item(...) list_item_html(html, __VA_ARGS__)
@@ -204,12 +210,16 @@ init_html(config_html_t * config)
     //debug_blob(_res_suffix_html);
 
     b = blob(1024);
-    add_blob(b, B("<link rel=\"stylesheet\" href=\""));
+    AB(b, "<link rel=\"stylesheet\" href=\"");
     res_url(b, B("main.css"));
-    add_blob(b, B("\">"));
-    add_blob(b, B("<script defer src=\""));
+    AB(b, "\">");
+    AB(b, "<script defer src=\"");
     res_url(b, B("main.js"));
-    add_blob(b, B("\"></script>"));
+    AB(b, "\"></script>");
+    AB(b, "<link rel=\"manifest\" href=\"");
+    AB(b, "/manifest.json");
+    add_blob(b, _res_suffix_html);
+    AB(b, "\">");
     _page_res_html = b;
 
     // TODO(jason): will probably have to add javascript
@@ -842,7 +852,7 @@ tr_end_html(blob_t * html)
 }
 
 void
-td_html(blob_t * html, blob_t * content)
+td_html(blob_t * html, const blob_t * content)
 {
     element_html(html, res_html.td, content);
 }
@@ -860,7 +870,7 @@ td_end_html(blob_t * html)
 }
 
 void
-th_html(blob_t * html, blob_t * content)
+th_html(blob_t * html, const blob_t * content)
 {
     element_html(html, res_html.th, content);
 }
@@ -875,6 +885,23 @@ void
 th_end_html(blob_t * html)
 {
     end_element_html(html, res_html.th);
+}
+
+void
+thtd_html(blob_t * html, const blob_t * th, const blob_t * td)
+{
+    th(th);
+    td(td);
+}
+
+// <tr><th>$th</th><td>$td</td></tr>
+void
+trthtd_html(blob_t * html, const blob_t * th, const blob_t * td)
+{
+    tr_start();
+    th(th);
+    td(td);
+    tr_end();
 }
 
 void

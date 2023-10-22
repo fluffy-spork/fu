@@ -52,6 +52,27 @@ new_app_dir_fu()
     }
 }
 
+blob_t *
+new_state_path_app(const blob_t * subpath)
+{
+    return new_path_file_fu(app.state_dir, subpath);
+}
+
+int
+path_dir_app(blob_t * path, const blob_t * subpath)
+{
+    return path_file_fu(path, app.dir, subpath);
+}
+
+// NOTE(jason): overwrites data from beginning
+int
+load_file_app(const blob_t * subpath, blob_t * data)
+{
+    blob_t * path= stk_blob(256);
+    path_dir_app(path, subpath);
+    return load_file(path, data);
+}
+
 // close sqlite db, etc
 int
 pre_fork_app_fu()

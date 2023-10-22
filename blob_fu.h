@@ -49,6 +49,10 @@ typedef struct {
     ({ blob_t * b = alloca(sizeof(blob_t)); s64 capacity = 32; u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); add_s64_blob(b, n); b; })
 
 #define B(cstr) wrap_blob(cstr)
+
+// TODO(jason): good idea?  for convenience
+#define AB(a, b) add_blob(a, B(b))
+
 // GCC specific syntax for multiple statements as an expression
 // wrap_blob should be a function to wrap an existing array with a specified
 // size/len and B() should directly do this behavior
@@ -329,175 +333,6 @@ _cstr_blob(const blob_t * blob, char * cstr, size_t size_cstr)
     return cstr;
 }
 
-ssize_t
-scan_fd_blob(blob_t * b, int fd, u8 delim, size_t max)
-{
-    assert(max <= MEDIUM_SIZE_BLOB);
-
-    u8 buf[MEDIUM_SIZE_BLOB];
-    size_t count = 0;
-    u8 c;
-    ssize_t n;
-    while ((n = read(fd, &c, 1)) == 1 && c != delim)
-    {
-        buf[count] = c;
-        count++;
-    }
-
-    if (count > 0) write_blob(b, buf, count);
-
-    return count;
-}
-
-ssize_t
-remaining_blob(const blob_t * src, ssize_t offset)
-{
-    // TODO(jason): this should probably do something about -1 offset
-    return src->size - offset;
-}
-
-// NOTE(jason): should end of blob count as delimiter?  easier for parsing as
-// doesn't have to be a special case
-// It can't be as the scanning should indicate that the delim was actually
-// found.  although maybe with offset pointer the return value identifies
-//
-// returns the number of bytes written to dest or -1 on error or end of
-// blob.  poffset is updated with the index after the delim
-ssize_t
-scan_blob_blob(blob_t * dest, const blob_t * src, blob_t * delim, ssize_t * poffset)
-{
-    assert(dest != NULL);
-    assert(src != NULL);
-    assert(delim != NULL);
-
-    //assert(offset >= 0);
-    if (*poffset < 0) return -1;
-
-    size_t offset = *poffset;
-
-    assert(src->size > 0);
-    //debug_u64(offset);
-    //debug_u64(src->size);
-    //assert(offset <= src->size);
-    // NOTE(jason): what the fuck was this assert trying to check???  must've meant
-    // remaining_blob as checking to see if there's space  in the src is pointless
-    //assert(available_blob(src) >= delim->size);
-
-    if (offset > src->size) return -1;
-
-    // NOTE(jason): if not found returns the whole blob
-    size_t size = remaining_blob(src, offset); //src->size - offset;
-
-    size_t imax = src->size;
-    for (size_t i = offset; i < imax; i++) {
-        // NOTE(jason): there was a check for single char before the memcmp,
-        // but i'm assuming that's a premature optimization
-        if (memcmp(&src->data[i], delim->data, delim->size) == 0) {
-            size = i - offset;
-            break;
-        }
-    }
-
-    if (size) {
-        if (write_blob(dest, &src->data[offset], size) == -1) return -1;
-
-        // check for errors!!!
-        *poffset = offset + size + delim->size;
-        return size;
-    } else if (size == 0) {
-        // NOTE(jason): delim at first char
-        // check for errors!!!
-        *poffset = offset + delim->size;
-        return 0;
-    } else {
-        return -1;
-    }
-}
-
-ssize_t
-scan_blob(blob_t * dest, const blob_t * src, u8 delim, ssize_t * poffset)
-{
-    blob_t * tmp = local_blob(1);
-    tmp->data[0] = delim;
-    tmp->size = 1;
-
-    return scan_blob_blob(dest, src, tmp, poffset);
-}
-
-ssize_t
-scan_line_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
-{
-    return scan_blob(dest, src, '\n', poffset);
-}
-
-ssize_t
-skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
-{
-    for (ssize_t i = *poffset; i < (ssize_t)b->size; i++) {
-        if (!isspace(b->data[i])) {
-            *poffset = i;
-            return 0;
-        }
-    }
-
-    return -1;
-}
-
-// should take an offset pointer and set it to after the number
-s64
-s64_blob(const blob_t * src, ssize_t offset)
-{
-    skip_whitespace_blob(src, &offset);
-
-    s64 total = 0;
-    bool neg = false;
-    if (src->data[offset] == '-') {
-        neg = true;
-        offset++;
-    }
-
-    size_t imax = min_size(src->size, 19); // 19
-    for (size_t i = offset; i < imax; i++) {
-        u8 c = src->data[i];
-
-        if (c >= '0' && c <= '9') {
-            total = total * 10 + (c - '0');
-        }
-        else {
-            break;
-        }
-    }
-
-    return neg
-        ? total * -1
-        : total;
-}
-
-/*
- * this seems problematic for overflow detection and I'm not sure we ever want
- * to be using u64 anyway
-u64
-u64_blob(const blob_t * src, ssize_t offset)
-{
-    skip_whitespace_blob(src, &offset);
-
-    u64 total = 0;
-    for (size_t i = offset; i < src->size; i++) {
-        u8 c = src->data[i];
-
-        if (c >= '0' && c <= '9') {
-            total = total * 10 + (c - '0');
-        }
-        else {
-            break;
-        }
-    }
-
-    return total;
-}
-*/
-
-
 // TODO(jason): maybe this should be different like cstr_blob() or something
 // should this return a "const blob_t *" or similar?
 blob_t *
@@ -581,6 +416,334 @@ add_cstr_blob(blob_t * b, const char * cstr)
     return write_blob(b, cstr, strlen(cstr));
 }
 
+ssize_t
+remaining_blob(const blob_t * src, ssize_t offset)
+{
+    // TODO(jason): this should probably do something about -1 offset
+    return src->size - offset;
+}
+
+bool
+ends_with_char_blob(blob_t * b, char c)
+{
+    return b->data[b->size - 1] == c;
+}
+
+bool
+ends_with_blob(const blob_t * b, const blob_t * suffix)
+{
+    if (b->size < suffix->size) return false;
+
+    return memcmp(b->data + (b->size - suffix->size), suffix->data, suffix->size) == 0;
+}
+
+bool
+begins_with_blob(const blob_t * b, const blob_t * prefix)
+{
+    if (prefix->size > b->size) return false;
+
+    return memcmp(b->data, prefix->data, prefix->size) == 0;
+}
+
+ssize_t
+index_blob(const blob_t * b, u8 c, ssize_t offset)
+{
+    ssize_t imax = b->size;
+    for (ssize_t i = offset; i < imax; i++) {
+        if (b->data[i] == c) return i;
+    }
+
+    return -1;
+}
+
+ssize_t
+index_blob_blob(const blob_t * b, blob_t * delim, ssize_t offset)
+{
+    ssize_t imax = b->size;
+    for (ssize_t i = offset; i < imax; i++) {
+        // NOTE(jason): there was a check for single char before the memcmp,
+        // but i'm assuming that's a premature optimization
+        if (memcmp(&b->data[i], delim->data, delim->size) == 0) {
+            return i;
+        }
+    }
+
+    return -1;
+}
+
+ssize_t
+rindex_blob(const blob_t * b, u8 c, ssize_t offset)
+{
+    if (offset == -1) offset = b->size - 1;
+
+    for (ssize_t i = offset; i >= 0; i--) {
+        if (b->data[i] == c) return i;
+    }
+
+    return -1;
+}
+
+// TODO(jason): why is this "first_contains" instead of "contains"?
+bool
+first_contains_blob(const blob_t * b, const blob_t * target)
+{
+    ssize_t off = index_blob(b, target->data[0], 0);
+    if (off >= 0 && (size_t)remaining_blob(b, off) >= target->size) {
+        if (memcmp(&b->data[off], target->data, target->size) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// XXX: reconsider the ssize_t and -1 to get end of src
+// returns the amount written or -1
+ssize_t
+sub_blob(blob_t * dest, const blob_t * src, size_t offset, ssize_t size)
+{
+    assert(offset < src->size);
+
+    if (size == -1) size = remaining_blob(src, offset);
+
+    //assert(dest->size + size <= dest->capacity);
+    return write_blob(dest, src->data + offset, size);
+}
+
+int
+split_blob(const blob_t * src, u8 c, blob_t * b1, blob_t * b2)
+{
+    ssize_t i = index_blob(src, c, 0);
+    if (i == -1) {
+        add_blob(b1, src);
+    } else {
+        sub_blob(b1, src, 0, i);
+        i++;
+        if ((size_t)i < src->size) sub_blob(b2, src, i, -1);
+    }
+
+    return 0;
+}
+
+ssize_t
+scan_fd_blob(blob_t * b, int fd, u8 delim, size_t max)
+{
+    assert(max <= MEDIUM_SIZE_BLOB);
+
+    u8 buf[MEDIUM_SIZE_BLOB];
+    size_t count = 0;
+    u8 c;
+    ssize_t n;
+    while ((n = read(fd, &c, 1)) == 1 && c != delim)
+    {
+        buf[count] = c;
+        count++;
+    }
+
+    if (count > 0) write_blob(b, buf, count);
+
+    return count;
+}
+
+// NOTE(jason): should end of blob count as target?  easier for parsing as
+// doesn't have to be a special case
+// It can't be as the scanning should indicate that the target was actually
+// found.  although maybe with offset pointer the return value identifies
+//
+// returns the number of bytes written to dest or -1 on error or end of
+// blob.  poffset is updated with the index after the target
+ssize_t
+scan_blob_blob(blob_t * dest, const blob_t * src, blob_t * target, ssize_t * poffset)
+{
+    assert(dest != NULL);
+    assert(src != NULL);
+    assert(target != NULL);
+
+    //assert(offset >= 0);
+    if (*poffset < 0) return -1;
+
+    size_t offset = *poffset;
+
+    assert(src->size > 0);
+    //debug_u64(offset);
+    //debug_u64(src->size);
+    //assert(offset <= src->size);
+    // NOTE(jason): what the fuck was this assert trying to check???  must've meant
+    // remaining_blob as checking to see if there's space  in the src is pointless
+    //assert(available_blob(src) >= target->size);
+
+    if (offset > src->size) return -1;
+
+    // NOTE(jason): if not found returns the whole blob
+    size_t size = remaining_blob(src, offset); //src->size - offset;
+
+    size_t imax = src->size;
+    for (size_t i = offset; i < imax; i++) {
+        // NOTE(jason): there was a check for single char before the memcmp,
+        // but i'm assuming that's a premature optimization
+        if (memcmp(&src->data[i], target->data, target->size) == 0) {
+            size = i - offset;
+            break;
+        }
+    }
+
+    if (size) {
+        if (write_blob(dest, &src->data[offset], size) == -1) return -1;
+
+        // check for errors!!!
+        *poffset = offset + size + target->size;
+        return size;
+    } else if (size == 0) {
+        // NOTE(jason): target at first char
+        // check for errors!!!
+        *poffset = offset + target->size;
+        return 0;
+    } else {
+        return -1;
+    }
+}
+
+ssize_t
+scan_blob(blob_t * dest, const blob_t * src, u8 delim, ssize_t * poffset)
+{
+    blob_t * tmp = local_blob(1);
+    tmp->data[0] = delim;
+    tmp->size = 1;
+
+    return scan_blob_blob(dest, src, tmp, poffset);
+}
+
+// delim is multiple single char delimiter chars so that one is matched
+// TODO(jason): minimally tested, but likely ok as the only line changed from
+// scan_blob_blob is the memcmp -> index_blob.  didn't seem like a good way to
+// use the same method and probably better to just be separate. maybe later.
+ssize_t
+scan_delim_blob(blob_t * dest, const blob_t * src, blob_t * delim, ssize_t * poffset)
+{
+    assert(dest != NULL);
+    assert(src != NULL);
+    assert(delim != NULL);
+
+    if (*poffset < 0) return -1;
+
+    size_t offset = *poffset;
+
+    assert(src->size > 0);
+
+    if (offset > src->size) return -1;
+
+    // NOTE(jason): if not found returns the whole blob
+    size_t size = remaining_blob(src, offset); //src->size - offset;
+
+    size_t imax = src->size;
+    for (size_t i = offset; i < imax; i++) {
+        if (index_blob(delim, src->data[i], 0) != -1) {
+            size = i - offset;
+            break;
+        }
+    }
+
+    if (size) {
+        if (write_blob(dest, &src->data[offset], size) == -1) return -1;
+
+        // check for errors!!!
+        *poffset = offset + size + 1;
+        return size;
+    } else if (size == 0) {
+        // NOTE(jason): target at first char
+        // check for errors!!!
+        *poffset = offset + 1;
+        return 0;
+    } else {
+        return -1;
+    }
+}
+
+// scan until whitespace
+ssize_t
+scan_whitespace_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
+{
+    // TODO(jason): improve to check isspace
+    // need a scan_delimiter_blob that takes a blob of single char delimiters
+    return scan_delim_blob(dest, src, B(" \n\r\t"), poffset);
+    //return scan_blob(dest, src, ' ', poffset);
+}
+
+ssize_t
+scan_line_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
+{
+    return scan_blob(dest, src, '\n', poffset);
+}
+
+ssize_t
+skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
+{
+    for (ssize_t i = *poffset; i < (ssize_t)b->size; i++) {
+        if (!isspace(b->data[i])) {
+            *poffset = i;
+            return 0;
+        }
+    }
+
+    return -1;
+}
+
+// TODO(jason): should take an offset pointer and set it to after the number so
+// it can be used with scan_blob, etc.  Or should there be scan_s64_blob?
+// probably
+s64
+s64_blob(const blob_t * src, ssize_t offset)
+{
+    skip_whitespace_blob(src, &offset);
+
+    s64 total = 0;
+    bool neg = false;
+    if (src->data[offset] == '-') {
+        neg = true;
+        offset++;
+    }
+
+    size_t imax = min_size(src->size, 19); // 19
+    for (size_t i = offset; i < imax; i++) {
+        u8 c = src->data[i];
+
+        if (c >= '0' && c <= '9') {
+            total = total * 10 + (c - '0');
+        }
+        else {
+            break;
+        }
+    }
+
+    return neg
+        ? total * -1
+        : total;
+}
+
+/*
+ * this seems problematic for overflow detection and I'm not sure we ever want
+ * to be using u64 anyway
+u64
+u64_blob(const blob_t * src, ssize_t offset)
+{
+    skip_whitespace_blob(src, &offset);
+
+    u64 total = 0;
+    for (size_t i = offset; i < src->size; i++) {
+        u8 c = src->data[i];
+
+        if (c >= '0' && c <= '9') {
+            total = total * 10 + (c - '0');
+        }
+        else {
+            break;
+        }
+    }
+
+    return total;
+}
+*/
+
 /*
 XXX: probably should not do things that would require this.  should add longer
 values at a time instead of char at a time.
@@ -641,90 +804,6 @@ add_u16_zero_pad_blob(blob_t * b, u64 n)
     char s[256];
     int size = snprintf(s, 256, "%06lu", n);
     write_blob(b, s, size);
-}
-
-bool
-ends_with_char_blob(blob_t * b, char c)
-{
-    return b->data[b->size - 1] == c;
-}
-
-bool
-ends_with_blob(const blob_t * b, const blob_t * suffix)
-{
-    if (b->size < suffix->size) return false;
-
-    return memcmp(b->data + (b->size - suffix->size), suffix->data, suffix->size) == 0;
-}
-
-bool
-begins_with_blob(const blob_t * b, const blob_t * prefix)
-{
-    if (prefix->size > b->size) return false;
-
-    return memcmp(b->data, prefix->data, prefix->size) == 0;
-}
-
-ssize_t
-index_blob(const blob_t * b, u8 c, size_t offset)
-{
-    for (size_t i = offset; i < b->size; i++) {
-        if (b->data[i] == c) return i;
-    }
-
-    return -1;
-}
-
-ssize_t
-rindex_blob(const blob_t * b, u8 c, size_t offset)
-{
-    for (ssize_t i = b->size - 1 - offset; i >= 0; i--) {
-        if (b->data[i] == c) return i;
-    }
-
-    return -1;
-}
-
-// TODO(jason): why is this "first_contains" instead of "contains"?
-bool
-first_contains_blob(const blob_t * b, const blob_t * target)
-{
-    ssize_t off = index_blob(b, target->data[0], 0);
-    if (off >= 0 && (size_t)remaining_blob(b, off) >= target->size) {
-        if (memcmp(&b->data[off], target->data, target->size) == 0) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-// XXX: reconsider the ssize_t and -1 to get end of src
-// returns the amount written or -1
-ssize_t
-sub_blob(blob_t * dest, const blob_t * src, size_t offset, ssize_t size)
-{
-    assert(offset < src->size);
-
-    if (size == -1) size = remaining_blob(src, offset);
-
-    //assert(dest->size + size <= dest->capacity);
-    return write_blob(dest, src->data + offset, size);
-}
-
-int
-split_blob(const blob_t * src, u8 c, blob_t * b1, blob_t * b2)
-{
-    ssize_t i = index_blob(src, c, 0);
-    if (i == -1) {
-        add_blob(b1, src);
-    } else {
-        sub_blob(b1, src, 0, i);
-        i++;
-        if ((size_t)i < src->size) sub_blob(b2, src, i, -1);
-    }
-
-    return 0;
 }
 
 u8

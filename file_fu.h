@@ -54,7 +54,7 @@ new_path_file_fu(const blob_t * dir, const blob_t * file)
 int
 dirname_file_fu(const blob_t * path, blob_t * dirname)
 {
-    ssize_t index = rindex_blob(path, '/', 0);
+    ssize_t index = rindex_blob(path, '/', path->size - 1);
     if (index == -1) {
         return -1;
     }
@@ -62,16 +62,16 @@ dirname_file_fu(const blob_t * path, blob_t * dirname)
     return sub_blob(dirname, path, 0, index) >= 0 ? 0 : dirname->error;
 }
 
-// what should happen if there's no '/'
+// if the path separator doesn't exist returns the whole path
 int
 basename_file_fu(const blob_t * path, blob_t * basename)
 {
-    ssize_t index = rindex_blob(path, '/', 0);
+    ssize_t index = rindex_blob(path, '/', -1);
     if (index == -1) {
-        return -1;
+        return add_blob(basename, path);
     }
 
-    return sub_blob(basename, path, index + 1, -1) >= 0 ? 0 : basename->error;
+    return sub_blob(basename, path, index + 1, -1) > 0 ? 0 : basename->error;
 }
 
 int
@@ -306,7 +306,7 @@ load_file(const blob_t * path, blob_t * data)
     reset_blob(data);
 
     if (size > available_blob(data)) {
-        error_log("sql file is too large", "db", size);
+        error_log("file is too large", "db", size);
         errno = ENOSPC;
         return -1;
     }
