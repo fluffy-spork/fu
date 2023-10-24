@@ -119,16 +119,18 @@ open_read_file_fu(const blob_t * path)
     return open_file_fu(path, O_RDONLY, 0);
 }
 
+// TODO(jason): are the default permissions ok?
 int
 open_write_file_fu(const blob_t * path)
 {
-    return open_file_fu(path, O_WRONLY|O_CREAT, S_IWUSR);
+    return open_file_fu(path, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
 }
 
+// TODO(jason): are the default permissions ok?
 int
 open_read_write_file_fu(const blob_t * path)
 {
-    return open_file_fu(path, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
+    return open_file_fu(path, O_RDWR|O_CREAT, S_IRUSR|S_IWUSR);
 }
 
 ssize_t
@@ -316,5 +318,21 @@ load_file(const blob_t * path, blob_t * data)
     }
 
     return 0;
+}
+
+// NOTE(jason): overwrites data from beginning
+int
+save_file(const blob_t * path, const blob_t * data)
+{
+	int fd = open_write_file_fu(path);
+	if (fd == -1) {
+		return log_errno("open_write_file_fu");
+	}
+
+	if (write_full_file_fu(fd, data) == -1) {
+        return -1;
+	}
+
+	return 0;
 }
 

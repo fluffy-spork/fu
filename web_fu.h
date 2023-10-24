@@ -67,6 +67,8 @@ typedef enum {
 // as a number, but this is only used for generating responses.
 // how can  payload too large max size be configurable? max size should just be
 // header
+// update redirect to separate 302 found and 303 see other since they have
+// different usages.
 #define HTTP_STATUS(var, E) \
     E(unknown, "HTTP/1.1 000 N\r\n", var) \
     E(ok, "HTTP/1.1 200 X\r\n", var) \
@@ -986,6 +988,8 @@ error_response(request_t * req, http_status_t status, blob_t * reason)
     reset_blob(req->head);
     reset_blob(req->body);
 
+    // TODO(jason): if req content type is json, then output json instead of
+    // html
     req->content_type = html_content_type;
     req->status = status;
 

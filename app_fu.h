@@ -59,6 +59,12 @@ new_state_path_app(const blob_t * subpath)
 }
 
 int
+state_path_app(blob_t * path, const blob_t * subpath)
+{
+    return path_file_fu(path, app.state_dir, subpath);
+}
+
+int
 path_dir_app(blob_t * path, const blob_t * subpath)
 {
     return path_file_fu(path, app.dir, subpath);
@@ -71,6 +77,14 @@ load_file_app(const blob_t * subpath, blob_t * data)
     blob_t * path= stk_blob(256);
     path_dir_app(path, subpath);
     return load_file(path, data);
+}
+
+int
+save_state_file_app(const blob_t * subpath, const blob_t * data)
+{
+    blob_t * path = stk_blob(256);
+    state_path_app(path, subpath);
+    return save_file(path, data);
 }
 
 // close sqlite db, etc
