@@ -369,7 +369,7 @@ insert_access_log_web(request_t * req)
             , user_id_field, req->user_id
             , received_field, received
             , elapsed_ns_field, elapsed
-            , request_content_length_field, req->request_body->size
+            , request_content_length_field, req->request_content_length
             , response_content_length_field, req->content_length 
             );
 
@@ -2534,5 +2534,12 @@ main_web(config_web_t * config)
     flush_log();
 
     return 0;
+}
+
+int
+save_request(const request_t * req, const blob_t * path)
+{
+    // TODO(jason): maybe this should always be in the app state dir?
+    return write_prefix_file_fu(path, req->request_body, req->fd, req->request_content_length);
 }
 

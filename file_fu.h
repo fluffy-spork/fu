@@ -253,11 +253,11 @@ tmp_file_fu()
 
 // count should be prefix->size + <whatever from fd>
 ssize_t
-write_prefix_file_fu(const blob_t * path, const blob_t * prefix, int in_fd, size_t count)
+write_prefix_file_fu(const blob_t * path, const blob_t * prefix, const int in_fd, const size_t count)
 {
     log_var_blob(path);
 
-    int out_fd = open(cstr_blob(path), O_CREAT|O_WRONLY|O_EXCL, S_IRUSR|S_IWUSR);
+    const int out_fd = open(cstr_blob(path), O_CREAT|O_WRONLY|O_EXCL, S_IRUSR|S_IWUSR);
     if (out_fd == -1) {
         return log_errno("open");
     }
