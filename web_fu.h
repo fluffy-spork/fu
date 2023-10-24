@@ -128,6 +128,7 @@ struct request_s {
     bool expect_continue;
 
     blob_t * request_head;
+    bool request_head_parsed;
     blob_t * request_body;
 
     // portion of uri after a matching wildcard route
@@ -706,6 +707,7 @@ reuse_request(request_t * req)
     erase_blob(req->head);
     erase_blob(req->body);
     erase_blob(req->request_head);
+    req->request_head_parsed = false;
     erase_blob(req->request_body);
     erase_blob(req->session_cookie);
 }
@@ -767,7 +769,7 @@ int
 require_request_head_web(request_t * req)
 {
     // NOTE(jason): no headers or headers already processed
-    if (empty_blob(req->request_head)) return 0;
+    if (req->request_head_parsed) return 0;
 
     blob_t * headers = req->request_head;
     //debug_blob(headers);
@@ -824,7 +826,7 @@ require_request_head_web(request_t * req)
         req->keep_alive = false;
     }
 
-    reset_blob(headers);
+    req->request_head_parsed = true;
 
     return 0;
 }
@@ -2537,9 +2539,15 @@ main_web(config_web_t * config)
 }
 
 int
-save_request(const request_t * req, const blob_t * path)
+save_request(request_t * req, const blob_t * path)
 {
-    // TODO(jason): maybe this should always be in the app state dir?
+    if (require_request_body_web(req)) return -1;
+
+    blob_t * header_path = stk_blob(256);
+    add_blob(header_path, path);
+    add_blob(header_path, B(".header"));
+    save_file(header_path, req->request_head);
+
     return write_prefix_file_fu(path, req->request_body, req->fd, req->request_content_length);
 }
 

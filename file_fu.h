@@ -255,7 +255,7 @@ tmp_file_fu()
 ssize_t
 write_prefix_file_fu(const blob_t * path, const blob_t * prefix, const int in_fd, const size_t count)
 {
-    log_var_blob(path);
+    //debug_blob(path);
 
     const int out_fd = open(cstr_blob(path), O_CREAT|O_WRONLY|O_EXCL, S_IRUSR|S_IWUSR);
     if (out_fd == -1) {
