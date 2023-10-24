@@ -270,8 +270,11 @@ write_prefix_file_fu(const blob_t * path, const blob_t * prefix, const int in_fd
 
     total += result;
 
-    result = copy_fd_file_fu(out_fd, in_fd, count - prefix->size);
-    if (result == -1) goto end;
+    ssize_t unread = count - prefix->size;
+    if (unread > 0) {
+        result = copy_fd_file_fu(out_fd, in_fd, unread);
+        if (result == -1) goto end;
+    }
 
     total += result;
 

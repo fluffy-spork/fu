@@ -9,7 +9,7 @@
 #include "file_fu.h"
 
 #define MAX_REQUEST_BODY 4096
-#define MAX_RESPONSE_BODY 8*16384
+#define MAX_RESPONSE_BODY 8*4096
 
 #define MIN_RESOLUTION 640
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
@@ -831,6 +831,8 @@ require_request_head_web(request_t * req)
     return 0;
 }
 
+// TODO(jason): possibly should include a blob to read the body into and
+// replace read_request_body
 int
 require_request_body_web(request_t * req)
 {
@@ -2549,5 +2551,17 @@ save_request(request_t * req, const blob_t * path)
     save_file(header_path, req->request_head);
 
     return write_prefix_file_fu(path, req->request_body, req->fd, req->request_content_length);
+}
+
+int
+read_request_body(request_t * req, blob_t * body)
+{
+    if (req->request_content_length == 0) return 0;
+
+    add_blob(body, req->request_body);
+    // TODO(jason): add read_full_file
+    if (read_file_fu(req->fd, body) == -1) return -1;
+
+    return 0;
 }
 
