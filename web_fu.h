@@ -63,15 +63,16 @@ typedef enum {
     USER_FILE_CACHE_CONTROL
 } cache_control_t;
 
-// NOTE(jason): the reason strings is pointless.  maybe need to store the code
+// NOTE(jason): the reason strings are pointless.  maybe need to store the code
 // as a number, but this is only used for generating responses.
-// how can  payload too large max size be configurable?
+// how can  payload too large max size be configurable? max size should just be
+// header
 #define HTTP_STATUS(var, E) \
     E(unknown, "HTTP/1.1 000 N\r\n", var) \
     E(ok, "HTTP/1.1 200 X\r\n", var) \
     E(created, "HTTP/1.1 201 X\r\n", var) \
     E(not_found, "HTTP/1.1 404 X\r\n", var) \
-    E(redirect, "HTTP/1.1 303 X\r\n", var) \
+    E(redirect, "HTTP/1.1 302 X\r\n", var) \
     E(permanent_redirect, "HTTP/1.1 301 X\r\n", var) \
     E(method_not_implemented, "HTTP/1.1 501 X\r\n", var) \
     E(bad_request, "HTTP/1.1 400 bad request\r\n", var) \
