@@ -99,6 +99,8 @@ typedef struct {
     int (* after_fork_f)();
 } config_web_t;
 
+typedef struct endpoint_s endpoint_t;
+
 typedef struct request_s request_t;
 typedef int (* request_task_f)(request_t *);
 
@@ -148,9 +150,10 @@ struct request_s {
 
     request_task_f after_task;
     s64 id_task; // pass an id to the task, like file_id, or whatever
+
+    endpoint_t * endpoint;
 };
 
-typedef struct endpoint_s endpoint_t;
 typedef int (* request_handler_func)(endpoint_t * ep, request_t *);
 
 #define EXTRACT_AS_ENUM_ENDPOINT(path, name, title, handler, ...) name##_id_endpoint,
@@ -710,6 +713,8 @@ reuse_request(request_t * req)
     req->request_head_parsed = false;
     erase_blob(req->request_body);
     erase_blob(req->session_cookie);
+
+    req->endpoint = NULL;
 }
 
 request_t *
@@ -1221,6 +1226,7 @@ route_endpoint(request_t * req)
             // reuse_request
             ep->params_parsed = false;
             clear_params(ep->params, ep->n_params);
+            req->endpoint = ep;
             return ep->handler(ep, req);
         }
     }

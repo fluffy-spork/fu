@@ -13,6 +13,7 @@
 #define page_begin(...) page_begin_html(html, __VA_ARGS__)
 #define page_end() page_end_html(html)
 #define h1(...) h1_html(html, __VA_ARGS__)
+#define h1_link(...) h1_link_html(html, __VA_ARGS__)
 #define img(...) img_html(html, __VA_ARGS__)
 #define video(...) video_html(html, __VA_ARGS__)
 #define start_post_form(...) start_post_form_html(html, __VA_ARGS__)
@@ -377,9 +378,36 @@ src_attr_html(blob_t * html, const blob_t * src)
 }
 
 void
+link_html(blob_t * html, const blob_t * url, const blob_t * content)
+{
+    // TODO(jason): maybe link should take another blob_t * query parameter instead
+    // of assuming they're already in the url
+
+    assert(url != NULL);
+
+    open_tag_html(html, res_html.anchor);
+    attr_html(html, res_html.href, url);
+    close_tag_html(html);
+
+    if (content != NULL) {
+        escape_html(html, content);
+    }
+
+    end_tag_html(html, res_html.anchor);
+}
+
+void
 h1_html(blob_t * html, const blob_t * content)
 {
     element_html(html, res_html.h1, content);
+}
+
+void
+h1_link_html(blob_t * html, const blob_t * content, const blob_t * url)
+{
+    start_element_html(html, res_html.h1);
+    link_html(html, url, content);
+    end_element_html(html, res_html.h1);
 }
 
 void
@@ -407,25 +435,6 @@ video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob
     close_tag_html(html);
 
     end_tag_html(html, res_html.video);
-}
-
-void
-link_html(blob_t * html, const blob_t * url, const blob_t * content)
-{
-    // TODO(jason): maybe link should take another blob_t * query parameter instead
-    // of assuming they're already in the url
-
-    assert(url != NULL);
-
-    open_tag_html(html, res_html.anchor);
-    attr_html(html, res_html.href, url);
-    close_tag_html(html);
-
-    if (content != NULL) {
-        escape_html(html, content);
-    }
-
-    end_tag_html(html, res_html.anchor);
 }
 
 void

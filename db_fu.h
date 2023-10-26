@@ -1239,6 +1239,7 @@ _by_id_db(db_t * db, const blob_t * sql, s64 id, ...)
 }
 
 
+/*
 #define by_id_fields_db(db, ...) _by_id_fields_db(db, __VA_ARGS__, 0)
 
 int
@@ -1250,6 +1251,7 @@ _by_id_fields_db(db_t * db, const blob_t * table, s64 rowid, ...)
 
     return 0;
 }
+*/
 
 
 /*
