@@ -946,7 +946,7 @@ add_response_headers(request_t *req)
     // NOTE(jason): it's fucking stupid that deny isn't the default and every
     // request is required to have this.
     header(t, res_web.x_frame_options, res_web.deny_x_frame_options);
-    //header(t, res_web.content_security_policy, res_web.self_default_content_security_policy);
+    header(t, res_web.content_security_policy, res_web.self_default_content_security_policy);
 
     // NOTE(jason): this is the blank line to indicate the headers are over and
     // the body should be next
