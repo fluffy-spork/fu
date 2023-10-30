@@ -320,8 +320,8 @@ const blob_t * ffmpeg_path_web;
     E(content_security_policy,"content-security-policy", var) \
     E(self_default_content_security_policy,"default-src 'self' blob:", var) \
     E(name_session_cookie,"z", var) \
-    E(session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=strict", var) \
-    E(secure_session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=strict; secure", var) \
+    E(session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=lax", var) \
+    E(secure_session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=lax; secure", var) \
     E(method_not_implemented,"method not implemented", var) \
     E(bad_request,"bad request", var) \
     E(not_found,"not found", var) \
