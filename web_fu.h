@@ -1068,11 +1068,8 @@ method_not_implemented_handler(endpoint_t * ep, request_t * req)
     return method_not_implemented_response(req);
 }
 
-int
-bad_request_response(request_t * req)
-{
-    return error_response(req, bad_request_http_status, res_web.bad_request);
-}
+// TODO(jason): make these use the file, function, and line number
+#define bad_request_response(req) error_response(req, bad_request_http_status, res_web.bad_request)
 
 int
 bad_request_handler(endpoint_t * ep, request_t * req)
