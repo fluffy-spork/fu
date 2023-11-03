@@ -617,6 +617,11 @@ scan_blob(blob_t * dest, const blob_t * src, u8 delim, ssize_t * poffset)
 // TODO(jason): minimally tested, but likely ok as the only line changed from
 // scan_blob_blob is the memcmp -> index_blob.  didn't seem like a good way to
 // use the same method and probably better to just be separate. maybe later.
+// TODO(jason): maybe a generic function could take multiple ranges and the
+// delim case would just have the begin and end of each range the same single
+// character.  would take twice as many compares, but I think most cases would
+// use a range like whitespace, digits, alpha, etc.  then implemente wrappers
+// for delim, whitespace, single range, etc
 ssize_t
 scan_delim_blob(blob_t * dest, const blob_t * src, blob_t * delim, ssize_t * poffset)
 {

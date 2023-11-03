@@ -3,6 +3,7 @@
 #include "file_fu.h"
 
 typedef sqlite3 db_t;
+typedef sqlite3_stmt stmt_db_t;
 
 #define log_error_db(db, label) \
     error_log(sqlite3_errmsg(db), label, sqlite3_extended_errcode(db))

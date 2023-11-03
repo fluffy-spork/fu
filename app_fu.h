@@ -14,6 +14,7 @@
 typedef struct {
     blob_t * dir;
     blob_t * state_dir;
+
     blob_t * main_db_file;
     db_t * db;
 } app_fu_t;
@@ -22,6 +23,7 @@ app_fu_t app = {};
 
 #define RES_APP(var, E) \
     E(user_table, "user", var) \
+    E(sql_dir, "/sql", var) \
 
 ENUM_BLOB(res_app, RES_APP)
 
@@ -74,9 +76,35 @@ path_dir_app(blob_t * path, const blob_t * subpath)
 int
 load_file_app(const blob_t * subpath, blob_t * data)
 {
-    blob_t * path= stk_blob(256);
+    blob_t * path = stk_blob(256);
     path_dir_app(path, subpath);
     return load_file(path, data);
+}
+
+int
+load_sql_file_app(const blob_t * file, blob_t * data)
+{
+    blob_t * path = stk_blob(256);
+    add_blob(path, res_app.sql_dir);
+    add_path_file_fu(path, file);
+    return load_file_app(path, data);
+}
+
+#define require_sql_app(file, stmt) dev_error(load_sql_app(file, stmt))
+
+int
+load_sql_app(const blob_t * file, stmt_db_t ** stmt)
+{
+    blob_t * sql = stk_blob(4096);
+    if (load_sql_file_app(file, sql)) {
+        return -1;
+    }
+
+    if (prepare_db(app.db, stmt, sql)) {
+        return -1;
+    }
+
+    return 0;
 }
 
 int
