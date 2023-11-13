@@ -366,6 +366,25 @@ set_blob(blob_t * b, blob_t * value)
     return add_blob(b, value);
 }
 
+int
+fill_blob(blob_t * b, u8 c, size_t n)
+{
+    if (n == 0) {
+        n = available_blob(b);
+    }
+    else {
+        n = min_size(n, available_blob(b));
+    }
+
+    if (n > 0) {
+        memset(&b->data[b->size], c, n);
+
+        b->size += n;
+    }
+
+    return 0;
+}
+
 // NOTE(jason): wrapper so it's easy to not have to know the trailing NULL is
 // required for var args in C.  Also means a NULL can't be included, but that
 // shouldn't really matter.
@@ -481,6 +500,19 @@ rindex_blob(const blob_t * b, u8 c, ssize_t offset)
     }
 
     return -1;
+}
+
+int
+trim_ext_blob(blob_t * b)
+{
+    ssize_t size = rindex_blob(b, '.', 0);
+    if (size < 0) {
+        return -1;
+    }
+
+    b->size = size;
+
+    return 0;
 }
 
 // TODO(jason): why is this "first_contains" instead of "contains"?
@@ -773,14 +805,27 @@ add_u8_blob(blob_t * b, u8 c)
 // TODO(jason): maybe this should have a way for 0 not be added and make an
 // empty blob
 void
-add_s64_blob(blob_t * b, s64 n)
+add_s64_blob(blob_t * b, s64 value)
 {
     // TODO(jason): replace with something that doesn't use stdio
     // and direct
     // possibly should use %jd and cast to intmax_t
     char s[256];
-    int size = snprintf(s, 256, "%ld", n);
+    int size = snprintf(s, 256, "%ld", value);
     write_blob(b, s, size);
+}
+
+void
+add_s64_zero_pad_blob(blob_t * b, s64 value, size_t width)
+{
+    blob_t * num = stk_blob(64);
+
+    add_s64_blob(num, value);
+    size_t padding = width - num->size;
+    if (padding > 0) {
+        fill_blob(b, '0', padding);
+    }
+    add_blob(b, num);
 }
 
 void
