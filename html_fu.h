@@ -40,7 +40,8 @@
 #define start_div_id_class(...) start_div_id_class_html(html, __VA_ARGS__)
 #define end_div() end_div_html(html)
 #define start_div_class(...) start_div_class_html(html, __VA_ARGS__)
-#define link(...) link_html(html, __VA_ARGS__)
+#define link(url, content) link_html(html, url, content, NULL)
+#define link_target(url, content, target) link_html(html, url, content, target)
 #define table_start() table_start_html(html)
 #define table_end() table_end_html(html)
 #define tr_start() tr_start_html(html)
@@ -164,6 +165,8 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(td, "td", var) \
     E(ul, "ul", var) \
     E(li, "li", var) \
+    E(target, "target", var) \
+    E(target_blank, "_blank", var) \
 
 ENUM_BLOB(res_html, RES_HTML)
 
@@ -378,7 +381,7 @@ src_attr_html(blob_t * html, const blob_t * src)
 }
 
 void
-link_html(blob_t * html, const blob_t * url, const blob_t * content)
+link_html(blob_t * html, const blob_t * url, const blob_t * content, const blob_t * target)
 {
     // TODO(jason): maybe link should take another blob_t * query parameter instead
     // of assuming they're already in the url
@@ -387,6 +390,7 @@ link_html(blob_t * html, const blob_t * url, const blob_t * content)
 
     open_tag_html(html, res_html.anchor);
     attr_html(html, res_html.href, url);
+    if (target) attr_html(html, res_html.target, target);
     close_tag_html(html);
 
     if (content != NULL) {
@@ -406,7 +410,7 @@ void
 h1_link_html(blob_t * html, const blob_t * content, const blob_t * url)
 {
     start_element_html(html, res_html.h1);
-    link_html(html, url, content);
+    link_html(html, url, content, NULL);
     end_element_html(html, res_html.h1);
 }
 
