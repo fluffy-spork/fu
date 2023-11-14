@@ -40,6 +40,8 @@
 #define start_div_id_class(...) start_div_id_class_html(html, __VA_ARGS__)
 #define end_div() end_div_html(html)
 #define start_div_class(...) start_div_class_html(html, __VA_ARGS__)
+#define start_link(...) start_link_html(html, __VA_ARGS__)
+#define end_link(...) end_link_html(html)
 #define link(url, content) link_html(html, url, content, NULL)
 #define link_target(url, content, target) link_html(html, url, content, target)
 #define table_start() table_start_html(html)
@@ -383,23 +385,35 @@ src_attr_html(blob_t * html, const blob_t * src)
 }
 
 void
-link_html(blob_t * html, const blob_t * url, const blob_t * content, const blob_t * target)
+start_link_html(blob_t * html, const blob_t * url, const blob_t * target)
 {
-    // TODO(jason): maybe link should take another blob_t * query parameter instead
-    // of assuming they're already in the url
-
     assert(url != NULL);
 
     open_tag_html(html, res_html.anchor);
     attr_html(html, res_html.href, url);
     if (target) attr_html(html, res_html.target, target);
     close_tag_html(html);
+}
+
+void
+end_link_html(blob_t * html)
+{
+    end_tag_html(html, res_html.anchor);
+}
+
+void
+link_html(blob_t * html, const blob_t * url, const blob_t * content, const blob_t * target)
+{
+    // TODO(jason): maybe link should take another blob_t * query parameter instead
+    // of assuming they're already in the url
+
+    start_link_html(html, url, target);
 
     if (content != NULL) {
         escape_html(html, content);
     }
 
-    end_tag_html(html, res_html.anchor);
+    end_link_html(html);
 }
 
 void
