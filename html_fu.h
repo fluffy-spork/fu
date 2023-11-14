@@ -167,6 +167,8 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(li, "li", var) \
     E(target, "target", var) \
     E(target_blank, "_blank", var) \
+    E(center_class, "center", var) \
+    E(content_class, "content", var) \
 
 ENUM_BLOB(res_html, RES_HTML)
 
