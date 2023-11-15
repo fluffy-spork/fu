@@ -945,90 +945,6 @@ delete_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t
     return result;
 }
 
-typedef struct row_handler_db_s row_handler_db_t;
-
-struct row_handler_db_s {
-    int (* func)(row_handler_db_t * handler);
-    s64 n_rows;
-
-    // TODO(jason): getting kind of wonky with these extra values to use
-    // outside the callback.  probably should be including it all in data instead
-    s64 last_id;
-    s64 last_user_id;
-
-    // TODO(jason): should outputs be passed as parameters to the row_handler?
-    param_t * outputs;
-    int n_outputs;
-    void * data;
-};
-
-// NOTE(jason): sql should use field->id for bind parameters with "?12", etc
-int
-rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_t * params, int n_params)
-{
-    int result;
-    sqlite3_stmt * stmt;
-
-    result = prepare_db(db, &stmt, sql);
-    if (result != SQLITE_OK) return result;
-
-    for (int i = 0; i < n_params; i++) {
-        param_t * p = &params[i];
-        //debug_s64(p->field->id);
-        result = text_bind_db(stmt, p->field->id, p->value);
-        if (result != SQLITE_OK) {
-            finalize_db(stmt);
-            return result;
-        }
-    }
-
-    int n_outputs = sqlite3_column_count(stmt);
-    param_t outputs[n_outputs];
-    for (int i = 0; i < n_outputs; i++) {
-        param_t * p = &outputs[i];
-        const char * column = sqlite3_column_name(stmt, i);
-        field_t * f = by_name_field(B(column));
-        if (!f) {
-            debugf("unknown field name: %s", column);
-            continue;
-        }
-        //debug_blob(f->name);
-
-        // think this should work, but can't test now and this entire function
-        // should eventually be deleted
-        //outputs[i] = local_param(f);
-        p->field = f;
-        p->value = local_blob(f->max_size);
-        p->error = local_blob(128);
-    }
-
-    handler->outputs = outputs;
-    handler->n_outputs = n_outputs;
-    handler->n_rows = 0;
-    while (sqlite3_step(stmt) == SQLITE_ROW) {
-        for (int i = 0; i < n_outputs; i++) {
-            reset_blob(outputs[i].value);
-            blob_db(stmt, i, outputs[i].value);
-        }
-
-        handler->func(handler);
-        handler->n_rows++;
-    }
-
-    result = finalize_db(stmt);
-
-    handler->outputs = NULL;
-    handler->n_outputs = 0;
-
-    return result;
-}
-
-int
-rows_db(db_t * db, const blob_t * sql, row_handler_db_t * handler)
-{
-    return rows_params_db(db, sql, handler, NULL, 0);
-}
-
 int
 sql_type_param(param_t * p)
 {
@@ -1099,6 +1015,85 @@ bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
     }
 
     return 0;
+}
+
+typedef struct row_handler_db_s row_handler_db_t;
+
+struct row_handler_db_s {
+    int (* func)(row_handler_db_t * handler);
+    s64 n_rows;
+
+    // TODO(jason): getting kind of wonky with these extra values to use
+    // outside the callback.  probably should be including it all in data instead
+    s64 last_id;
+    s64 last_user_id;
+
+    // TODO(jason): should outputs be passed as parameters to the row_handler?
+    param_t * outputs;
+    int n_outputs;
+    void * data;
+};
+
+// NOTE(jason): sql should use field->id for bind parameters with "?12", etc
+int
+rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_t * params, int n_params)
+{
+    int result;
+    sqlite3_stmt * stmt;
+
+    result = prepare_db(db, &stmt, sql);
+    if (result != SQLITE_OK) return result;
+
+    if (bind_params_db(stmt, params, n_params)) {
+        finalize_db(stmt);
+        return -1;
+    }
+
+    int n_outputs = sqlite3_column_count(stmt);
+    param_t outputs[n_outputs];
+    for (int i = 0; i < n_outputs; i++) {
+        param_t * p = &outputs[i];
+        const char * column = sqlite3_column_name(stmt, i);
+        field_t * f = by_name_field(B(column));
+        if (!f) {
+            debugf("unknown field name: %s", column);
+            continue;
+        }
+        //debug_blob(f->name);
+
+        // think this should work, but can't test now and this entire function
+        // should eventually be deleted
+        //outputs[i] = local_param(f);
+        p->field = f;
+        p->value = local_blob(f->max_size);
+        p->error = local_blob(128);
+    }
+
+    handler->outputs = outputs;
+    handler->n_outputs = n_outputs;
+    handler->n_rows = 0;
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        for (int i = 0; i < n_outputs; i++) {
+            reset_blob(outputs[i].value);
+            blob_db(stmt, i, outputs[i].value);
+        }
+
+        handler->func(handler);
+        handler->n_rows++;
+    }
+
+    result = finalize_db(stmt);
+
+    handler->outputs = NULL;
+    handler->n_outputs = 0;
+
+    return result;
+}
+
+int
+rows_db(db_t * db, const blob_t * sql, row_handler_db_t * handler)
+{
+    return rows_params_db(db, sql, handler, NULL, 0);
 }
 
 int
