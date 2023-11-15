@@ -1238,13 +1238,21 @@ param_endpoint(endpoint_t * ep, field_id_t field_id)
     return by_id_param(ep->params, ep->n_params, field_id);
 }
 
+blob_t *
+set_param_endpoint(endpoint_t * ep, field_id_t field_id, blob_t * value)
+{
+    param_t * p = param_endpoint(ep, field_id);
+    assert(p != NULL);
+    set_blob(p->value, value);
+    return value;
+}
+
 s64
 set_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
 {
     param_t * p = param_endpoint(ep, field_id);
     assert(p != NULL);
-    reset_blob(p->value);
-    add_s64_blob(p->value, value);
+    set_s64_blob(p->value, value);
     return value;
 }
 
