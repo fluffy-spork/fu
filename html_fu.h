@@ -171,6 +171,8 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(target_blank, "_blank", var) \
     E(center_class, "center", var) \
     E(content_class, "content", var) \
+    E(script, "script", var) \
+    E(defer, "defer", var) \
 
 ENUM_BLOB(res_html, RES_HTML)
 
@@ -382,6 +384,26 @@ void
 src_attr_html(blob_t * html, const blob_t * src)
 {
     attr_html(html, res_html.src, src);
+}
+
+void
+defer_attr_html(blob_t * html)
+{
+    empty_attr_html(html, res_html.defer);
+}
+
+void
+script_html(blob_t * html, blob_t * file)
+{
+    blob_t * url = stk_blob(256);
+    res_url(url, file);
+
+    open_tag_html(html, res_html.script);
+    src_attr_html(html, url);
+    defer_attr_html(html);
+    close_tag_html(html);
+
+    end_element_html(html, res_html.script);
 }
 
 void
