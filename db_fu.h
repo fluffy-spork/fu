@@ -108,6 +108,31 @@ prepare_file_db(db_t * db, sqlite3_stmt **stmt, const blob_t * path)
     return prepare_db(db, stmt, sql);
 }
 
+int
+reset_stmt_db(stmt_db_t * stmt)
+{
+    return sqlite3_reset(stmt);
+}
+
+int
+clear_bindings_db(stmt_db_t * stmt)
+{
+    return sqlite3_clear_bindings(stmt);
+}
+
+int
+step_db(stmt_db_t * stmt)
+{
+    return sqlite3_step(stmt);
+}
+
+s64
+column_count_db(stmt_db_t * stmt)
+{
+    return sqlite3_column_count(stmt);
+}
+
+
 //#define finalize_db(stmt) _finalize_db(stmt, __FILE__, __LINE__)
 //_finalize_db(sqlite3_stmt * stmt, const char * file, s64 line)
 
@@ -235,6 +260,8 @@ cstr_bind_db(sqlite3_stmt * stmt, int index, const char * value)
 int
 text_bind_db(sqlite3_stmt * stmt, int index, const blob_t * value)
 {
+    dev_error(index == 0);
+
     int rc = sqlite3_bind_text(stmt, index, (char *)value->data, value->size, SQLITE_STATIC);
     if (rc) {
         log_error_stmt_db(stmt, "text bind failed");
@@ -248,6 +275,8 @@ text_bind_db(sqlite3_stmt * stmt, int index, const blob_t * value)
 int
 s64_bind_db(sqlite3_stmt * stmt, int index, s64 value)
 {
+    dev_error(index == 0);
+
     int rc = sqlite3_bind_int64(stmt, index, value);
     if (rc) {
         log_error_stmt_db(stmt, "s64 bind failed");
@@ -275,6 +304,13 @@ blob_db(sqlite3_stmt * stmt, int index, blob_t * value)
     }
 
     return 0;
+}
+
+// 0 based index
+ssize_t
+column_name_db(sqlite3_stmt * stmt, int index, blob_t * name)
+{
+    return add_cstr_blob(name, sqlite3_column_name(stmt, index));
 }
 
 int
@@ -946,7 +982,7 @@ delete_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t
 }
 
 int
-sql_type_param(param_t * p)
+sql_type_param(const param_t * p)
 {
     switch (p->field->type) {
         case integer_field_type:
@@ -959,7 +995,7 @@ sql_type_param(param_t * p)
 }
 
 int
-bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
+bind_params_db(sqlite3_stmt * stmt, const param_t * params, int n_params)
 {
     int n_bind = sqlite3_bind_parameter_count(stmt);
 
@@ -980,7 +1016,7 @@ bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
         blob_t * bind_name = B(name + 1);
 
         for (int j = 0; j < n_params; j++) {
-            param_t * p = &params[j];
+            const param_t * p = &params[j];
             if (equal_blob(p->field->name, bind_name)) {
                 bind_to_param[i] = j;
                 break;
@@ -999,7 +1035,7 @@ bind_params_db(sqlite3_stmt * stmt, param_t * params, int n_params)
     for (int i = 0; i < n_bind; i++) {
         int rc = 0;
 
-        param_t * p = &params[bind_to_param[i]];
+        const param_t * p = &params[bind_to_param[i]];
         int sql_type = sql_type_param(p);
         if (sql_type == SQLITE_INTEGER) {
             rc = s64_bind_db(stmt, i + 1, s64_blob(p->value, 0));
