@@ -1,10 +1,10 @@
-# EXPERIMENTAL Unconventional C Library and SQLite Web/App Framework
+# EXPERIMENTAL Unconventional C Library and Web App Server
 
 A new C library without using existing conventions or standards.
 
 Nothing is sacred.
 
-A lot of work to do.
+A lot of work to do, but can run a web app.
 
 ## Getting Started
 
@@ -66,23 +66,23 @@ WantedBy=multi-user.target
 * embedded pre-fork web server
   * only implements what's needed which is relatively small
   * forked processes mean each request is isolated for user data and crashing
-  * (TODO) include https support and letsencrypt so there's no manual work to
-    get https working.  Will initially link to standard linux library like
-    openssl, but eventually include from scratch only https support in fu
   * Currently use haproxy for https and http redirect to https
   * file upload by direct POST from javascript.  avoids encoding, etc.
     currently depends on ffmpeg for media processing.
+  * (TODO) include https support and letsencrypt so there's no manual work to
+    get https working.  Will initially link to standard linux library like
+    openssl, but eventually include from scratch only https support in fu
 
-* generate HTML with function calls
+* generate HTML with code
   * No templating
   * easy to create pages that look similar
   * don't have to learn another language
-  * methods are type checked, etc at build
-  * normal usage won't requiring typing any HTML
+  * functions are type checked, etc at build
+  * normal usage won't require typing any HTML
   * don't necessarily have to even know HTML is most cases
   * (TODO) integrate more standard HTML gen functions from fluffy
 
-* (TODO) generate CSS with function calls
+* (TODO) generate CSS with code
   * integrate existing CSS styles from fluffy
 
 * Minimal javascript
