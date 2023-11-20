@@ -63,6 +63,8 @@
 #define start_list() start_list_html(html)
 #define end_list() end_list_html(html)
 #define list_item(...) list_item_html(html, __VA_ARGS__)
+#define script(...) script_html(html, __VA_ARGS__)
+#define res_script(...) res_script_html(html, __VA_ARGS__)
 
 #define AUTOCOMPLETE_ENUM(var, E) \
     E(off, "off", var) \
@@ -393,17 +395,25 @@ defer_attr_html(blob_t * html)
 }
 
 void
-script_html(blob_t * html, blob_t * file)
+script_html(blob_t * html, blob_t * path)
 {
-    blob_t * url = stk_blob(256);
-    res_url(url, file);
-
     open_tag_html(html, res_html.script);
-    src_attr_html(html, url);
-    defer_attr_html(html);
+    if (valid_blob(path)) {
+        src_attr_html(html, path);
+        defer_attr_html(html);
+    }
     close_tag_html(html);
 
     end_element_html(html, res_html.script);
+}
+
+void
+res_script_html(blob_t * html, blob_t * file)
+{
+    blob_t * url = stk_blob(1024);
+    res_url(url, file);
+
+    script_html(html, url);
 }
 
 void
