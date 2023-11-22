@@ -46,7 +46,8 @@
 #define end_link(...) end_link_html(html)
 #define link(url, content) link_html(html, url, content, NULL)
 #define link_target(url, content, target) link_html(html, url, content, target)
-#define table_start() table_start_html(html)
+#define table_start() table_start_html(html, NULL)
+#define table_class_start(class_name) table_start_html(html, class_name)
 #define table_end() table_end_html(html)
 #define tr_start() tr_start_html(html)
 #define tr_end() tr_end_html(html)
@@ -889,9 +890,9 @@ numeric_input_html(blob_t * html, const blob_t * name, const blob_t * value)
 */
 
 void
-table_start_html(blob_t * html)
+table_start_html(blob_t * html, const blob_t * class_name)
 {
-    start_element_html(html, res_html.table);
+   start_element_id_class_html(html, res_html.table, NULL, class_name);
 }
 
 void
