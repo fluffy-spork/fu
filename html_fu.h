@@ -15,7 +15,8 @@
 #define h1(...) h1_html(html, __VA_ARGS__)
 #define h1_link(...) h1_link_html(html, __VA_ARGS__)
 #define img(...) img_html(html, __VA_ARGS__)
-#define video(...) video_html(html, __VA_ARGS__)
+#define video(...) video_html(html, __VA_ARGS__, false)
+#define autoplay_video(...) video_html(html, __VA_ARGS__)
 #define start_post_form(...) start_post_form_html(html, __VA_ARGS__)
 #define start_get_form(...) start_get_form_html(html, __VA_ARGS__)
 #define end_form() end_form_html(html)
@@ -36,6 +37,7 @@
 #define div_id(...) div_id_html(html, __VA_ARGS__)
 #define div_class(...) div_class_html(html, __VA_ARGS__)
 #define div_id_class(...) div_id_class_html(html, __VA_ARGS__)
+#define placeholder_div(class_name) div_class_html(html, class_name, NULL)
 #define start_div_id(...) start_div_id_html(html, __VA_ARGS__)
 #define start_div_id_class(...) start_div_id_class_html(html, __VA_ARGS__)
 #define end_div() end_div_html(html)
@@ -331,7 +333,7 @@ void
 element_html(blob_t * html, const blob_t * name, const blob_t * content)
 {
     start_element_html(html, name);
-    escape_html(html, content);
+    if (content) escape_html(html, content);
     end_element_html(html, name);
 }
 
@@ -339,7 +341,7 @@ void
 element_id_class_html(blob_t * html, const blob_t * name, const blob_t * id, const blob_t * class_name, const blob_t * content)
 {
     start_element_id_class_html(html, name, id, class_name);
-    escape_html(html, content);
+    if (content) escape_html(html, content);
     end_element_html(html, name);
 }
 
@@ -441,9 +443,7 @@ link_html(blob_t * html, const blob_t * url, const blob_t * content, const blob_
 
     start_link_html(html, url, target);
 
-    if (content != NULL) {
-        escape_html(html, content);
-    }
+    if (content) escape_html(html, content);
 
     end_link_html(html);
 }
