@@ -84,8 +84,8 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(less_than_ref, "&lt;", var) \
     E(error, "error", var) \
     E(errors, "errors", var) \
-    E(doctype, "<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">", var) \
-    E(begin_head, "<html><head><meta name=\"theme-color\" content=\"#000\">", var) \
+    E(doctype, "<!doctype html>", var) \
+    E(begin_head, "<html><head><meta name=\"theme-color\" content=\"#000\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">", var) \
     E(end_head, "</head>", var) \
     E(res_path, "/res/", var) \
     E(begin_title, "<title>", var) \
@@ -106,11 +106,13 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(div, "div", var) \
     E(img, "img", var) \
     E(src, "src", var) \
+    E(data_src, "data-src", var) \
     E(alt, "alt", var) \
     E(video, "video", var) \
     E(controls, "controls", var) \
     E(autoplay, "autoplay", var) \
     E(preload, "preload", var) \
+    E(preload_auto, "auto", var) \
     E(preload_none, "none", var) \
     E(preload_metadata, "metadata", var) \
     E(poster, "poster", var) \
@@ -485,6 +487,24 @@ video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob
     if (autoplay) empty_attr_html(html, res_html.autoplay);
     empty_attr_html(html, res_html.controls);
     //if (alt) attr_html(html, res_html.alt, alt);
+    close_tag_html(html);
+
+    end_tag_html(html, res_html.video);
+}
+
+// for background video tags that aren't visible initially and shouldn't load
+// anything, including a poster
+//
+// src is in data-src and needs to be copied to src when loading
+//
+// like in a slideshow
+void
+data_video_html(blob_t * html, const blob_t * src)
+{
+    open_tag_html(html, res_html.video);
+    attr_html(html, res_html.data_src, src);
+    attr_html(html, res_html.preload, res_html.preload_none);
+    empty_attr_html(html, res_html.controls);
     close_tag_html(html);
 
     end_tag_html(html, res_html.video);

@@ -443,6 +443,12 @@ remaining_blob(const blob_t * src, ssize_t offset)
 }
 
 bool
+begins_with_char_blob(blob_t * b, char c)
+{
+    return b->data[0] == c;
+}
+
+bool
 ends_with_char_blob(blob_t * b, char c)
 {
     return b->data[b->size - 1] == c;
@@ -710,6 +716,19 @@ ssize_t
 scan_line_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
 {
     return scan_blob(dest, src, '\n', poffset);
+}
+
+ssize_t
+skip_u8_blob(const blob_t * b, u8 c, ssize_t * poffset)
+{
+    for (ssize_t i = *poffset; i < (ssize_t)b->size; i++) {
+        if (b->data[i] != c) {
+            *poffset = i;
+            return 0;
+        }
+    }
+
+    return -1;
 }
 
 ssize_t

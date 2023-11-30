@@ -477,8 +477,13 @@ urldecode_params(const blob_t * input, param_t * params, size_t n_params)
 
     int count = 0;
 
-    // XXX(jason): not correct parsing
     ssize_t offset = 0;
+
+    // a '&' at the beginning would be included in whichever param name is
+    // first which is wrong
+    skip_u8_blob(input, '&', &offset);
+
+    // XXX(jason): not correct parsing
     while (scan_blob(urlencoded, input, '=', &offset) != -1) {
         reset_blob(name);
         percent_decode_blob(name, urlencoded);
