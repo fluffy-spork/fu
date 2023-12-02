@@ -182,7 +182,7 @@ copy_fd_file_fu(int out_fd, int in_fd, size_t len)
 {
     // NOTE(jason): from https://stackoverflow.com/questions/7463689/most-efficient-way-to-copy-a-file-in-linux
 
-    blob_t * buf = local_blob(8192);
+    blob_t * buf = stk_blob(8192);
 
     ssize_t ret = 0;
 

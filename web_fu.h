@@ -472,8 +472,8 @@ urldecode_params(const blob_t * input, param_t * params, size_t n_params)
     assert(params != NULL);
     assert(n_params > 0);
 
-    blob_t * name = local_blob(255);
-    blob_t * urlencoded = local_blob(1024);
+    blob_t * name = stk_blob(255);
+    blob_t * urlencoded = stk_blob(1024);
 
     int count = 0;
 
@@ -539,7 +539,7 @@ content_type_magic(const blob_t * data)
     static char mp42_magic[] = { 0x66, 0x74, 0x79, 0x70, 0x6D, 0x70, 0x34, 0x32 };
     static char mov_magic[] = { 0x66, 0x74, 0x79, 0x70 };
 
-    blob_t * magic = local_blob(40);
+    blob_t * magic = stk_blob(40);
     sub_blob(magic, data, 0, magic->capacity);
 
     if (begins_with_blob(data, wrap_array_blob(jpeg_magic))) {
@@ -605,7 +605,7 @@ content_type_path(const blob_t * path)
         return binary_content_type;
     }
 
-    blob_t * magic = local_blob(255);
+    blob_t * magic = stk_blob(255);
     if (read_file_fu(fd, magic) == -1) {
         log_errno("read_file_fu");
         return binary_content_type;
@@ -784,8 +784,8 @@ require_request_head_web(request_t * req)
     blob_t * headers = req->request_head;
     //debug_blob(headers);
 
-    blob_t * name = local_blob(255);
-    blob_t * value = local_blob(1024);
+    blob_t * name = stk_blob(255);
+    blob_t * value = stk_blob(1024);
 
     ssize_t offset = 0;
 
@@ -807,8 +807,8 @@ require_request_head_web(request_t * req)
                 || !equal_blob(value, res_web.connection_close);
         }
         else if (case_equal_blob(res_web.cookie, name)) {
-            blob_t * name_cookie = local_blob(255);
-            blob_t * value_cookie = local_blob(255);
+            blob_t * name_cookie = stk_blob(255);
+            blob_t * value_cookie = stk_blob(255);
 
             ssize_t coff = 0;
             while (scan_blob(name_cookie, value, '=', &coff) != -1) {
@@ -1123,7 +1123,7 @@ payload_too_large_response(request_t * req)
 int
 file_response(request_t * req, const blob_t * dir, const blob_t * path, content_type_t content_type, s64 user_id)
 {
-    blob_t * file_path = local_blob(255);
+    blob_t * file_path = stk_blob(255);
     path_file_fu(file_path, dir, path);
 
     //debug_blob(file_path);
@@ -1188,7 +1188,7 @@ url_params_endpoint(blob_t * url, endpoint_t * ep, param_t * params, size_t n_pa
 int
 redirect_params_endpoint(request_t * req, const endpoint_t * ep, param_t * params, size_t n_params)
 {
-    blob_t * url = local_blob(255);
+    blob_t * url = stk_blob(255);
     add_blob(url, ep->path);
     urlencode_params(url, params, n_params);
 
@@ -1318,7 +1318,7 @@ redirect_next_endpoint(request_t * req, endpoint_t * ep, endpoint_t * default_ep
     }
 
     if (valid_blob(hash)) {
-        blob_t * u = local_blob(next_id->value->size + 2*hash->size);
+        blob_t * u = stk_blob(next_id->value->size + 2*hash->size);
         vadd_blob(u, next_id->value, res_web.hash, hash);
         return redirect_web(req, u);
     }
@@ -1383,7 +1383,7 @@ require_session_web(request_t * req, bool create)
     if (create) {
         s64 new_id = random_s64_fu();
 
-        blob_t * cookie = local_blob(32);
+        blob_t * cookie = stk_blob(32);
         add_random_blob(cookie, 16);
 
         //log_var_blob(cookie);
@@ -1404,7 +1404,7 @@ require_session_web(request_t * req, bool create)
 
         req->session_id = new_id;
 
-        blob_t * c = local_blob(255);
+        blob_t * c = stk_blob(255);
 
         add_blob(c, res_web.name_session_cookie);
         write_blob(c, "=", 1);
@@ -1955,10 +1955,10 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         return bad_request_response(req);
     }
 
-    blob_t * file_key = local_blob(32);
+    blob_t * file_key = stk_blob(32);
     fill_random_blob(file_key);
 
-    blob_t * path = local_blob(255);
+    blob_t * path = stk_blob(255);
     path_upload_web(path, file_key);
 
     s64 file_id;
@@ -1999,7 +1999,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
         req->keep_alive = false;
     }
 
-    blob_t * location = local_blob(255);
+    blob_t * location = stk_blob(255);
     add_s64_blob(location, file_id);
 
     return created_response(req, binary_content_type, location);
@@ -2038,7 +2038,7 @@ files_handler(endpoint_t * ep, request_t * req)
         type = jpeg_content_type;
     }
 
-    blob_t * filename = local_blob(path.value->capacity + 4);
+    blob_t * filename = stk_blob(path.value->capacity + 4);
     vadd_blob(filename, path.value, suffix_content_type(type));
 
     //debug_blob(filename);
@@ -2068,8 +2068,8 @@ handle_request(request_t *req)
 
     // TODO(jason): adjust this size so the entire request is read one shot in
     // non-file upload cases.
-    blob_t * input = local_blob(MAX_REQUEST_BODY/2);
-    blob_t * tmp = local_blob(1024);
+    blob_t * input = stk_blob(MAX_REQUEST_BODY/2);
+    blob_t * tmp = stk_blob(1024);
 
     // NOTE(jason): read in the request line, headers, part of body.  any body
     // will be copied to req->request_body and handlers can read the rest of
@@ -2426,7 +2426,7 @@ main_web(config_web_t * config)
     // everything as IPv6 internally
     hints.ai_flags = AI_PASSIVE | AI_V4MAPPED;
 
-    blob_t * port = local_blob(16);
+    blob_t * port = stk_blob(16);
     add_s64_blob(port, config->port);
 
     struct addrinfo *srv_info;

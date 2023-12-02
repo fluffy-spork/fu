@@ -141,10 +141,10 @@ typedef struct {
     blob_t * error;
 } param_t; // rename field_value_t?
 
-// NOTE(jason): I think this usage of local_blob which uses alloca is ok.
+// NOTE(jason): I think this usage of stk_blob which uses alloca is ok.
 // It shouldn't have issues with pointers in blocks since it isn't a pointer.
 // we'll see.
-#define local_param(f) (param_t){ .field = f, .value = local_blob(f->max_size), .error = local_blob(256) }
+#define local_param(f) (param_t){ .field = f, .value = stk_blob(f->max_size), .error = stk_blob(256) }
 // prefer stk_param and remove local_param
 #define stk_param(f) (param_t){ .field = f, .value = stk_blob(f->max_size), .error = stk_blob(256) }
 

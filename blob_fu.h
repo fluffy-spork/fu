@@ -3,15 +3,15 @@
 // BLOB = binary large object
 // variable sized array
 //
-// thought about a bob_t and blob_t  where bob_t is a fixed size, but then they
-// weren't interchangeable which would be annoying.  That's why there are
-// small_blob, etc which hopefully work for this purpose.  Also now local_blob,
-// etc
-
-// TODO(jason): local_vblob(list of blobs) that allocates a local blob the size
-// of the combined list of blobs and adds them all.  basically alloca + concat
-// also could do vblob for a heap version
-
+// NOTE(jason): not worried about memory usage or immutable.
+// For immutable, I use ENUM_BLOBs as constants.
+//
+// Some things, like constant in blob_t were experiments that could be removed
+// or maybe should put error and constant in a u8 flags var or something.
+//
+// TODO(jason): remove dependencies to C stdlib
+// TODO(jason): getrandom required for random_blob, not sure if I care
+// TODO(jason): replace size_t with probably s64
 
 // for isspace.  need to replace
 #include <ctype.h>
@@ -33,20 +33,14 @@ typedef struct {
     u8 * data;
 } blob_t;
 
-// TODO(jason): maybe this should be called stack_blob?  it's not block local,
-// it's stack frame/function
 // GCC specific syntax for multiple statements as an expression
-#define local_blob(capacity) \
-    ({ blob_t * b = alloca(sizeof(blob_t)); u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); })
-
-// NOTE(jason): stack blob is probably more accurate.  local_ doesn't really
-// tell you anything and it's kind of wrong.
 #define stk_blob(capacity) \
-    ({ blob_t * b = alloca(sizeof(blob_t)); u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); })
+    ({ blob_t * b = alloca(sizeof(blob_t)); u8 * d = alloca(capacity); _init_blob(b, d, capacity, 0, false); })
 
 // stack blob large enough capacity and initialized with an s64
+// NOTE(jason): historically, I think this is mostly used like a constant
 #define stk_s64_blob(n) \
-    ({ blob_t * b = alloca(sizeof(blob_t)); s64 capacity = 32; u8 * d = alloca(capacity); _init_local_blob(b, d, capacity, 0); add_s64_blob(b, n); b; })
+    ({ blob_t * b = alloca(sizeof(blob_t)); s64 capacity = 32; u8 * d = alloca(capacity); _init_blob(b, d, capacity, 0, false); add_s64_blob(b, n); b; })
 
 #define B(cstr) wrap_blob(cstr)
 
@@ -57,22 +51,21 @@ typedef struct {
 // wrap_blob should be a function to wrap an existing array with a specified
 // size/len and B() should directly do this behavior
 #define wrap_blob(cstr) \
-    ({ blob_t * b = alloca(sizeof(blob_t)); _init_local_blob(b, (u8 *)cstr, strlen(cstr), -1); })
+    ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)cstr, strlen(cstr), -1, true); })
 #define wrap_array_blob(array) \
-    ({ blob_t * b = alloca(sizeof(blob_t)); _init_local_blob(b, (u8 *)array, array_size_fu(array), -1); })
+    ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)array, array_size_fu(array), -1, true); })
 
 #define cstr_blob(blob) \
     ({ size_t size = blob->size + 1; char * c = alloca(size); _cstr_blob(blob, c, size); })
 
 blob_t *
-_init_local_blob(blob_t * b, u8 * data, size_t capacity, ssize_t size)
+_init_blob(blob_t * b, u8 * data, size_t capacity, ssize_t size, bool constant)
 {
     b->capacity = capacity;
     b->size = size == -1 ? capacity : (size_t)size;
     b->data = data;
     b->error = 0;
-    // this isn't true for local_blob
-    b->constant = true;
+    b->constant = constant;
 
     return b;
 }
@@ -96,31 +89,6 @@ blob(size_t capacity)
     return b;
 }
 
-// TODO(jason): by having standard sizes there could be pools
-// maybe should be sizes in the names instead of "small", etc
-// these probably aren't necessary anymore after adding local_blob
-#define SMALL_SIZE_BLOB 256
-#define MEDIUM_SIZE_BLOB 4096
-#define LARGE_SIZE_BLOB 65536
-
-blob_t *
-small_blob()
-{
-    return blob(SMALL_SIZE_BLOB);
-}
-
-blob_t *
-medium_blob()
-{
-    return blob(MEDIUM_SIZE_BLOB);
-}
-
-blob_t *
-large_blob()
-{
-    return blob(LARGE_SIZE_BLOB);
-}
-
 void
 free_blob(blob_t * blob)
 {
@@ -129,7 +97,6 @@ free_blob(blob_t * blob)
     free(blob);
 }
 
-// maybe clear? set everything to a specific char?
 void
 erase_blob(blob_t * blob)
 {
@@ -145,8 +112,6 @@ reset_blob(blob_t * blob)
     blob->error = 0;
 }
 
-// TODO(jason): should this just return false if the blob is NULL?  added
-// valid_blob to check if a blob has a value
 bool
 empty_blob(const blob_t * b)
 {
@@ -535,7 +500,7 @@ first_contains_blob(const blob_t * b, const blob_t * target)
     return false;
 }
 
-// XXX: reconsider the ssize_t and -1 to get end of src
+// TODO(jason): reconsider the ssize_t and -1 to get end of src
 // returns the amount written or -1
 ssize_t
 sub_blob(blob_t * dest, const blob_t * src, size_t offset, ssize_t size)
@@ -566,9 +531,12 @@ split_blob(const blob_t * src, u8 c, blob_t * b1, blob_t * b2)
 ssize_t
 scan_fd_blob(blob_t * b, int fd, u8 delim, size_t max)
 {
-    assert(max <= MEDIUM_SIZE_BLOB);
+    // TODO(jason): not sure about this max and buf.  being able to make the
+    // max less than the total size seems good, but I'm not sure why it isn't
+    // attempting to directly read into the blob?
+    assert(max <= 4096);
 
-    u8 buf[MEDIUM_SIZE_BLOB];
+    u8 buf[4096];
     size_t count = 0;
     u8 c;
     ssize_t n;
@@ -644,7 +612,7 @@ scan_blob_blob(blob_t * dest, const blob_t * src, blob_t * target, ssize_t * pof
 ssize_t
 scan_blob(blob_t * dest, const blob_t * src, u8 delim, ssize_t * poffset)
 {
-    blob_t * tmp = local_blob(1);
+    blob_t * tmp = stk_blob(1);
     tmp->data[0] = delim;
     tmp->size = 1;
 
@@ -899,7 +867,7 @@ max_blob(const blob_t * b)
     return max;
 }
 
-// XXX: maybe this should be called add_replaced_blob or something???
+// XXX: maybe this should be called replace_blob or something???
 ssize_t
 escape_blob(blob_t * b, const blob_t * value, const u8 c, const blob_t * replacement)
 {

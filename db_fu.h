@@ -99,7 +99,7 @@ prepare_db(db_t * db, sqlite3_stmt **stmt, const blob_t * sql)
 int
 prepare_file_db(db_t * db, sqlite3_stmt **stmt, const blob_t * path)
 {
-    blob_t * sql = local_blob(8*1024);
+    blob_t * sql = stk_blob(8*1024);
 
     if (load_file(path, sql)) {
         return log_errno("load_file");
@@ -213,7 +213,7 @@ rollback_db(db_t * db)
 int
 savepoint_db(db_t * db, const blob_t * name)
 {
-    blob_t * sql = local_blob(256);
+    blob_t * sql = stk_blob(256);
     vadd_blob(sql, B("savepoint "), name);
     return ddl_db(db, sql);
 }
@@ -221,7 +221,7 @@ savepoint_db(db_t * db, const blob_t * name)
 int
 release_db(db_t * db, const blob_t * name)
 {
-    blob_t * sql = local_blob(256);
+    blob_t * sql = stk_blob(256);
     vadd_blob(sql, B("release "), name);
     return ddl_db(db, sql);
 }
@@ -229,7 +229,7 @@ release_db(db_t * db, const blob_t * name)
 int
 rollback_to_db(db_t * db, const blob_t * name)
 {
-    blob_t * sql = local_blob(256);
+    blob_t * sql = stk_blob(256);
     vadd_blob(sql, B("rollback to "), name);
     return ddl_db(db, sql);
 }
@@ -316,7 +316,7 @@ column_name_db(sqlite3_stmt * stmt, int index, blob_t * name)
 int
 blob_pragma_db(db_t * db, const blob_t * pragma, blob_t * value)
 {
-    blob_t * sql = local_blob(255);
+    blob_t * sql = stk_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -336,7 +336,7 @@ blob_pragma_db(db_t * db, const blob_t * pragma, blob_t * value)
 int
 set_blob_pragma_db(db_t * db, const blob_t * pragma, const blob_t * value)
 {
-    blob_t * sql = local_blob(255);
+    blob_t * sql = stk_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -361,7 +361,7 @@ set_blob_pragma_db(db_t * db, const blob_t * pragma, const blob_t * value)
 int
 set_s64_pragma_db(db_t * db, blob_t * pragma, s64 value)
 {
-    blob_t * sql = local_blob(255);
+    blob_t * sql = stk_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -386,7 +386,7 @@ set_s64_pragma_db(db_t * db, blob_t * pragma, s64 value)
 s64
 s64_pragma_db(db_t * db, blob_t * pragma)
 {
-    blob_t * sql = local_blob(255);
+    blob_t * sql = stk_blob(255);
 
     add_blob(sql, B("pragma "));
     add_blob(sql, pragma);
@@ -790,7 +790,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
 int
 insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * params, int n_params, field_id_t ignore_field)
 {
-    blob_t * sql = local_blob(255);
+    blob_t * sql = stk_blob(255);
 
     add_blob(sql, B("insert into "));
     add_blob(sql, table);
@@ -849,7 +849,7 @@ insert_params(db_t * db, const blob_t * table, s64 * id, s64 user_id, param_t * 
 int
 update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t * id_field, s64 id, field_id_t ignore_field)
 {
-    blob_t * sql = local_blob(255);
+    blob_t * sql = stk_blob(255);
 
     add_blob(sql, B("update "));
     add_blob(sql, table);
@@ -922,7 +922,7 @@ update_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t
 int
 delete_params(db_t * db, blob_t * table, param_t * params, int n_params, field_t * id_field, s64 id)
 {
-    blob_t * sql = local_blob(255);
+    blob_t * sql = stk_blob(255);
 
     add_blob(sql, B("delete from "));
     add_blob(sql, table);
@@ -1101,8 +1101,8 @@ rows_params_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, param_
         // should eventually be deleted
         //outputs[i] = local_param(f);
         p->field = f;
-        p->value = local_blob(f->max_size);
-        p->error = local_blob(128);
+        p->value = stk_blob(f->max_size);
+        p->error = stk_blob(128);
     }
 
     handler->outputs = outputs;
@@ -1183,8 +1183,8 @@ rows_ids_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, s64 * ids
         //debug_blob(f->name);
 
         p->field = f;
-        p->value = local_blob(f->max_size);
-        p->error = local_blob(128);
+        p->value = stk_blob(f->max_size);
+        p->error = stk_blob(128);
     }
 
     // TODO(jason): could also pass the ids array to a single statement using
