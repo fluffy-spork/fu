@@ -116,6 +116,7 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(preload_none, "none", var) \
     E(preload_metadata, "metadata", var) \
     E(poster, "poster", var) \
+    E(playsinline, "playsinline", var) \
     E(anchor, "a", var) \
     E(href, "href", var) \
     E(para, "p", var) \
@@ -486,6 +487,8 @@ video_html(blob_t * html, const blob_t * src, const blob_t * preload, const blob
     if (valid_blob(poster)) attr_html(html, res_html.poster, poster);
     if (autoplay) empty_attr_html(html, res_html.autoplay);
     empty_attr_html(html, res_html.controls);
+    // NOTE(jason): bullshit to work around safari iphone always playing stuff fullscreen
+    empty_attr_html(html, res_html.playsinline);
     //if (alt) attr_html(html, res_html.alt, alt);
     close_tag_html(html);
 
@@ -505,6 +508,8 @@ data_video_html(blob_t * html, const blob_t * src)
     attr_html(html, res_html.data_src, src);
     attr_html(html, res_html.preload, res_html.preload_none);
     empty_attr_html(html, res_html.controls);
+    // NOTE(jason): bullshit to work around safari iphone always playing stuff fullscreen
+    empty_attr_html(html, res_html.playsinline);
     close_tag_html(html);
 
     end_tag_html(html, res_html.video);
