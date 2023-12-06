@@ -476,7 +476,7 @@ rindex_blob(const blob_t * b, u8 c, ssize_t offset)
 int
 trim_ext_blob(blob_t * b)
 {
-    ssize_t size = rindex_blob(b, '.', 0);
+    ssize_t size = rindex_blob(b, '.', -1);
     if (size < 0) {
         return -1;
     }
@@ -484,6 +484,17 @@ trim_ext_blob(blob_t * b)
     b->size = size;
 
     return 0;
+}
+
+ssize_t
+replace_ext_blob(blob_t * b, const blob_t * ext)
+{
+    if (trim_ext_blob(b)) {
+        return 0;
+    }
+
+    write_blob(b, ".", 1);
+    return add_blob(b, ext);
 }
 
 // TODO(jason): why is this "first_contains" instead of "contains"?
