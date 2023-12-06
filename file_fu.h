@@ -51,7 +51,7 @@ new_path_file_fu(const blob_t * dir, const blob_t * file)
 }
 
 // what should happen if there's no '/'
-int
+ssize_t
 dirname_file_fu(const blob_t * path, blob_t * dirname)
 {
     ssize_t index = rindex_blob(path, '/', path->size - 1);
@@ -63,7 +63,7 @@ dirname_file_fu(const blob_t * path, blob_t * dirname)
 }
 
 // if the path separator doesn't exist returns the whole path
-int
+ssize_t
 basename_file_fu(const blob_t * path, blob_t * basename)
 {
     ssize_t index = rindex_blob(path, '/', -1);
