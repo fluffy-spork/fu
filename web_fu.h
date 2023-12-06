@@ -14,9 +14,11 @@
 #define MIN_RESOLUTION 640
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
 
+#define OK_FILE_STATUS 0
 #define ENCODE_FILE_STATUS 1
 #define PROCESSING_FILE_STATUS 2
 #define ENCODE_ERROR_FILE_STATUS 3
+#define DELETE_FILE_STATUS 4
 
 // TODO(jason): possibly should call this http_server (seems too long), httpd
 // (daemon?), or something.  doesn't really matter and "web" is short.
@@ -1544,6 +1546,12 @@ set_status_file(db_t * db, s64 file_id, int file_status)
 }
 
 int
+delete_file_web(db_t * db, s64 file_id)
+{
+    return set_status_file(db, file_id, DELETE_FILE_STATUS);
+}
+
+int
 file_info(db_t * db, param_t * file_id, param_t * path, param_t * content_type)
 {
     return by_id_db(db, B("select path, content_type from file_web where file_id = ?"), s64_blob(file_id->value, 0), path, content_type);
@@ -1671,11 +1679,13 @@ resize_png_web(const blob_t * input, const blob_t * output, s64 width)
     return resize_ffmpeg_web(input, output, width);
 }
 
+// NOTE(jason): poster is from 6 seconds into clip since there's currently 4
+// seconds of padding.
 int
 extract_poster_web(const blob_t * input, const blob_t * output, s64 width)
 {
     blob_t * filter = stk_blob(1024);
-    add_blob(filter, B("-y -vframes 1 -vf scale="));
+    add_blob(filter, B("-y -ss 6 -vframes 1 -vf scale="));
     add_s64_blob(filter, width);
     add_blob(filter, B(":-1"));
 
