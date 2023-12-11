@@ -2265,7 +2265,7 @@ map_window_row_image(image_t * out, const image_t * in, u8 map_blob_f(const blob
             int stride = out->width;
 
             for (int y2 = 0; y2 < size; y2++) {
-                _init_local_blob(&row, &in->data[(y + y2)*stride], size, -1);
+                _init_blob(&row, &in->data[(y + y2)*stride], size, -1, true);
                 inter->data[y2] = map_blob_f(&row);
             }
 
