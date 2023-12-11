@@ -25,7 +25,7 @@ curl http://localhost:8080
 
 In the project I'm building with fu, it runs with systemd as a service
 
-/etc/systemd/system/<app>.server
+/etc/systemd/system/&lt;app&gt;.server
 ```
 [Unit]
 Description=app
