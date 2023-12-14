@@ -854,6 +854,23 @@ add_u16_zero_pad_blob(blob_t * b, u64 n)
     write_blob(b, s, size);
 }
 
+ssize_t
+add_decimal_blob(blob_t * b, s64 num, s64 divisor, int precision)
+{
+    // TODO(jason): needs improvement
+
+    ssize_t start = b->size;
+
+    div_t r = div(num, divisor);
+    add_s64_blob(b, r.quot);
+    if (precision > 0 && r.rem != 0) {
+        write_blob(b, ".", 1);
+        add_s64_zero_pad_blob(b, r.rem, precision);
+    }
+
+    return b->size - start;
+}
+
 u8
 min_blob(const blob_t * b)
 {
