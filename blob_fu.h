@@ -814,12 +814,12 @@ add_s64_blob(blob_t * b, s64 value)
 }
 
 void
-add_s64_zero_pad_blob(blob_t * b, s64 value, size_t width)
+add_s64_zero_pad_blob(blob_t * b, s64 value, ssize_t width)
 {
     blob_t * num = stk_blob(64);
 
     add_s64_blob(num, value);
-    size_t padding = width - num->size;
+    ssize_t padding = width - num->size;
     if (padding > 0) {
         fill_blob(b, '0', padding);
     }
@@ -865,7 +865,7 @@ add_decimal_blob(blob_t * b, s64 num, s64 divisor, int precision)
     add_s64_blob(b, r.quot);
     if (precision > 0 && r.rem != 0) {
         write_blob(b, ".", 1);
-        add_s64_zero_pad_blob(b, r.rem, precision);
+        add_s64_zero_pad_blob(b, abs(r.rem), precision);
     }
 
     return b->size - start;
