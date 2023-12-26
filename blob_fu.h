@@ -999,6 +999,15 @@ read_hex_blob(blob_t * b, void * buf, size_t count)
     return 2*count;
 }
 
+void
+add_hex_s64_blob(blob_t * b, s64 value)
+{
+    // TODO(jason): stop using snprintf
+    char s[256];
+    int size = snprintf(s, 256, "%lx", value);
+    write_blob(b, s, size);
+}
+
 ssize_t
 add_random_blob(blob_t * b, ssize_t n_random)
 {
