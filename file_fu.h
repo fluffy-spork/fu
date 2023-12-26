@@ -167,7 +167,7 @@ write_full_file_fu(int fd, const blob_t * b)
     size_t n = b->size;
 
     while (n) {
-        ssize_t written = write_file_fu(fd, b);
+        ssize_t written = write(fd, b->data + ret, n);
         if (written == -1) return log_errno("write full failed");
 
         n -= written;
