@@ -83,6 +83,13 @@ const color_t YELLOW = {
     .alpha = 255
 };
 
+// TODO(jason): add size to struct and remove n_pixels
+ssize_t
+size_image(image_t * img)
+{
+    return img->n_pixels * img->channels;
+}
+
 size_t
 write_image(int fd, image_t * img)
 {
