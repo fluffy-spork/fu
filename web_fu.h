@@ -55,6 +55,7 @@ ENUM_BLOB(method, METHOD)
     E(video_any, "video/*", var) \
     E(webp, "image/webp", var) \
     E(json, "application/json", var) \
+    E(mpg, "video/mpeg", var) \
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
@@ -321,6 +322,9 @@ const blob_t * ffmpeg_path_web;
     E(deny_x_frame_options,"DENY", var) \
     E(content_security_policy,"content-security-policy", var) \
     E(self_default_content_security_policy,"default-src 'self' blob:", var) \
+    E(transfer_encoding,"transfer-encoding", var) \
+    E(chunked_transfer_encoding,"chunked", var) \
+    E(end_chunk_transfer_encoding,"0\r\n\r\n", var) \
     E(name_session_cookie,"z", var) \
     E(session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=lax", var) \
     E(secure_session_cookie_attributes,"; path=/; max-age=15552000; httponly; samesite=lax; secure", var) \
@@ -350,6 +354,7 @@ const blob_t * ffmpeg_path_web;
     E(access_log_table, "access_log_web", var) \
     E(dot_webp,".webp", var) \
     E(app_png, "app.png", var) \
+    E(dot_mpg,".mpg", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -598,6 +603,9 @@ content_type_path(const blob_t * path)
     }
     else if (ends_with_blob(path, res_web.dot_ts)) {
         return ts_content_type;
+    }
+    else if (ends_with_blob(path, res_web.dot_mpg)) {
+        return mpg_content_type;
     }
 
     // if there's no extension, attempt to identify based on magic number
@@ -916,6 +924,8 @@ status_line(request_t * req)
 }
 */
 
+// TODO(jason): possibly confusing that this includes the blank line.  it means
+// extra headers have to be added before calling thie function
 void
 add_response_headers(request_t *req)
 {
@@ -931,7 +941,7 @@ add_response_headers(request_t *req)
     if (req->content_length > 0) {
         u64_header(t, res_web.content_length, req->content_length);
     }
-    else {
+    else if (req->body->size > 0) {
         req->content_length = req->body->size;
         u64_header(t, res_web.content_length, (u64)req->body->size);
     }
