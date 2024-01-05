@@ -11,13 +11,18 @@
 // ^^^ not sure what this meant???  Maybe referring to the headers that had to
 // be included.
 
+// TODO(jason): currently, BGRA, but sounds like switching to RGBA is possible.
+// Maybe have been due to old SDL.  From google, it looks like RGBA is now
+// standard and BGRA is an old hardware thing.
+// netbpm P7 PAM format is RGBA
+
 typedef struct {
     int width;
     int height;
     int channels;
     int stride;
     int n_pixels; // TODO(jason): I don't think this is actually useful and possibly encourages bad behavior ignoring stride?
-    u8 *data;
+    u8 * data;
 } image_t;
 
 typedef struct {
@@ -85,7 +90,7 @@ const color_t YELLOW = {
 
 // TODO(jason): add size to struct and remove n_pixels
 ssize_t
-size_image(image_t * img)
+size_image(const image_t * img)
 {
     return img->n_pixels * img->channels;
 }
@@ -94,6 +99,18 @@ size_t
 write_image(int fd, image_t * img)
 {
     return write(fd, img->data, img->n_pixels * img->channels);
+}
+
+bool
+equal_image(image_t * a, image_t * b)
+{
+    if (a->n_pixels  == b->n_pixels
+            && a->channels == b->channels
+            && memcmp(a->data, b->data, size_image(a) == 0)) {
+        return true;
+    }
+
+    return false;
 }
 
 void debug_color(const char *label, const color_t *c)
@@ -896,7 +913,7 @@ sad_image(image_t *img1, image_t *img2)
     u64 sad = 0;
     size_t imax = img1->n_pixels * img1->channels;
     for (size_t i = 0; i < imax; i++) {
-        sad += abs(img1->data[i] - img2->data[i]);
+        sad += abs((int)img1->data[i] - img2->data[i]);
     }
 
     return sad;
@@ -1710,7 +1727,7 @@ mix_image(image_t *old, image_t *new, const int weight)
 }
 
 void
-set_all_pixels(image_t *img, const u8 r, const u8 g, const u8 b, const u8 a)
+set_all_rgba_image(image_t *img, const u8 r, const u8 g, const u8 b, const u8 a)
 {
     assert(img->channels == 4);
 
@@ -1722,7 +1739,14 @@ set_all_pixels(image_t *img, const u8 r, const u8 g, const u8 b, const u8 a)
     }
 }
 
-void fill_rect(image_t *img, int x, int y, int width, int height, const color_t *fg)
+void
+set_all_color_image(image_t * img, color_t c)
+{
+    set_all_rgba_image(img, c.red, c.green, c.blue, c.alpha);
+}
+
+void
+fill_rect(image_t *img, int x, int y, int width, int height, const color_t *fg)
 {
     x = clamp(x, 0, img->width - 1);
     y = clamp(y, 0, img->height - 1);
@@ -1737,12 +1761,14 @@ void fill_rect(image_t *img, int x, int y, int width, int height, const color_t 
     }
 }
 
-void fill_square_center(image_t *img, int x, int y, int size, const color_t *fg)
+void
+fill_square_center(image_t *img, int x, int y, int size, const color_t *fg)
 {
     fill_rect(img, x - size/2, y - size/2, size, size, fg);
 }
 
-void draw_line_low(image_t *img, int x0, int y0, int x1, int y1, const color_t *fg)
+void
+draw_line_low(image_t *img, int x0, int y0, int x1, int y1, const color_t *fg)
 {
     int dx = x1 - x0;
     int dy = y1 - y0;
@@ -2791,5 +2817,121 @@ label_connected_components_image(const image_t * img, image_t * labels)
     }
 
     lut_channel_image(labels, labels, lut, 0);
+}
+
+ssize_t
+write_pam_image(int fd, const image_t * img)
+{
+    dev_error(img->channels != 4);
+
+    blob_t * hdr = stk_blob(1024);
+    add_blob(hdr, B("P7\n"));
+    add_blob(hdr, B("WIDTH "));
+    add_s64_blob(hdr, img->width);
+    add_blob(hdr, B("\nHEIGHT "));
+    add_s64_blob(hdr, img->height);
+    add_blob(hdr, B("\nDEPTH 4\nMAXVAL 255\nTUPLTYPE RGB_ALPHA\nENDHDR\n"));
+
+    size_t n = size_image(img);
+    blob_t * rgba = blob(n);
+    for (size_t i = 0; i < n; i += img->channels) {
+        rgba->data[i] = img->data[i + 2];
+        rgba->data[i + 1] = img->data[i + 1];
+        rgba->data[i + 2] = img->data[i];
+        rgba->data[i + 3] = img->data[i + 3];
+    }
+    // TODO(jason): i keep directlying updating blobs like I shouldn't and get
+    // caught not updating the size.
+    rgba->size = n;
+
+    int rc = 0;
+
+    if (write_file_fu(fd, hdr) == -1) {
+        rc = -1;
+        goto error;
+    }
+
+    if (write_full_file_fu(fd, rgba) == -1) {
+        log_errno("write_full_file");
+        rc = -1;
+        goto error;
+    }
+
+error:
+    free_blob(rgba);
+
+    return rc;
+}
+
+ssize_t
+read_pam_image(int fd, image_t * img)
+{
+    dev_error(img->channels != 4);
+
+    // XXX(jason): definitely need to fix this
+    // 256x256 = 69
+    // 1024x256 = 70
+    blob_t * hdr = stk_blob(69);
+    ssize_t count_hdr = read_file_fu(fd, hdr);
+    if (count_hdr == -1) {
+        return log_errno("read pam header");
+    }
+    else if (count_hdr == 0) {
+        return 0;
+    }
+
+    //debug_blob(hdr);
+
+    if (!begins_with_blob(hdr, B("P7\n"))) {
+        error_log("invalid pam file", "pam", 7);
+        return -1;
+    }
+
+    size_t size = size_image(img);
+
+    ssize_t count = read(fd, img->data, size);
+    if (count == -1) {
+        log_errno("read pam image");
+        return -1;
+    }
+
+    if ((size_t)count != size) {
+        debug_s64(read);
+        debug_s64(size);
+        log_errno("read pam image");
+        return -1;
+    }
+
+    // swap R and B channels
+    u8 tmp;
+    for (size_t i = 0; i < size; i += 4) {
+        tmp = img->data[i];
+        img->data[i] = img->data[i + 2];
+        img->data[i + 2] = tmp;
+    }
+
+    return size;
+}
+
+int
+save_pam_image(const blob_t * path, const image_t * img)
+{
+    int rc = 0;
+
+	int fd = open_write_file_fu(path);
+	if (fd == -1) {
+		rc = log_errno("open_write_file_fu");
+        goto error;
+	}
+
+	if (write_pam_image(fd, img) == -1) {
+        rc = -1;
+        goto error;
+	}
+
+error:
+    close(fd);
+
+	return rc;
 }
 
