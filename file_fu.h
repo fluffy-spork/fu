@@ -126,6 +126,12 @@ open_write_file_fu(const blob_t * path)
     return open_file_fu(path, O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
 }
 
+int
+open_trunc_file(const blob_t * path)
+{
+    return open_file_fu(path, O_WRONLY|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR);
+}
+
 // TODO(jason): are the default permissions ok?
 int
 open_read_write_file_fu(const blob_t * path)
@@ -329,7 +335,7 @@ load_file(const blob_t * path, blob_t * data)
 int
 save_file(const blob_t * path, const blob_t * data)
 {
-	int fd = open_write_file_fu(path);
+	int fd = open_trunc_file(path);
 	if (fd == -1) {
 		return log_errno("open_write_file_fu");
 	}
@@ -337,6 +343,8 @@ save_file(const blob_t * path, const blob_t * data)
 	if (write_full_file_fu(fd, data) == -1) {
         return -1;
 	}
+
+    close(fd);
 
 	return 0;
 }
