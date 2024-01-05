@@ -36,6 +36,12 @@ typedef double f64;
 #define MAX_U64 UINT64_MAX
 #define MAX_S64 INT64_MAX
 
+#define for_i(n) for (int i = 0; i < n; i++)
+#define for_j(n) for (int j = 0; j < n; j++)
+
+// TODO(jason): I think I want to stop using size_t
+#define for_size_i(n) for (size_t i = 0; i < n; i++)
+
 typedef enum {
     U8_DATA_TYPE,
     U16_DATA_TYPE,
@@ -214,6 +220,18 @@ min_size(size_t a, size_t b)
 
 size_t
 max_size(size_t a, size_t b)
+{
+    return a > b ? a : b;
+}
+
+ssize_t
+min_ssize(ssize_t a, ssize_t b)
+{
+    return a < b ? a : b;
+}
+
+ssize_t
+max_ssize(ssize_t a, ssize_t b)
 {
     return a > b ? a : b;
 }
