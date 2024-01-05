@@ -124,6 +124,16 @@ valid_blob(const blob_t * b)
     return b != NULL && b->size > 0;
 }
 
+// TODO(jason): what should this return type be to be a u8 value, but still
+// allow returning -1 on error.
+// surely there's a better name
+s32
+offset_blob(const blob_t * b, size_t offset)
+{
+    if (offset >= b->size) return -1;
+    return b->data[offset];
+}
+
 // TODO(jason): is this weird and should just convert to an integer?
 bool
 not_zero_blob(const blob_t * b)
@@ -697,17 +707,66 @@ scan_line_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
     return scan_blob(dest, src, '\n', poffset);
 }
 
+// scan until a duplicate u8 is found.  the poffset should be set to the first
+// character of the duplicate
+ssize_t
+scan_dupe_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
+{
+    if (*poffset < 0) return -1;
+
+    size_t offset = *poffset;
+
+    assert(src->size > 0);
+
+    // end of data
+    if (offset >= src->size) return -1;
+
+    // NOTE(jason): if not found returns the whole blob
+    size_t size = remaining_blob(src, offset);
+
+    u8 last = src->data[offset];
+    size_t imax = src->size;
+    for (size_t i = offset + 1; i < imax; i++) {
+        u8 v = src->data[i];
+        if (v == last) {
+            size = (i - offset) - 1;
+            break;
+        }
+
+        last = v;
+    }
+
+    if (size > 0) {
+        if (write_blob(dest, &src->data[offset], size) == -1) return -1;
+    }
+
+    *poffset = offset + size;
+
+    return size;
+}
+
+// return count of skipped c with poffset set to non-matching char
 ssize_t
 skip_u8_blob(const blob_t * b, u8 c, ssize_t * poffset)
 {
-    for (ssize_t i = *poffset; i < (ssize_t)b->size; i++) {
+    ssize_t offset = *poffset;
+
+    // NOTE(jason): if not found returns the remaining blob
+    ssize_t size = remaining_blob(b, offset);
+
+    ssize_t imax = b->size;
+    for (ssize_t i = offset; i < imax; i++) {
+        //debug_s64(i);
+        //debug_s64(b->data[i]);
         if (b->data[i] != c) {
-            *poffset = i;
-            return 0;
+            size = i - offset;
+            break;
         }
     }
 
-    return -1;
+    *poffset = offset + size;
+
+    return size;
 }
 
 ssize_t
@@ -947,6 +1006,8 @@ c_escape_blob(blob_t * b, const blob_t * value)
     return written;
 }
 
+#define write_hex_blob_blob(b, s) write_hex_blob(b, s->data, s->size)
+
 // NOTE(jason): using hex for short values like 64-bit is better than base64
 // since it's simpler and the overhead isn't worth it.
 ssize_t
@@ -997,6 +1058,21 @@ read_hex_blob(blob_t * b, void * buf, size_t count)
     }
 
     return 2*count;
+}
+
+#define debug_hex_blob(b) _debug_hex_blob(b, #b)
+
+int
+_debug_hex_blob(const blob_t * b, const char * label)
+{
+    dev_error(b == NULL);
+
+    size_t n = b->size * 2;
+    // TODO(jason): a little wonky
+    blob_t * hex = stk_blob(n);
+    write_hex_blob_blob(hex, b);
+    debugf("%s: %s", label, cstr_blob(hex));
+    return hex->error;
 }
 
 void
