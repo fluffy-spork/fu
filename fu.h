@@ -40,7 +40,8 @@ typedef double f64;
 #define for_j(n) for (int j = 0; j < n; j++)
 
 // TODO(jason): I think I want to stop using size_t
-#define for_size_i(n) for (size_t i = 0; i < n; i++)
+#define for_i_size(n) for (size_t i = 0; i < (size_t)n; i++)
+#define for_j_size(n) for (size_t j = 0; j < (size_t)n; j++)
 
 typedef enum {
     U8_DATA_TYPE,
@@ -93,6 +94,8 @@ typedef enum {
 
 #define debug_s64(var) debugf("%s: %ld", #var, (s64)var);
 #define debug_u64(var) debugf("%s: %lu", #var, (u64)var);
+
+#define debug_hex_u64(var) debugf("%s: %lx", #var, (u64)var);
 
 #define debug_f64(var) debugf("%s: %f", #var, (f64)var);
 

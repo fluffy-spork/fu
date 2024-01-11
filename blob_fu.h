@@ -12,6 +12,7 @@
 // TODO(jason): remove dependencies to C stdlib
 // TODO(jason): getrandom required for random_blob, not sure if I care
 // TODO(jason): replace size_t with probably s64
+// TODO(jason): add some functions for set/get of s16, s32, etc as binary
 
 // for isspace.  need to replace
 #include <ctype.h>
@@ -23,6 +24,9 @@
 #define error_log_blob(var) error_log(#var, "error_log_blob", var->error)
 // TODO(jason): needs to handle 0 bytes within string and be able to print hex
 #define debug_blob(var) debugf("%s: %s", #var, cstr_blob(var))
+
+#define for_i_blob(b) for_i_size(b->size)
+#define for_j_blob(b) for_j_size(b->size)
 
 typedef struct {
     // XXX maybe make this flags?  could track error, pooled, etc
@@ -97,10 +101,12 @@ free_blob(blob_t * blob)
     free(blob);
 }
 
+// NOTE(jason): sets full capacity to 0 to wipe memory.  use reset_blob to just
+// abandon data.
 void
 erase_blob(blob_t * blob)
 {
-    memset(blob->data, 0, blob->size);
+    memset(blob->data, 0, blob->capacity);
     blob->size = 0;
     blob->error = 0;
 }
@@ -132,6 +138,15 @@ offset_blob(const blob_t * b, size_t offset)
 {
     if (offset >= b->size) return -1;
     return b->data[offset];
+}
+
+// returns -1 if the offset is larger than the current size
+ssize_t
+set_offset_blob(blob_t * b, size_t offset, u8 value)
+{
+    if (offset >= b->size) return -1;
+    b->data[offset] = value;
+    return b->size++;
 }
 
 // TODO(jason): is this weird and should just convert to an integer?
@@ -333,7 +348,7 @@ add_blob(blob_t * dest, const blob_t * src)
 }
 
 ssize_t
-set_blob(blob_t * b, blob_t * value)
+set_blob(blob_t * b, const blob_t * value)
 {
     // TODO(jason): should this be clearing the error since reset_blob does?
     // overwrite_blob doesn't
@@ -410,6 +425,8 @@ add_cstr_blob(blob_t * b, const char * cstr)
     return write_blob(b, cstr, strlen(cstr));
 }
 
+// I keep confusing this for available_blob, but really shouldn't since I don't
+// have an offset in those cases.
 ssize_t
 remaining_blob(const blob_t * src, ssize_t offset)
 {
@@ -427,6 +444,18 @@ bool
 ends_with_char_blob(blob_t * b, char c)
 {
     return b->data[b->size - 1] == c;
+}
+
+bool
+begins_u8_blob(blob_t * b, u8 v)
+{
+    return b->data[0] == v;
+}
+
+bool
+ends_u8_blob(blob_t * b, u8 v)
+{
+    return b->data[b->size - 1] == v;
 }
 
 bool
