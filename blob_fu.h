@@ -58,6 +58,9 @@ typedef struct {
     ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)cstr, strlen(cstr), -1, true); })
 #define wrap_array_blob(array) \
     ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)array, array_size_fu(array), -1, true); })
+#define wrap_size_blob(array, size) \
+    ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)array, size, -1, true); })
+
 
 #define cstr_blob(blob) \
     ({ size_t size = blob->size + 1; char * c = alloca(size); _cstr_blob(blob, c, size); })
@@ -586,7 +589,9 @@ scan_fd_blob(blob_t * b, int fd, u8 delim, size_t max)
     // attempting to directly read into the blob?
     assert(max <= 4096);
 
-    u8 buf[4096];
+    size_t size_buf = min_size(available_blob(b), max);
+    u8 * buf = alloca(size_buf);
+    //u8 buf[4096];
     size_t count = 0;
     u8 c;
     ssize_t n;
@@ -594,6 +599,8 @@ scan_fd_blob(blob_t * b, int fd, u8 delim, size_t max)
     {
         buf[count] = c;
         count++;
+
+        if (count == size_buf) break;
     }
 
     if (count > 0) write_blob(b, buf, count);
@@ -1212,4 +1219,17 @@ enum_blob(blob_t ** enum_blob, size_t n, blob_t * value, int default_id)
     log_blob(var.list[e], label);
 
 #define for_each_enum_blob(var) for (size_t i = 0; i < var.n_list; i++)
+
+u64
+sad_blob(blob_t * b1, blob_t * b2)
+{
+    dev_error(b1->size != b2->size);
+
+    u64 sad = 0;
+    for_i_blob(b1) {
+        sad += abs((int)b1->data[i] - b2->data[i]);
+    }
+
+    return sad;
+}
 

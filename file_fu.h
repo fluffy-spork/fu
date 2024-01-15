@@ -140,9 +140,16 @@ open_read_write_file_fu(const blob_t * path)
 }
 
 ssize_t
-read_file_fu(int fd, blob_t * b)
+read_max_file_fu(int fd, blob_t * b, size_t max)
 {
-    size_t available = available_blob(b);
+    size_t available;
+    if (max == 0) {
+        available = available_blob(b);
+    }
+    else {
+        available = min_size(available_blob(b), max);
+    }
+
     if (available == 0) {
         return 0;
     }
@@ -156,6 +163,12 @@ read_file_fu(int fd, blob_t * b)
 
     // size 0 means an EOF was read.
     return size;
+}
+
+ssize_t
+read_file_fu(int fd, blob_t * b)
+{
+    return read_max_file_fu(fd, b, 0);
 }
 
 ssize_t
