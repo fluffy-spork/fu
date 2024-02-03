@@ -14,6 +14,7 @@
 #include <sys/random.h>
 #include <time.h>
 #include <unistd.h>
+#include <inttypes.h>
 
 #include <libgen.h>
 
@@ -94,13 +95,13 @@ typedef enum {
 
 #define debug_u8(var) debugf("%s: %u", #var, (u8)var);
 
-#define debug_s64(var) debugf("%s: %ld", #var, (s64)var);
-#define debug_u64(var) debugf("%s: %lu", #var, (u64)var);
+#define debug_s64(var) debugf("%s: %" PRId64, #var, (s64)var);
+#define debug_u64(var) debugf("%s: %" PRIu64, #var, (u64)var);
 
-#define debug_item_s64(array, index) debugf("%s[%ld]: %ld", #array, (s64)index, (s64)array[index]);
-#define debug_hex_item_s64(array, index) debugf("%s[0x%lx]: %ld", #array, (s64)index, (s64)array[index]);
+#define debug_item_s64(array, index) debugf("%s[%" PRId64 "]: %" PRId64, #array, (s64)index, (s64)array[index]);
+#define debug_hex_item_s64(array, index) debugf("%s[0x%" PRIx64 "]: %" PRId64, #array, (s64)index, (s64)array[index]);
 
-#define debug_hex_u64(var) debugf("%s: 0x%08lx", #var, (u64)var);
+#define debug_hex_u64(var) debugf("%s: 0x%08" PRIx64, #var, (u64)var);
 #define debug_hex_u8(var) debugf("%s: 0x%02x", #var, (u8)var);
 
 #define debug_f64(var) debugf("%s: %f", #var, (f64)var);
