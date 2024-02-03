@@ -92,10 +92,16 @@ typedef enum {
     do { fprintf(stderr, "D   %s:%s:%d %s\n", __FILE__, __func__, __LINE__, msg); } while (0)
 #endif
 
+#define debug_u8(var) debugf("%s: %u", #var, (u8)var);
+
 #define debug_s64(var) debugf("%s: %ld", #var, (s64)var);
 #define debug_u64(var) debugf("%s: %lu", #var, (u64)var);
 
-#define debug_hex_u64(var) debugf("%s: %lx", #var, (u64)var);
+#define debug_item_s64(array, index) debugf("%s[%ld]: %ld", #array, (s64)index, (s64)array[index]);
+#define debug_hex_item_s64(array, index) debugf("%s[0x%lx]: %ld", #array, (s64)index, (s64)array[index]);
+
+#define debug_hex_u64(var) debugf("%s: 0x%08lx", #var, (u64)var);
+#define debug_hex_u8(var) debugf("%s: 0x%02x", #var, (u8)var);
 
 #define debug_f64(var) debugf("%s: %f", #var, (f64)var);
 

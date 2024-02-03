@@ -441,6 +441,11 @@ set_pixel(image_t *img, int x, int y, const color_t *fg)
         data[i + 1] = fg->green;
         data[i + 2] = fg->red;
         data[i + 3] = fg->alpha;
+    }
+    if (img->channels == 3) {
+        data[i] = fg->red;
+        data[i + 1] = fg->green;
+        data[i + 2] = fg->blue;
     } else {
         data[i] = fg->blue;
     }
@@ -1727,22 +1732,41 @@ mix_image(image_t *old, image_t *new, const int weight)
 }
 
 void
-set_all_rgba_image(image_t *img, const u8 r, const u8 g, const u8 b, const u8 a)
+set_all_bgra_image(image_t *img, const u8 r, const u8 g, const u8 b, const u8 a)
 {
     assert(img->channels == 4);
 
-    for (int i = 0; i < img->n_pixels*img->channels;) {
-        img->data[i++] = b;
-        img->data[i++] = g;
-        img->data[i++] = r;
-        img->data[i++] = a;
+    for (int i = 0; i < img->n_pixels*img->channels; i += img->channels) {
+        img->data[i] = b;
+        img->data[i + 1] = g;
+        img->data[i + 2] = r;
+        img->data[i + 3] = a;
+    }
+}
+
+void
+set_all_rgb_image(image_t *img, const u8 r, const u8 g, const u8 b)
+{
+    assert(img->channels == 3);
+
+    for (int i = 0; i < img->n_pixels*img->channels; i += img->channels) {
+        img->data[i] = r;
+        img->data[i + 1] = g;
+        img->data[i + 2] = b;
     }
 }
 
 void
 set_all_color_image(image_t * img, color_t c)
 {
-    set_all_rgba_image(img, c.red, c.green, c.blue, c.alpha);
+    dev_error(img->channels < 3);
+
+    if (img->channels == 4) {
+        set_all_bgra_image(img, c.red, c.green, c.blue, c.alpha);
+    }
+    else if (img->channels == 3) {
+        set_all_rgb_image(img, c.red, c.green, c.blue);
+    }
 }
 
 void
@@ -2820,7 +2844,7 @@ label_connected_components_image(const image_t * img, image_t * labels)
 }
 
 ssize_t
-write_pam_image(int fd, const image_t * img)
+write_pam_bgra_image(int fd, const image_t * img)
 {
     dev_error(img->channels != 4);
 
@@ -2861,6 +2885,45 @@ error:
     free_blob(rgba);
 
     return rc;
+}
+
+ssize_t
+write_pam_rgb_image(int fd, const image_t * img)
+{
+    dev_error(img->channels != 3);
+
+    blob_t * hdr = stk_blob(1024);
+    add_blob(hdr, B("P7\n"));
+    add_blob(hdr, B("WIDTH "));
+    add_s64_blob(hdr, img->width);
+    add_blob(hdr, B("\nHEIGHT "));
+    add_s64_blob(hdr, img->height);
+    add_blob(hdr, B("\nDEPTH 3\nMAXVAL 255\nTUPLTYPE RGB\nENDHDR\n"));
+
+    if (write_file_fu(fd, hdr) == -1) {
+        return log_errno("write pam header");
+    }
+
+    if (write(fd, img->data, size_image(img)) == -1) {
+        return log_errno("write");
+    }
+
+    return 0;
+}
+
+ssize_t
+write_pam_image(int fd, const image_t * img)
+{
+    if (img->channels == 4) {
+        return write_pam_bgra_image(fd, img);
+    }
+    else if (img->channels == 3) {
+        return write_pam_rgb_image(fd, img);
+    }
+    else {
+        debug_s64(img->channels);
+        dev_error("unsupported channel count");
+    }
 }
 
 ssize_t
