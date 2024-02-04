@@ -950,7 +950,7 @@ add_u16_zero_pad_blob(blob_t * b, u64 n)
 }
 
 ssize_t
-add_decimal_blob(blob_t * b, s64 num, s64 divisor, int precision)
+add_decimal_blob(blob_t * b, s64 num, int divisor, int precision)
 {
     // TODO(jason): needs improvement
 
