@@ -904,7 +904,7 @@ add_s64_blob(blob_t * b, s64 value)
     // and direct
     // possibly should use %jd and cast to intmax_t
     char s[256];
-    int size = snprintf(s, 256, "%ld", value);
+    int size = snprintf(s, 256, "%" PRId64, value);
     write_blob(b, s, size);
 }
 
@@ -935,7 +935,7 @@ add_u64_blob(blob_t * b, u64 n)
     // and direct
     // possibly should use %ju and cast to uintmax_t
     char s[256];
-    int size = snprintf(s, 256, "%lu", n);
+    int size = snprintf(s, 256, "%" PRIu64, n);
     write_blob(b, s, size);
 }
 
@@ -956,11 +956,11 @@ add_decimal_blob(blob_t * b, s64 num, int divisor, int precision)
 
     ssize_t start = b->size;
 
-    div_t r = div(num, divisor);
+    lldiv_t r = lldiv(num, divisor);
     add_s64_blob(b, r.quot);
     if (precision > 0 && r.rem != 0) {
         write_blob(b, ".", 1);
-        add_s64_zero_pad_blob(b, abs(r.rem), precision);
+        add_s64_zero_pad_blob(b, llabs(r.rem), precision);
     }
 
     return b->size - start;
@@ -1044,6 +1044,12 @@ c_escape_blob(blob_t * b, const blob_t * value)
 
 #define write_hex_blob_blob(b, s) write_hex_blob(b, s->data, s->size)
 
+u8
+_char_to_hex_blob(u8 c) {
+    //assert(c < 16);
+    return (c > 9) ? (c - 10) + 'a' : c + '0';
+}
+
 // NOTE(jason): using hex for short values like 64-bit is better than base64
 // since it's simpler and the overhead isn't worth it.
 ssize_t
@@ -1060,15 +1066,10 @@ write_hex_blob(blob_t * b, void * src, ssize_t n_src)
     // TODO(jason): be better if this didn't allocate
     char * hex = alloca(n_hex);
 
-    u8 char_to_hex(u8 c) {
-        //assert(c < 16);
-        return (c > 9) ? (c - 10) + 'a' : c + '0';
-    }
-
     for (ssize_t i = 0, j = 0; i < n_src; i++, j += 2) {
         u8 c = data[i];
-        hex[j] = char_to_hex((c & 0xf0) >> 4);
-        hex[j + 1] = char_to_hex(c & 0x0f);
+        hex[j] = _char_to_hex_blob((c & 0xf0) >> 4);
+        hex[j + 1] = _char_to_hex_blob(c & 0x0f);
     }
 
     return write_blob(b, hex, n_hex);
@@ -1076,20 +1077,21 @@ write_hex_blob(blob_t * b, void * src, ssize_t n_src)
 
 #define read_hex_blob_blob(src, dest) read_hex_blob(src, dest->data, dest->size);
 
+u8
+_hex_to_digit_blob(u8 h) {
+    //assert((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f'));
+    return (h >= '0' && h <= '9') ? h - '0' : 10 + h - 'a';
+}
+
 ssize_t
 read_hex_blob(blob_t * b, void * buf, size_t count)
 {
     u8 * hex = b->data;
     u8 * data = buf;
 
-    u8 hex_to_digit(u8 h) {
-        //assert((h >= '0' && h <= '9') || (h >= 'a' && h <= 'f'));
-        return (h >= '0' && h <= '9') ? h - '0' : 10 + h - 'a';
-    }
-
     for (size_t i = 0, j = 0; i < count; i++, j += 2) {
-        u8 upper = hex_to_digit(hex[j]) << 4;
-        u8 lower = hex_to_digit(hex[j + 1]);
+        u8 upper = _hex_to_digit_blob(hex[j]) << 4;
+        u8 lower = _hex_to_digit_blob(hex[j + 1]);
         data[i] = upper | lower;
     }
 
@@ -1116,7 +1118,7 @@ add_hex_s64_blob(blob_t * b, s64 value)
 {
     // TODO(jason): stop using snprintf
     char s[256];
-    int size = snprintf(s, 256, "%lx", value);
+    int size = snprintf(s, 256, "%" PRIx64, value);
     write_blob(b, s, size);
 }
 
@@ -1126,7 +1128,7 @@ add_random_blob(blob_t * b, ssize_t n_random)
     assert(n_random <= 256);
 
     u8 * r = alloca(n_random);
-    if (getrandom(r, n_random, 0) != n_random) {
+    if (random_fu(r, n_random) != n_random) {
         return -1;
     }
 
@@ -1198,8 +1200,8 @@ alpha_numeric_hyphen_blob(const blob_t * b)
     var_name.name = const_blob(value); \
     var_name.list[name##_##var_name] = var_name.name; \
 
-int
-enum_blob(blob_t ** enum_blob, size_t n, blob_t * value, int default_id)
+size_t
+enum_blob(blob_t ** enum_blob, size_t n, blob_t * value, size_t default_id)
 {
     // NOTE(jason): enum init method likely needs to be called
     assert(n > 0);
