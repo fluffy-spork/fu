@@ -11,10 +11,13 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/random.h>
 #include <time.h>
 #include <unistd.h>
 #include <inttypes.h>
+
+#if __linux__
+    #include <sys/random.h>
+#endif
 
 #include <libgen.h>
 
@@ -111,7 +114,7 @@ typedef enum {
 #define gigabytes(n_bytes) round((double)n_bytes/1024/1024)
 
 bool
-dev_mode()
+dev_mode(void)
 {
     return getenv("FU_DEV") != NULL;
 }
@@ -119,7 +122,7 @@ dev_mode()
 /* timespec stuff is included for crude performance timing */
 
 int
-debug_backtrace_fu()
+debug_backtrace_fu(void)
 {
     const int BT_BUF_SIZE = 1024;
     void *buffer[BT_BUF_SIZE];
@@ -306,47 +309,58 @@ max_s64(s64 a, s64 b)
     return a > b ? a : b;
 }
 
+ssize_t
+random_fu(void * buf, size_t size_buf)
+{
+#ifdef __APPLE__
+    arc4random_buf(buf, size_buf);
+    return size_buf;
+#elif __linux__
+    return getrandom(buf, size_buf, 0);
+#endif
+}
+
 u64
-random_u64_fu()
+random_u64_fu(void)
 {
     u64 num;
-    ssize_t result = getrandom(&num, sizeof(num), 0);
+    ssize_t result = random_fu(&num, sizeof(num));
     RARE_FAIL(result  == sizeof(num));
     return num;
 }
 
 s64
-random_s64_fu()
+random_s64_fu(void)
 {
     s64 num;
-    ssize_t result = getrandom(&num, sizeof(num), 0);
+    ssize_t result = random_fu(&num, sizeof(num));
     num = llabs(num);
     RARE_FAIL(result  == sizeof(num));
     return num;
 }
 
 u16
-random_u16_fu()
+random_u16_fu(void)
 {
     u16 num;
-    ssize_t result = getrandom(&num, sizeof(num), 0);
+    ssize_t result = random_fu(&num, sizeof(num));
     RARE_FAIL(result  == sizeof(num));
     return num;
 }
 
 // random alaph character (a-z)
 u8
-random_alpha_fu()
+random_alpha_fu(void)
 {
     u8 num;
-    ssize_t result = getrandom(&num, sizeof(num), 0);
+    ssize_t result = random_fu(&num, sizeof(num));
     RARE_FAIL(result  == sizeof(num));
     return 'a' + num % 26;
 }
 
 // random between 0 and 1
 f64
-random_f64_fu()
+random_f64_fu(void)
 {
     u64 r = random_u64_fu();
 
