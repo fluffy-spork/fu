@@ -940,12 +940,12 @@ add_u64_blob(blob_t * b, u64 n)
 }
 
 void
-add_u16_zero_pad_blob(blob_t * b, u64 n)
+add_u16_zero_pad_blob(blob_t * b, u16 n)
 {
     // TODO(jason): replace with something that doesn't use stdio
     // and direct
     char s[256];
-    int size = snprintf(s, 256, "%06lu", n);
+    int size = snprintf(s, 256, "%06d", n);
     write_blob(b, s, size);
 }
 
