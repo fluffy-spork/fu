@@ -65,10 +65,10 @@ typedef struct {
 // log is a C standard function for logarithm
 log_t * plog = &(log_t){};
 
-void (* _flush_log_f)();
+void (* _flush_log_f)(void);
 
 int
-init_log(void (* flush_log_f)())
+init_log(void (* flush_log_f)(void))
 {
     _flush_log_f = flush_log_f;
 
@@ -137,7 +137,7 @@ _log_s64(log_t * log, const s64 value, const char * label, size_t size_label, co
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
-    int size = snprintf(s, 256, "%ld", value);
+    int size = snprintf(s, 256, "%" PRId64, value);
     _log(log, s, size, label, size_label, 0, file, function, line);
 }
 
@@ -146,7 +146,7 @@ _log_u64(log_t * log, const u64 value, const char * label, size_t size_label, co
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
-    int size = snprintf(s, 256, "%lu", value);
+    int size = snprintf(s, 256, "%" PRIu64, value);
     _log(log, s, size, label, size_label, 0, file, function, line);
 }
 
@@ -194,7 +194,7 @@ write_log(log_t * log, int fd)
 }
 
 void
-stderr_flush_log()
+stderr_flush_log(void)
 {
     if (plog->size < 1) return;
 
@@ -203,7 +203,7 @@ stderr_flush_log()
 }
 
 void
-flush_log()
+flush_log(void)
 {
     if (_flush_log_f) {
         _flush_log_f();
