@@ -182,10 +182,10 @@ write_log(log_t * log, int fd)
         log_entry_t * entry = &log->entries[i];
         size_t size;
         if (entry->label[0]) {
-            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%zd %s: %s\n",
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%" PRId64 " %s: %s\n",
                     entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->label, entry->msg);
         } else {
-            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%zd %s\n",
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%" PRId64 " %s\n",
                     entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->msg);
         }
         ssize_t written = write(fd, msg, size);
