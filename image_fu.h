@@ -1759,13 +1759,18 @@ set_all_rgb_image(image_t *img, const u8 r, const u8 g, const u8 b)
 void
 set_all_color_image(image_t * img, color_t c)
 {
-    dev_error(img->channels < 3);
-
     if (img->channels == 4) {
         set_all_bgra_image(img, c.red, c.green, c.blue, c.alpha);
     }
     else if (img->channels == 3) {
         set_all_rgb_image(img, c.red, c.green, c.blue);
+    }
+    else if (img->channels == 1) {
+        memset(img->data, c.blue, img->n_pixels);
+    }
+    else {
+        debug_s64(img->channels);
+        dev_error("unsupported img channels");
     }
 }
 

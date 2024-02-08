@@ -136,6 +136,7 @@ valid_blob(const blob_t * b)
 // TODO(jason): what should this return type be to be a u8 value, but still
 // allow returning -1 on error.
 // surely there's a better name
+// TODO(jason): should be using the blob error field and return u8
 s32
 offset_blob(const blob_t * b, size_t offset)
 {
