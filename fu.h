@@ -24,6 +24,13 @@
 #include <execinfo.h>
 #endif
 
+// NOTE(jason): mainly marking where a response is int with -1 on error so
+// distinguishable from int as a value
+//
+// maybe have to have 2 for -1 error and non-zero error.  although mixing value
+// and error in return is not preferred
+typedef int error_t;
+
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
@@ -204,6 +211,19 @@ f64_sec_timespec(const struct timespec ts)
 {
     const f64 nsec_per_sec = 1000 * 1000 * 1000;
     return (f64)ts.tv_sec + ((f64)ts.tv_nsec)/nsec_per_sec;
+}
+
+int
+now_timespec(struct timespec * frame_time)
+{
+    return clock_gettime(CLOCK_MONOTONIC, frame_time);
+}
+
+int
+frame_delay(struct timespec * frame_time, s32 ns_per_frame)
+{
+    incr_ns_timespec(frame_time, ns_per_frame);
+    return clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, frame_time, NULL);
 }
 
 /*

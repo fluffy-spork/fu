@@ -26,7 +26,7 @@ app_image_file="$name-$(uname -m).AppImage"
 CFLAGS="-Wall -Wextra -Werror -rdynamic $CFLAGS"
 
 if [ -f jcc.env ]; then
-    . $PWD/jcc.env
+    . "$PWD/jcc.env"
 fi
 
 cmd="$1"
