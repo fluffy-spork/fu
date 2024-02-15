@@ -106,7 +106,7 @@ equal_image(image_t * a, image_t * b)
 {
     if (a->n_pixels  == b->n_pixels
             && a->channels == b->channels
-            && memcmp(a->data, b->data, size_image(a) == 0)) {
+            && (memcmp(a->data, b->data, size_image(a)) == 0)) {
         return true;
     }
 
