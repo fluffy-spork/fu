@@ -219,12 +219,14 @@ now_timespec(struct timespec * frame_time)
     return clock_gettime(CLOCK_MONOTONIC, frame_time);
 }
 
+/* temp remove this as clock_nanosleep isn't on mac
 int
 frame_delay(struct timespec * frame_time, s32 ns_per_frame)
 {
     incr_ns_timespec(frame_time, ns_per_frame);
     return clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, frame_time, NULL);
 }
+*/
 
 /*
 bool
