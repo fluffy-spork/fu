@@ -25,6 +25,9 @@ typedef struct {
     u8 * data;
 } image_t;
 
+#define for_y_image(img) for (int y = 0; y < img->height; y++)
+#define for_x_image(img) for (int x = 0; x < img->width; x++)
+
 typedef struct {
     u8 red;
     u8 green;
@@ -727,11 +730,17 @@ test_color_to_lab_color()
 }
 
 
+#define debug_xy_image(img, max, x, y) _debug_image(img, max, x, y)
+#define debug_image(img, max) debug_xy_image(img, max, 0, 0)
+
 void
-debug_image(image_t *img, size_t max)
+_debug_image(image_t *img, size_t max, int x_off, int y_off)
 {
-    for (size_t y = 0; y < max; y++) {
-        for (size_t x = 0; x < max; x++) {
+    size_t y_max = min_size(img->height, y_off + max);
+    size_t x_max = min_size(img->width, x_off + max);
+
+    for (size_t y = y_off; y < y_max; y++) {
+        for (size_t x = x_off; x < x_max; x++) {
             debugf("[%zdx%zd] = %u", x, y, img->data[y*img->width + x]);
         }
         debug("");
@@ -785,6 +794,12 @@ paste_image(image_t *src, image_t *dest, int x, int y)
     copy_rect_image(src->width, src->height, src, 0, 0, dest, x, y);
 }
 
+void
+paste_center_image(image_t * src, image_t * dest)
+{
+    paste_image(src, dest, abs(dest->width - src->width)/2, abs(dest->height - src->height)/2); 
+}
+
 // copy a region of interest from larger image
 void
 roi_image(image_t *roi, const image_t *img, int x, int y)
@@ -811,6 +826,7 @@ lut_image(const image_t *in, image_t *out, const u8 *lut)
     //assert(in->channels == 4);
     assert(in->channels == out->channels);
 
+    // TODO(jason): what does this mean?  how would alpha become 255?
     // alpha is typically 255 and so converts to 255
     size_t imax = in->n_pixels * in->channels;
     for (size_t i = 0; i < imax; i++) {
@@ -1873,6 +1889,12 @@ void draw_rect(image_t *img, int x, int y, int width, int height, const color_t 
     set_pixel(img, x2, y2, fg);
 }
 
+void
+border_image(image_t * img, const color_t * fg)
+{
+    draw_rect(img, 0, 0, img->width, img->height, fg);
+}
+
 void draw_square_center(image_t *img, int x, int y, int size, const color_t *fg)
 {
     x = x - size/2;
@@ -2721,7 +2743,9 @@ conv2d_u8_image(u8 *out, u8 *in, size_t width, size_t height, int *kernel, size_
                     sum += in[ky*width + kx] * kernel[k--];
                 }
             }
-            //debugf("k max: %zd, sum: %d", k, sum);
+//            if (sum > 0) {
+//            debugf("k max: %zd, sum: %d", k, sum);
+//            }
             // threshold?
             out[y*width + x] = clamp255(sum/ksum);
         }
