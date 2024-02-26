@@ -1,6 +1,18 @@
 #ifndef MATH_FU_H
 #define MATH_FU_H
 
+u8
+add_saturated(u8 a, u8 b)
+{
+    return (b > 255 - a) ? 255 : a + b;
+}
+
+u8
+sub_saturated(u8 a, u8 b)
+{
+    return (a > b) ? a - b : 0;
+}
+
 int clamp(int n, int min, int max)
 {
     if (n < min) {
