@@ -1,16 +1,24 @@
 #ifndef MATH_FU_H
 #define MATH_FU_H
 
+// branchless from https://web.archive.org/web/20190213215419/https://locklessinc.com/articles/sat_arithmetic/
 u8
-add_saturated(u8 a, u8 b)
+add_sat_u8(u8 a, u8 b)
 {
-    return (b > 255 - a) ? 255 : a + b;
+    u8 c = a + b;
+    c |= -(c < a);
+
+    return c;
 }
 
+// branchless from https://web.archive.org/web/20190213215419/https://locklessinc.com/articles/sat_arithmetic/
 u8
-sub_saturated(u8 a, u8 b)
+sub_sat_u8(u8 a, u8 b)
 {
-    return (a > b) ? a - b : 0;
+    u8 c = a - b;
+    c &= -(c <= a);
+
+    return c;
 }
 
 int clamp(int n, int min, int max)
