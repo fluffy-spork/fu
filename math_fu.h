@@ -1,25 +1,4 @@
-#ifndef MATH_FU_H
-#define MATH_FU_H
-
-// branchless from https://web.archive.org/web/20190213215419/https://locklessinc.com/articles/sat_arithmetic/
-u8
-add_sat_u8(u8 a, u8 b)
-{
-    u8 c = a + b;
-    c |= -(c < a);
-
-    return c;
-}
-
-// branchless from https://web.archive.org/web/20190213215419/https://locklessinc.com/articles/sat_arithmetic/
-u8
-sub_sat_u8(u8 a, u8 b)
-{
-    u8 c = a - b;
-    c &= -(c <= a);
-
-    return c;
-}
+#pragma once
 
 int clamp(int n, int min, int max)
 {
@@ -76,4 +55,30 @@ float cum_mov_avg_f(float cma, float x, int n)
     return cma + (x - cma)/(n + 1);
 }
 
-#endif
+// branchless from https://web.archive.org/web/20190213215419/https://locklessinc.com/articles/sat_arithmetic/
+u8
+add_sat_u8(u8 a, u8 b)
+{
+    u8 c = a + b;
+    c |= -(c < a);
+
+    return c;
+}
+
+// branchless from https://web.archive.org/web/20190213215419/https://locklessinc.com/articles/sat_arithmetic/
+u8
+sub_sat_u8(u8 a, u8 b)
+{
+    u8 c = a - b;
+    c &= -(c <= a);
+
+    return c;
+}
+
+u8
+add_sat_s8(u8 a, s8 b)
+{
+    int c = a + b;
+    return clamp255(c);
+}
+
