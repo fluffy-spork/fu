@@ -139,6 +139,17 @@ open_read_write_file_fu(const blob_t * path)
     return open_file_fu(path, O_RDWR|O_CREAT, S_IRUSR|S_IWUSR);
 }
 
+int
+close_file_fu(int fd)
+{
+    int rc = close(fd);
+    if (rc == -1) {
+        log_errno("close_file");
+    }
+
+    return rc;
+}
+
 ssize_t
 read_max_file_fu(int fd, blob_t * b, size_t max)
 {
