@@ -37,15 +37,9 @@ float fclampf(float n, float min, float max)
 u8
 clamp255(int n)
 {
-    if (n > 255) {
-        return 255;
-    }
-    else if (n < 0) {
-        return 0;
-    }
-    else {
-        return n;
-    }
+    if (n > 255) return 255;
+    if (n < 0) return 0;
+    return n;
 }
 
 int clamp_int(int a, int min, int max) {
