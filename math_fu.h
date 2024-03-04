@@ -34,9 +34,13 @@ float fclampf(float n, float min, float max)
 }
 
 // clamp a value to 0 to 255
-int clamp255(int n)
+u8
+clamp255(int n)
 {
-    return clamp(n, 0, 255);
+    // https://codereview.stackexchange.com/questions/6502/fastest-way-to-clamp-an-integer-to-the-range-0-255/73957#73957
+
+    n = (n > 255) ? 255 : n;
+    return (n < 0) ? 0 : n;
 }
 
 int clamp_int(int a, int min, int max) {
