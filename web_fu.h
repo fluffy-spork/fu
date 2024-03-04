@@ -116,6 +116,8 @@ struct request_s {
     // for deletion
     s64 session_id;
     blob_t * session_cookie;
+    bool session_supported;
+
     s64 user_id;
     blob_t * user_alias;
 
@@ -711,6 +713,7 @@ reuse_request(request_t * req)
     req->expect_continue = false;
 
     req->session_id = 0;
+    req->session_supported = false;
     req->user_id = 0;
     erase_blob(req->user_alias);
 
@@ -825,6 +828,7 @@ require_request_head_web(request_t * req)
                 if (equal_blob(name_cookie, res_web.name_session_cookie)) {
                     if (scan_blob(value_cookie, value, ';', &coff) != -1) {
                         add_blob(req->session_cookie, value_cookie);
+                        req->session_supported = true;
                         break;
                     }
                 }
