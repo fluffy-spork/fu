@@ -550,6 +550,16 @@ void clear_image(image_t *img, int value)
     memset(img->data, value, img->n_pixels*img->channels);
 }
 
+void
+plane_image(const image_t * img, int channel, u8 * buf, size_t size_buf)
+{
+    size_t size = size_image(img);
+    for (int i = channel, j = 0; i < size; i += 4, j++) {
+        buf[j] = img->data[i];
+    }
+}
+
+
 typedef struct lab_color
 {
     s8 L; // 0 to 100
