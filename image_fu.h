@@ -2476,7 +2476,7 @@ threshold_decimate_image(const image_t *in, image_t *out, u8 max_value, s64 sum_
 }
 
 void
-vertical_chart_image(image_t *img, const int *hist, const size_t n, const int x, const int y, const color_t *fg)
+vertical_chart_image(image_t *img, const int *hist, const int n, const int x, const int y, const color_t *fg)
 {
     int h = 64;
 
