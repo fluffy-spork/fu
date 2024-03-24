@@ -554,7 +554,8 @@ void
 plane_image(const image_t * img, int channel, u8 * buf, size_t size_buf)
 {
     size_t size = size_image(img);
-    for (int i = channel, j = 0; i < size; i += 4, j++) {
+    int n_channels = img->channels;
+    for (int i = channel, j = 0; i < size; i += n_channels, j++) {
         buf[j] = img->data[i];
     }
 }
@@ -589,7 +590,6 @@ void copy_image(const image_t *src, image_t *dest)
 void
 copy_rect_image(int width, int height, const image_t *src, int x1, int y1, image_t *dest, int x2, int y2)
 {
-    //assert(src->channels == 1);
     assert(src->channels == dest->channels);
     assert(x2 < dest->width);
     assert(y2 < dest->height);
@@ -598,6 +598,22 @@ copy_rect_image(int width, int height, const image_t *src, int x1, int y1, image
     assert(width + x2 <= dest->width);
     assert(height + y2 <= dest->height);
 
+    int channels = src->channels;
+    int stride = width * channels;
+    int src_stride = src->width * src->channels;
+    int dest_stride = dest->width * dest->channels;
+    int x1_off = x1*channels;
+    int x2_off = x2*channels;
+
+    // NOTE(jason): I assume this is faster than the basic loop, but haven't
+    // tested.  this works for all number of channels too
+    for_i(height) {
+        u8 * s = src->data + ((y1 + i) * src_stride + x1_off);
+        u8 * d = dest->data + ((y2 + i) * dest_stride + x2_off);
+        memcpy(d, s, stride);
+    }
+
+    /*
     if (src->channels == 1) {
         for (int i = 0; i < height; i++) {
             for (int j = 0; j < width; j++) {
@@ -616,6 +632,7 @@ copy_rect_image(int width, int height, const image_t *src, int x1, int y1, image
             }
         }
     }
+    */
 }
 
 void
