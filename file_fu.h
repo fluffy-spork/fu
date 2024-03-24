@@ -343,8 +343,8 @@ load_file(const blob_t * path, blob_t * data)
     reset_blob(data);
 
     if (size > available_blob(data)) {
-        error_log("file is too large", "db", size);
         errno = ENOSPC;
+        log_errno("file is too large");
         return -1;
     }
 
