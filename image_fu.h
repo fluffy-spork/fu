@@ -250,7 +250,7 @@ insertion_sort_u8(u8 *a, size_t n)
 {
     for (size_t i = 1; i < n; i++) {
         u8 x = a[i];
-        int j = i - 1;
+        size_t j = i - 1;
         for (; j >=0 && a[j] > x; j--) {
             a[j + 1] = a[j];
         }
@@ -259,7 +259,7 @@ insertion_sort_u8(u8 *a, size_t n)
 }
 
 void
-test_insertion_sort_u8()
+test_insertion_sort_u8(void)
 {
     u8 a[] = { 33, 12, 9, 3, 42, 88 };
     int n = sizeof(a)/sizeof(a[0]);
@@ -893,7 +893,7 @@ histogram_equalization_image(const image_t *in, image_t *out)
 }
 
 int
-test_histogram_equalization_image()
+test_histogram_equalization_image(void)
 {
     size_t size_test = 64;
     u8 in_test[64] = {
@@ -943,13 +943,13 @@ normalize_image(const image_t *in, image_t *out)
     // find the min and max
     // calculate new Y and then RGB
 
-    size_t n = in->n_pixels;
+    int n = in->n_pixels;
 
     u8 *luma = malloc(in->n_pixels*sizeof(u8));
     if (!luma) return ENOMEM;
 
     color_t pixel;
-    for (size_t i = 0; i < n; i++)
+    for (int i = 0; i < n; i++)
     {
         get_pixel_at(in, i, &pixel);
 
@@ -962,7 +962,7 @@ normalize_image(const image_t *in, image_t *out)
 
     //debug_u8_array(luma_lut, 256, "luma_lut");
 
-    for (size_t i = 0; i < n; i++)
+    for (int i = 0; i < n; i++)
     {
         u8 luma2 = luma_lut[luma[i]];
         pixel.red = luma2;
@@ -1391,13 +1391,13 @@ count_histogram_image(int hist[], size_t size_hist, size_t offset)
     return count;
 }
 
-int
+s64
 mean_histogram(int hist[], int size_hist)
 {
     assert(size_hist <= 256);
 
-    u64 sum = 0;
-    u64 total = 0;
+    s64 sum = 0;
+    s64 total = 0;
     for (int i = 0; i < size_hist; i++)
     {
         total += hist[i];
@@ -2482,8 +2482,7 @@ vertical_chart_image(image_t *img, const int *hist, const size_t n, const int x,
 
     int vmax = hist[index_of_max_array(hist, 256)];
     if (vmax != 0) {
-        for (size_t j = 0; j < n; j++)
-        {
+        for (int j = 0; j < n; j++) {
             int v = hist[j];
             int y1 = y + h;
             // if there's any value the min is 1
