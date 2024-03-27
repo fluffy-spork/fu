@@ -2801,6 +2801,25 @@ write_pam_image(int fd, const image_t * img)
     }
 }
 
+int
+swap_red_blue_image(image_t * img)
+{
+    dev_error(img->channels < 3);
+
+    const int channels = img->channels;
+    size_t size = size_image(img);
+
+    // swap R and B channels
+    u8 tmp;
+    for (size_t i = 0; i < size; i += channels) {
+        tmp = img->data[i];
+        img->data[i] = img->data[i + 2];
+        img->data[i + 2] = tmp;
+    }
+
+    return 0;
+}
+
 ssize_t
 read_pam_image(int fd, image_t * img)
 {
@@ -2840,13 +2859,7 @@ read_pam_image(int fd, image_t * img)
         return -1;
     }
 
-    // swap R and B channels
-    u8 tmp;
-    for (size_t i = 0; i < size; i += 4) {
-        tmp = img->data[i];
-        img->data[i] = img->data[i + 2];
-        img->data[i + 2] = tmp;
-    }
+    swap_red_blue_image(img);
 
     return size;
 }
