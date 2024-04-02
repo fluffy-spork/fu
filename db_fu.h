@@ -590,6 +590,26 @@ exec_s64_pii_db(db_t * db, const blob_t * sql, s64 * value, s64 p1, s64 p2)
     return finalize_db(stmt);
 }
 
+int
+exec_s64_piii_db(db_t * db, const blob_t * sql, s64 * value, s64 p1, s64 p2, s64 p3)
+{
+    sqlite3_stmt * stmt;
+
+    if (prepare_db(db, &stmt, sql)
+            || s64_bind_db(stmt, 1, p1)
+            || s64_bind_db(stmt, 2, p2)
+            || s64_bind_db(stmt, 3, p3))
+    {
+        return finally_stmt_db(db, stmt);
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (value) *value = s64_db(stmt, 0);
+    }
+
+    return finalize_db(stmt);
+}
+
 // TODO(jason): should this return an error like SQLITE_NOTFOUND if a value
 // isn't found?  currently have to check for the value being empty
 int
@@ -1157,6 +1177,33 @@ ids_params_db(db_t * db, const blob_t * sql, s64 * ids, int * n_ids, param_t * i
         ids[i] = s64_db(stmt, 0);
     }
     *n_ids = i;
+
+    return finalize_db(stmt);
+}
+
+int
+s64_params_db(db_t * db, const blob_t * sql, s64 * value, param_t * inputs, int n_inputs)
+{
+    int result;
+    sqlite3_stmt * stmt;
+
+    result = prepare_db(db, &stmt, sql);
+    if (result != SQLITE_OK) return result;
+
+    if (bind_params_db(stmt, inputs, n_inputs)) {
+        finalize_db(stmt);
+        return -1;
+    }
+
+    switch (sqlite3_step(stmt)) {
+        case SQLITE_ROW:
+            *value = s64_db(stmt, 0);
+            break;
+        case SQLITE_DONE:
+            *value = 0;
+            break;
+        default:
+    }
 
     return finalize_db(stmt);
 }
