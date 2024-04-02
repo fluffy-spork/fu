@@ -1474,7 +1474,7 @@ require_user_web(request_t * req, const endpoint_t * auth)
         return -1;
     }
 
-    log_var_s64(req->session_id);
+//    log_var_s64(req->session_id);
 
     text_bind_db(stmt, 1, req->uri);
     s64_bind_db(stmt, 2, req->session_id);
