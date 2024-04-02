@@ -148,7 +148,7 @@ typedef struct {
 // prefer stk_param and remove local_param
 #define stk_param(f) (param_t){ .field = f, .value = stk_blob(f->max_size), .error = stk_blob(256) }
 
-#define def_param(field) param_t field = local_param(fields.field);
+#define def_param(field) param_t field = stk_param(fields.field);
 
 #define debug_param(p) \
     debug_blob(p->field->name); \
