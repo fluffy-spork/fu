@@ -1222,7 +1222,6 @@ s64_params_db(db_t * db, const blob_t * sql, s64 * value, param_t * inputs, int 
         case SQLITE_DONE:
             *value = 0;
             break;
-        default:
     }
 
     return finalize_db(stmt);
