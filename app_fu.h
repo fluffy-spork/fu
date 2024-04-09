@@ -12,6 +12,8 @@
 #define MAIN_DB_FILE_APP "main.sqlite"
 
 typedef struct {
+    blob_t * name;
+
     blob_t * dir;
     blob_t * state_dir;
 
@@ -332,11 +334,17 @@ upgrade_db_app(const blob_t * db_file)
     // I feel like it's ok since it's at the base app level
     version_sql_t versions[] = {
         { 1, "create table if not exists user (user_id integer primary key autoincrement, email text unique not null, alias text unique not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
+        , { 2, "alter table user add column invited_by_user_id integer not null default 0" }
     };
 
     return upgrade_db(db_file, versions);
 }
 
+int
+insert_user_app(db_t * db, s64 * user_id, blob_t * email, blob_t * alias, s64 invited_by_user_id)
+{
+    return exec_s64_pbbi_db(db, B("insert into user (email, alias, invited_by_user_id, created, modified, last_read_post_id) values (?, ?, ?, unixepoch(), unixepoch(), (select coalesce(max(post_id),0) from post)) returning user_id"), user_id, email, alias, invited_by_user_id);
+}
 
 void
 exit_callback_app()
@@ -353,6 +361,8 @@ init_app_fu(int argc, char *argv[], void (* flush_log_f)())
         error_log("state directory required", "argc", 1);
         return -1;
     }
+
+    app.name = blob(32);
 
     app.dir = new_app_dir_fu();
     app.state_dir = const_blob(argv[1]);

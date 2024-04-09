@@ -554,6 +554,26 @@ exec_s64_pbi_db(db_t * db, const blob_t * sql, s64 * value, const blob_t * p1, c
 }
 
 int
+exec_s64_pbbi_db(db_t * db, const blob_t * sql, s64 * value, const blob_t * p1, const blob_t * p2, const s64 p3)
+{
+    sqlite3_stmt * stmt;
+
+    if (prepare_db(db, &stmt, sql)
+            || text_bind_db(stmt, 1, p1)
+            || text_bind_db(stmt, 2, p2)
+            || s64_bind_db(stmt, 3, p3))
+    {
+        return finally_stmt_db(db, stmt);
+    }
+
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        if (value) *value = s64_db(stmt, 0);
+    }
+
+    return finalize_db(stmt);
+}
+
+int
 exec_s64_pi_db(db_t * db, blob_t * sql, s64 * value, s64 p1)
 {
     sqlite3_stmt * stmt;
