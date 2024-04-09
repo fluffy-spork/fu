@@ -121,6 +121,15 @@ reset_blob(blob_t * blob)
     blob->error = 0;
 }
 
+int
+set_size_blob(blob_t * b, size_t size)
+{
+    // should this return an error if size > capacity
+    b->size = min_size(size, b->capacity);
+
+    return 0;
+}
+
 bool
 empty_blob(const blob_t * b)
 {
