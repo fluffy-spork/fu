@@ -251,7 +251,7 @@ insertion_sort_u8(u8 *a, size_t n)
     for (size_t i = 1; i < n; i++) {
         u8 x = a[i];
         size_t j = i - 1;
-        for (; j >=0 && a[j] > x; j--) {
+        for (; a[j] > x; j--) {
             a[j + 1] = a[j];
         }
         a[j + 1] = x;
@@ -382,12 +382,16 @@ double distance(double x0, double y0, double x1, double y1)
     return sqrt(dx*dx + dy*dy);
 }
 
+// NOTE(jason): this only works for single channel images.  wtf?
+__attribute__((always_inline)) inline
 u8
 get_gray(const image_t * img, int x, int y)
 {
     return img->data[y*img->stride + x];
 }
 
+// NOTE(jason): this only works for single channel images.  wtf?
+__attribute__((always_inline)) inline
 u8
 set_gray(const image_t * img, int x, int y, u8 value)
 {
@@ -553,9 +557,11 @@ void clear_image(image_t *img, int value)
 void
 plane_image(const image_t * img, int channel, u8 * buf, size_t size_buf)
 {
+    dev_error(size_buf < (size_t)img->n_pixels);
+
     size_t size = size_image(img);
     int n_channels = img->channels;
-    for (int i = channel, j = 0; i < size; i += n_channels, j++) {
+    for (size_t i = channel, j = 0; i < size; i += n_channels, j++) {
         buf[j] = img->data[i];
     }
 }
@@ -945,8 +951,10 @@ normalize_image(const image_t *in, image_t *out)
 
     int n = in->n_pixels;
 
-    u8 *luma = malloc(in->n_pixels*sizeof(u8));
+    u8 * luma = malloc(in->n_pixels);
     if (!luma) return ENOMEM;
+
+    memset(luma, 0, in->n_pixels);
 
     color_t pixel;
     for (int i = 0; i < n; i++)
@@ -1346,11 +1354,14 @@ debug_chromaticity(int i, const chromaticity *chroma)
 void
 histogram_image(const image_t *img, size_t channel, int hist[], size_t size_hist)
 {
+    dev_error(size_hist != 256);
+
     memset(hist, 0, sizeof(int)*size_hist);
 
-    size_t imax = img->n_pixels * img->channels;
-    for (size_t i = channel; i < imax; i += img->channels) {
-        hist[img->data[i] % size_hist]++;
+    const size_t imax = img->n_pixels * img->channels;
+    const size_t stride = img->channels;
+    for (size_t i = channel; i < imax; i += stride) {
+        hist[img->data[i]]++;
     }
 }
 
@@ -2443,7 +2454,7 @@ avg_decimate_image(image_t *in, image_t *out)
 }
 
 int
-threshold_decimate_image(const image_t *in, image_t *out, u8 max_value, s64 sum_threshold)
+threshold_decimate_image(const image_t *in, image_t *out, u8 threshold, s64 n_over_threshold, u8 under, u8 over)
 {
     assert(in->channels == 1);
     assert(in->channels == out->channels);
@@ -2455,7 +2466,7 @@ threshold_decimate_image(const image_t *in, image_t *out, u8 max_value, s64 sum_
 
     for (int y = 0; y < out->height; y++) {
         for (int x = 0; x < out->width; x++) {
-            s64 sum = 0;
+            s64 n_over = 0;
             int xt_off = x*x_stride;
             int yt_off = y*y_stride;
             int xt_max = xt_off + x_stride;
@@ -2463,12 +2474,14 @@ threshold_decimate_image(const image_t *in, image_t *out, u8 max_value, s64 sum_
 
             for (int yt = yt_off; yt < yt_max; yt++) {
                 for (int xt = xt_off; xt < xt_max; xt++) {
-                    sum += get_gray(in, xt, yt) < max_value;
+                    //int gray = in->data[yt*in->stride + xt];
+                    int gray = get_gray(in, xt, yt);
+                    n_over += gray >= threshold;
                 }
             }
 
-            //debugf("sum: %zd", sum);
-            out->data[y*out->width + x] = (sum > sum_threshold) ? 255 : 0;
+//            if (n_over != 0) debug_s64(n_over);
+            out->data[y*out->width + x] = (n_over >= n_over_threshold) ? over : under;
         }
     }
 
