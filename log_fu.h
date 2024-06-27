@@ -137,7 +137,7 @@ _log_s64(log_t * log, const s64 value, const char * label, size_t size_label, co
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
-    int size = snprintf(s, 256, "%" PRId64, value);
+    int size = snprintf(s, 256, "%lld", value);
     _log(log, s, size, label, size_label, 0, file, function, line);
 }
 
@@ -146,7 +146,7 @@ _log_u64(log_t * log, const u64 value, const char * label, size_t size_label, co
 {
     char s[256];
     // XXX: seems kind of sucky to use snprintf for number conversion
-    int size = snprintf(s, 256, "%" PRIu64, value);
+    int size = snprintf(s, 256, "%llu", value);
     _log(log, s, size, label, size_label, 0, file, function, line);
 }
 
@@ -182,10 +182,10 @@ write_log(log_t * log, int fd)
         log_entry_t * entry = &log->entries[i];
         size_t size;
         if (entry->label[0]) {
-            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%" PRId64 " %s: %s\n",
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%lld %s: %s\n",
                     entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->label, entry->msg);
         } else {
-            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%" PRId64 " %s\n",
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%lld %s\n",
                     entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->msg);
         }
         ssize_t written = write(fd, msg, size);

@@ -914,7 +914,7 @@ add_s64_blob(blob_t * b, s64 value)
     // and direct
     // possibly should use %jd and cast to intmax_t
     char s[256];
-    int size = snprintf(s, 256, "%" PRId64, value);
+    int size = snprintf(s, 256, "%lld", value);
     write_blob(b, s, size);
 }
 
@@ -945,7 +945,7 @@ add_u64_blob(blob_t * b, u64 n)
     // and direct
     // possibly should use %ju and cast to uintmax_t
     char s[256];
-    int size = snprintf(s, 256, "%" PRIu64, n);
+    int size = snprintf(s, 256, "%llu", n);
     write_blob(b, s, size);
 }
 
@@ -1128,7 +1128,7 @@ add_hex_s64_blob(blob_t * b, s64 value)
 {
     // TODO(jason): stop using snprintf
     char s[256];
-    int size = snprintf(s, 256, "%" PRIx64, value);
+    int size = snprintf(s, 256, "%llx", value);
     write_blob(b, s, size);
 }
 
@@ -1202,7 +1202,7 @@ alpha_numeric_hyphen_blob(const blob_t * b)
         var_name.n_list = n_##var_name; \
     } \
     var_name##_t enum_##var_name(blob_t * value, var_name##_t default_id) { return enum_blob(var_name.list, var_name.n_list, value, default_id); } \
-    const blob_t * blob_##var_name(var_name##_t  id) { assert(id < var_name.n_list); return var_name.list[id]; } \
+    const blob_t * blob_##var_name(var_name##_t  id) { assert((int)id < var_name.n_list); return var_name.list[id]; } \
 
 #define EXTRACT_AS_ENUM_BLOB(name, value, var_name) name##_##var_name,
 #define EXTRACT_AS_VAR_BLOB(name, value, var_name) blob_t * name;

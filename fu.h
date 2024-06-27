@@ -34,12 +34,12 @@ typedef int error_t;
 typedef uint8_t u8;
 typedef uint16_t u16;
 typedef uint32_t u32;
-typedef uint64_t u64;
+typedef unsigned long long int u64;
 
 typedef int8_t s8;
 typedef int16_t s16;
 typedef int32_t s32;
-typedef int64_t s64;
+typedef long long int s64;
 
 typedef float f32;
 typedef double f64;
@@ -105,8 +105,8 @@ typedef enum {
 
 #define debug_u8(var) debugf("%s: %u", #var, (u8)var);
 
-#define debug_s64(var) debugf("%s: %" PRId64, #var, (s64)var);
-#define debug_u64(var) debugf("%s: %" PRIu64, #var, (u64)var);
+#define debug_s64(var) debugf("%s: %lld", #var, (s64)var);
+#define debug_u64(var) debugf("%s: %llu", #var, (u64)var);
 
 #define debug_item_s64(array, index) debugf("%s[%" PRId64 "]: %" PRId64, #array, (s64)index, (s64)array[index]);
 #define debug_hex_item_s64(array, index) debugf("%s[0x%" PRIx64 "]: %" PRId64, #array, (s64)index, (s64)array[index]);
