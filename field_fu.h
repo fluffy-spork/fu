@@ -69,7 +69,7 @@ max_size_field_type(field_type_t type, s32 req_size)
 }
 
 field_t *
-field(u64 id, blob_t * name, blob_t * label, field_type_t type, s32 req_min_size, s32 req_max_size)
+field(field_id_t id, blob_t * name, blob_t * label, field_type_t type, s32 req_min_size, s32 req_max_size)
 {
     field_t * field = malloc(sizeof(field_t));
     if (field) {
@@ -97,7 +97,7 @@ struct {
 } fields;
 
 void
-init_fields()
+init_fields(void)
 {
     init_field_type();
 

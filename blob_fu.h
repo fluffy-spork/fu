@@ -1,7 +1,7 @@
 #pragma once
 
 // BLOB = binary large object
-// variable sized array
+// fixed capacity array
 //
 // NOTE(jason): not worried about memory usage or immutable.
 // For immutable, I use ENUM_BLOBs as constants.
@@ -1195,9 +1195,9 @@ alpha_numeric_hyphen_blob(const blob_t * b)
     } var_name##_t; \
     struct { \
         table(var_name, EXTRACT_AS_VAR_BLOB) \
-        size_t n_list; blob_t * list[n_##var_name]; \
+        int n_list; blob_t * list[n_##var_name]; \
     } var_name; \
-    void init_##var_name() { \
+    void init_##var_name(void) { \
         table(var_name, EXTRACT_AS_INIT_BLOB) \
         var_name.n_list = n_##var_name; \
     } \
@@ -1210,13 +1210,13 @@ alpha_numeric_hyphen_blob(const blob_t * b)
     var_name.name = const_blob(value); \
     var_name.list[name##_##var_name] = var_name.name; \
 
-size_t
-enum_blob(blob_t ** enum_blob, size_t n, blob_t * value, size_t default_id)
+int
+enum_blob(blob_t ** enum_blob, int n, blob_t * value, int default_id)
 {
     // NOTE(jason): enum init method likely needs to be called
     assert(n > 0);
 
-    for (size_t i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++) {
         //log_var_blob(enum_blob[i]);
         if (equal_blob(enum_blob[i], value)) {
             return i;

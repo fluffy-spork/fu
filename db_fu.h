@@ -30,7 +30,7 @@ log_callback_db(void * arg, int err_code, const char *msg)
 // NOTE(jason): currently not the end of the world if this isn't called, but
 // the log callback won't be setup which is helpful
 int
-init_db()
+init_db(void)
 {
     // NOTE(jason): has to be called before sqlite3_initialize
     sqlite3_config(SQLITE_CONFIG_LOG, log_callback_db, NULL);
@@ -51,7 +51,7 @@ busy_handler_db(void * ptr, int count)
     s64 delay_us = random_range_s64_fu(0, 1000000);
     //debug_s64(delay_us);
     if (delay_us) {
-        usleep(delay_us);
+        usleep((unsigned int)delay_us);
         return 1;
     }
 
@@ -239,7 +239,7 @@ rollback_to_db(db_t * db, const blob_t * name)
 int
 cstr_bind_db(sqlite3_stmt * stmt, int index, const char * value)
 {
-    int len = value[0] ? strlen(value) : 0;
+    int len = value[0] ? (int)strlen(value) : 0;
     int rc = 0;
     if (len) {
         rc = sqlite3_bind_text(stmt, index, value, len, SQLITE_STATIC);
@@ -262,7 +262,7 @@ text_bind_db(sqlite3_stmt * stmt, int index, const blob_t * value)
 {
     dev_error(index == 0);
 
-    int rc = sqlite3_bind_text(stmt, index, (char *)value->data, value->size, SQLITE_STATIC);
+    int rc = sqlite3_bind_text(stmt, index, (char *)value->data, (int)value->size, SQLITE_STATIC);
     if (rc) {
         log_error_stmt_db(stmt, "text bind failed");
         return -1;
@@ -766,7 +766,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
 
     /// how to detect too many varargs for max_params?
     for (int i = 0; i < max_params; i++) {
-        field_id_t id = va_arg(args, s64);
+        field_id_t id = va_arg(args, field_id_t);
         if (!id) break;
 
         field_t * f = by_id_field(id);
