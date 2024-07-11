@@ -353,19 +353,14 @@ exit_callback_app()
 }
 
 int
-init_app_fu(int argc, char *argv[], void (* flush_log_f)())
+init_app_fu(const char * state_dir, void (* flush_log_f)())
 {
     atexit(exit_callback_app);
-
-    if (argc < 2) {
-        error_log("state directory required", "argc", 1);
-        return -1;
-    }
 
     app.name = blob(32);
 
     app.dir = new_app_dir_fu();
-    app.state_dir = const_blob(argv[1]);
+    app.state_dir = const_blob(state_dir);
     app.main_db_file = new_path_file_fu(app.state_dir, B(MAIN_DB_FILE_APP));
 
     if (read_access_file_fu(app.state_dir)) {
@@ -400,5 +395,16 @@ init_app_fu(int argc, char *argv[], void (* flush_log_f)())
     flush_log();
 
     return 0;
+}
+
+int
+init_argv_app_fu(int argc, char *argv[], void (* flush_log_f)())
+{
+    if (argc < 2) {
+        error_log("state directory required", "argc", 1);
+        return -1;
+    }
+
+    return init_app_fu(argv[1], flush_log_f);
 }
 
