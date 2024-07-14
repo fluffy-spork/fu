@@ -32,7 +32,7 @@ ENUM_BLOB(res_app, RES_APP)
 // get the directory of the AppImage AppDir for accessing resource files, etc
 // in the AppImage
 blob_t *
-new_app_dir_fu()
+new_app_dir_fu(void)
 {
     char exe[256];
     ssize_t len = readlink("/proc/self/exe", exe, 256);
@@ -110,6 +110,12 @@ load_sql_app(const blob_t * file, stmt_db_t ** stmt)
 }
 
 int
+open_main_db_app(void)
+{
+    return open_db(app.main_db_file, &app.db);
+}
+
+int
 save_state_file_app(const blob_t * subpath, const blob_t * data)
 {
     blob_t * path = stk_blob(256);
@@ -119,7 +125,7 @@ save_state_file_app(const blob_t * subpath, const blob_t * data)
 
 // close sqlite db, etc
 int
-pre_fork_app_fu()
+pre_fork_app_fu(void)
 {
     flush_log();
 
@@ -143,7 +149,7 @@ post_fork_app_fu(pid_t pid)
         exit(EXIT_FAILURE);
     }
 
-    if (open_db(app.main_db_file, &app.db)) {
+    if (open_main_db_app()) {
         exit(EXIT_FAILURE);
     }
 
@@ -151,7 +157,7 @@ post_fork_app_fu(pid_t pid)
 }
 
 pid_t
-fork_app_fu()
+fork_app_fu(void)
 {
     if (pre_fork_app_fu()) {
         log_errno("pre_fork_app");
@@ -279,7 +285,7 @@ sigsegv_sa_handler(int signum)
 }
 
 int
-set_default_sigaction_handlers()
+set_default_sigaction_handlers(void)
 {
     // TODO(jason): this is probably wrong, but mostly shouldn't be called
 
@@ -347,13 +353,13 @@ insert_user_app(db_t * db, s64 * user_id, blob_t * email, blob_t * alias, s64 in
 }
 
 void
-exit_callback_app()
+exit_callback_app(void)
 {
     flush_log();
 }
 
 int
-init_app_fu(const char * state_dir, void (* flush_log_f)())
+init_app_fu(const char * state_dir, void (* flush_log_f)(void))
 {
     atexit(exit_callback_app);
 
@@ -363,9 +369,12 @@ init_app_fu(const char * state_dir, void (* flush_log_f)())
     app.state_dir = const_blob(state_dir);
     app.main_db_file = new_path_file_fu(app.state_dir, B(MAIN_DB_FILE_APP));
 
+    // NOTE(jason): has to be before any log calls
+    init_log(flush_log_f);
+
     if (read_access_file_fu(app.state_dir)) {
         log_var_blob(app.state_dir);
-        error_log("state dir does not exist", "app", 2);
+        log_errno("cannot access state dir");
         return -1;
     }
 
@@ -380,8 +389,6 @@ init_app_fu(const char * state_dir, void (* flush_log_f)())
         log_errno("failed to set default sigaction handlers");
         return -1;
     }
-
-    init_log(flush_log_f);
 
     init_res_app();
 
@@ -398,7 +405,7 @@ init_app_fu(const char * state_dir, void (* flush_log_f)())
 }
 
 int
-init_argv_app_fu(int argc, char *argv[], void (* flush_log_f)())
+init_argv_app_fu(int argc, char *argv[], void (* flush_log_f)(void))
 {
     if (argc < 2) {
         error_log("state directory required", "argc", 1);
