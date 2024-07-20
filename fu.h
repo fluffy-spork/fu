@@ -114,6 +114,7 @@ typedef enum {
 #define debug_hex_u64(var) debugf("%s: 0x%08" PRIx64, #var, (u64)var);
 #define debug_hex_u8(var) debugf("%s: 0x%02x", #var, (u8)var);
 
+#define debug_f32(var) debugf("%s: %f", #var, (f32)var);
 #define debug_f64(var) debugf("%s: %f", #var, (f64)var);
 
 #define kilobytes(n_bytes) round((double)n_bytes/1024)
