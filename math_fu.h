@@ -1,16 +1,5 @@
 #pragma once
 
-int clamp(int n, int min, int max)
-{
-    if (n < min) {
-        return min;
-    } else if (n > max) {
-        return max;
-    } else {
-        return n;
-    }
-}
-
 double fclamp(double n, double min, double max)
 {
     if (n < min) {
@@ -42,7 +31,15 @@ clamp255(int n)
     return n;
 }
 
-int clamp_int(int a, int min, int max) {
+int
+clamp_int(int a, int min, int max) {
+    if (a < min) return min;
+    if (a > max) return max;
+    return a;
+}
+
+s64
+clamp_s64(s64 a, s64 min, s64 max) {
     if (a < min) return min;
     if (a > max) return max;
     return a;

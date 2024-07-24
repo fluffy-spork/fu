@@ -657,8 +657,8 @@ paste_center_image(image_t * src, image_t * dest)
 void
 roi_image(image_t *roi, const image_t *img, int x, int y)
 {
-    x = clamp(x, 0, img->width - 1);
-    y = clamp(y, 0, img->height - 1);
+    x = clamp_int(x, 0, img->width - 1);
+    y = clamp_int(y, 0, img->height - 1);
     copy_rect_image(roi->width, roi->height, img, x, y, roi, 0, 0);
 }
 
@@ -716,7 +716,7 @@ add_image(image_t *img, const u8 value)
     // alpha is typically 255 and so converts to 255
     size_t imax = img->n_pixels * img->channels;
     for (size_t i = 0; i < imax; i++) {
-        img->data[i] = clamp((int)img->data[i] + value, 0, 255);
+        img->data[i] = clamp_int((int)img->data[i] + value, 0, 255);
     }
 }
 
@@ -1651,11 +1651,11 @@ set_all_color_image(image_t * img, color_t c)
 void
 fill_rect(image_t *img, int x, int y, int width, int height, const color_t *fg)
 {
-    x = clamp(x, 0, img->width - 1);
-    y = clamp(y, 0, img->height - 1);
+    x = clamp_int(x, 0, img->width - 1);
+    y = clamp_int(y, 0, img->height - 1);
 
-    int max_col = clamp(x + width, 0, img->width);
-    int max_row = clamp(y + height, 0, img->height);
+    int max_col = clamp_int(x + width, 0, img->width);
+    int max_row = clamp_int(y + height, 0, img->height);
 
     for (int row = y; row < max_row; row++) {
         for (int col = x; col < max_col; col++) {
@@ -1735,10 +1735,10 @@ void draw_line(image_t *img, int x0, int y0, int x1, int y1, const color_t *fg)
 
 void draw_rect(image_t *img, int x, int y, int width, int height, const color_t *fg)
 {
-    int x2 = clamp(x + width - 1, 0, img->width - 1);
-    int y2 = clamp(y + height - 1, 0, img->height - 1);
-    x = clamp(x, 0, img->width - 1);
-    y = clamp(y, 0, img->height - 1);
+    int x2 = clamp_int(x + width - 1, 0, img->width - 1);
+    int y2 = clamp_int(y + height - 1, 0, img->height - 1);
+    x = clamp_int(x, 0, img->width - 1);
+    y = clamp_int(y, 0, img->height - 1);
     draw_line(img, x, y, x2, y, fg);
     draw_line(img, x, y, x, y2, fg);
     draw_line(img, x2, y, x2, y2, fg);
@@ -1763,8 +1763,8 @@ void draw_square_center(image_t *img, int x, int y, int size, const color_t *fg)
     diff = y + size - img->height;
     int height = (diff > 0) ? size - diff : size;
 
-    x = clamp(x, 0, img->width - 1);
-    y = clamp(y, 0, img->height - 1);
+    x = clamp_int(x, 0, img->width - 1);
+    y = clamp_int(y, 0, img->height - 1);
 
     for (int row = 0; row < height; row++) {
         if (row == 0 || row == height - 1) {
