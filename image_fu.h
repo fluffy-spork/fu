@@ -2708,12 +2708,20 @@ label_connected_components_image(const image_t * img, image_t * labels)
                 u8 label = 0;
 
                 if (left == 0 && top == 0) { // new label
-                    assert(next_label != max_label);
-
                     label = next_label;
-                    next_label++;
 
-                    lut[label] = label;
+                    if (next_label != max_label) {
+                        next_label++;
+
+                        lut[label] = label;
+
+                        if (next_label == max_label) {
+                            debugf("max labels reached: %d", max_label);
+                        }
+                    }
+                    else {
+                        debug("using max label");
+                    }
                 } else if (left != 0 && top != 0) {
                     label = min_u8(min_u8(min_u8(left, top), lut[left]), lut[top]);
 
