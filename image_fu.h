@@ -2719,9 +2719,9 @@ label_connected_components_image(const image_t * img, image_t * labels)
                             debugf("max labels reached: %d", max_label);
                         }
                     }
-                    else {
-                        debug("using max label");
-                    }
+//                    else {
+//                        debug("using max label");
+//                    }
                 } else if (left != 0 && top != 0) {
                     label = min_u8(min_u8(min_u8(left, top), lut[left]), lut[top]);
 
