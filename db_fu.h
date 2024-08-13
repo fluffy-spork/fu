@@ -516,7 +516,7 @@ exec_s64_pb_db(db_t * db, blob_t * sql, s64 * value, const blob_t * p1)
 // NOTE(jason): all parameters should be text that sqlite will convert or app
 // converts to text first.  at least that's the theory.
 int
-exec_s64_pbb_db(db_t * db, blob_t * sql, s64 * value, blob_t * p1, blob_t * p2)
+exec_s64_pbb_db(db_t * db, blob_t * sql, s64 * value, const blob_t * p1, const blob_t * p2)
 {
     sqlite3_stmt * stmt;
 
