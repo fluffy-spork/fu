@@ -16,3 +16,9 @@ main_async_dispatch(void (^block)(void))
     dispatch_async(dispatch_get_main_queue(), block);
 }
 
+void
+main_sync_dispatch(void (^block)(void))
+{
+    dispatch_sync(dispatch_get_main_queue(), block);
+}
+
