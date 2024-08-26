@@ -152,6 +152,13 @@ debug_timespec(const struct timespec *ts, const char *label)
     debugf("%s: %ld.%09ld", label, ts->tv_sec, ts->tv_nsec);
 }
 
+struct timespec
+zero_timespec(void)
+{
+    struct timespec zero = {};
+    return zero;
+}
+
 // return c = a - b
 void
 sub_timespec(const struct timespec *a, const struct timespec *b, struct timespec *c)
@@ -191,6 +198,25 @@ elapsed_ns(struct timespec start)
     sub_timespec(&now, &start, &elapsed);
 
     return ns_timespec(elapsed);
+}
+
+s64
+show_frame_fu(struct timespec * last, s64 frame_duration_ns)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_REALTIME, &now);
+
+    struct timespec elapsed;
+    sub_timespec(&now, last, &elapsed);
+
+    s64 ns = ns_timespec(elapsed);
+    if (ns >= frame_duration_ns) {
+        *last = now;
+        return ns;
+    }
+    else {
+        return 0;
+    }
 }
 
 void
