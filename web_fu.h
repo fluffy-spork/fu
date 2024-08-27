@@ -1419,6 +1419,7 @@ require_session_web(request_t * req, bool create)
         }
 
         req->session_id = new_id;
+        set_blob(req->session_cookie, cookie);
 
         blob_t * c = stk_blob(255);
 
