@@ -378,6 +378,7 @@ save_file(const blob_t * path, const blob_t * data)
 }
 
 
+// NOTE(jason): https://stackoverflow.com/questions/799679/programmatically-retrieving-the-absolute-path-of-an-os-x-command-line-app
 blob_t *
 new_executable_path_file_fu()
 {
