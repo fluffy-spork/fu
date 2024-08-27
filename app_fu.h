@@ -7,7 +7,7 @@
 #include "field_fu.h"
 #include "db_fu.h"
 
-#include "sys/wait.h"
+#include <sys/wait.h>
 
 #define MAIN_DB_FILE_APP "main.sqlite"
 
@@ -34,26 +34,25 @@ ENUM_BLOB(res_app, RES_APP)
 blob_t *
 new_app_dir_fu(void)
 {
-    char exe[256];
-    ssize_t len = readlink("/proc/self/exe", exe, 256);
-    if (len == -1) return NULL;
+    blob_t * dir = stk_blob(256);
 
-    exe[len] = '\0';
+    blob_t * exe_path = new_executable_path_file_fu();
+    if (dirname_file_fu(exe_path, dir)) {
+        return NULL;
+    }
 
-    blob_t * dir = const_blob(dirname(exe));
     blob_t * app_dir = new_path_file_fu(dir, B("AppDir"));
+    app_dir->constant = true;
+
+    debug_blob(app_dir);
 
     if (read_access_file_fu(app_dir)) {
-        // app image
+        log_errno(cstr_blob(app_dir));
         free_blob(app_dir);
-        return dir;
+        return NULL;
     }
-    else {
-        // file system
-        dir->constant = false;
-        free_blob(dir);
-        return app_dir;
-    }
+
+    return app_dir;
 }
 
 blob_t *
@@ -366,6 +365,11 @@ init_app_fu(const char * state_dir, void (* flush_log_f)(void))
     app.name = blob(32);
 
     app.dir = new_app_dir_fu();
+    if (!app.dir) {
+        error_log("unable to access app.dir", "app", 2);
+        return -1;
+    }
+
     app.state_dir = const_blob(state_dir);
     app.main_db_file = new_path_file_fu(app.state_dir, B(MAIN_DB_FILE_APP));
 

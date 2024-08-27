@@ -1,7 +1,9 @@
 #pragma once
 
+#include <dlfcn.h> // dladdr, ..
 #include <fcntl.h>
 #include <sys/stat.h>
+
 
 int
 size_file_fu(int fd, size_t * size)
@@ -74,11 +76,13 @@ basename_file_fu(const blob_t * path, blob_t * basename)
     return sub_blob(basename, path, index + 1, -1) > 0 ? 0 : basename->error;
 }
 
+
 int
 read_access_file_fu(const blob_t * path)
 {
     return access(cstr_blob(path), R_OK);
 }
+
 
 int
 mkdir_file_fu(const blob_t * path, mode_t mode)
@@ -371,5 +375,24 @@ save_file(const blob_t * path, const blob_t * data)
     close(fd);
 
 	return 0;
+}
+
+
+blob_t *
+new_executable_path_file_fu()
+{
+    void * pmain = dlsym(RTLD_DEFAULT, "main");
+    if (!pmain) {
+        debugf("dlsym: %s", dlerror());
+        return NULL;
+    }
+
+    Dl_info info;
+    if (dladdr(pmain, &info) == 0) {
+        debugf("error: dladdr: %s", dlerror());
+        return NULL;
+    }
+
+    return const_blob(info.dli_fname);
 }
 
