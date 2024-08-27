@@ -44,8 +44,6 @@ new_app_dir_fu(void)
     blob_t * app_dir = new_path_file_fu(dir, B("AppDir"));
     app_dir->constant = true;
 
-    debug_blob(app_dir);
-
     if (read_access_file_fu(app_dir)) {
         log_errno(cstr_blob(app_dir));
         free_blob(app_dir);
