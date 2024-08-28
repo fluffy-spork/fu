@@ -682,6 +682,7 @@ image_content_type(content_type_t type)
     }
 }
 
+
 content_type_t
 preferred_image_type(content_type_t type)
 {
@@ -689,8 +690,13 @@ preferred_image_type(content_type_t type)
         return jpeg_content_type;
     }
 
+    if (video_content_type(type)) {
+        return mp4_content_type;
+    }
+
     return type;
 }
+
 
 bool
 post_request(request_t * req)
@@ -1894,6 +1900,8 @@ int
 process_media_task_web(request_t * req)
 {
     // TODO(jason): this probably should flush the long in the loop as otherwise it just keeps building up
+    // TODO(jason): give priority to request uploaded file if not processing
+    // backlog.  really just need to process faster in general.
     UNUSED(req);
 
     // process files as long as more to process and no other threads processing
