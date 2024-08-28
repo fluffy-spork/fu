@@ -357,6 +357,7 @@ const blob_t * ffmpeg_path_web;
     E(dot_webp,".webp", var) \
     E(app_png, "app.png", var) \
     E(dot_mpg,".mpg", var) \
+    E(dot_mov,".mov", var) \
 
 ENUM_BLOB(res_web, RES_WEB)
 
@@ -634,6 +635,8 @@ suffix_content_type(content_type_t type)
             return res_web.dot_jpg;
         case mp4_content_type: 
             return res_web.dot_mp4;
+        case mov_content_type:
+            return res_web.dot_mov;
         case webp_content_type: 
             return res_web.dot_webp;
         case png_content_type: 
@@ -646,6 +649,7 @@ suffix_content_type(content_type_t type)
             return res_web.dot_ts;
         default:
             log_var_s64(type);
+            log_var_blob(blob_content_type(type));
             dev_error("invalid content type");
     }
 }
@@ -1592,7 +1596,8 @@ _ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * fil
         return -1;
     }
 
-    info_log(cmd);
+    // NOTE(jason): excessive logging
+    //info_log(cmd);
 
     int rc = system(cmd);
     if (rc) {
