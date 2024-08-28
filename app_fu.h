@@ -8,6 +8,7 @@
 #include "db_fu.h"
 
 #include <sys/wait.h>
+#include <sys/utsname.h>
 
 #define MAIN_DB_FILE_APP "main.sqlite"
 
@@ -27,12 +28,37 @@ app_fu_t app = {};
     E(user_table, "user", var) \
     E(sql_dir, "/sql", var) \
 
+
 ENUM_BLOB(res_app, RES_APP)
+
+
+// uname -s -m (for example, Linux-x86_64, Darwin-x86_64)
+//
+// NOTE(jason): initially for deploying multiple ffmpeg binaries with a
+// platform suffix
+void
+add_platform_suffix_app(blob_t * b)
+{
+    // TODO(jason): could probably set this at init or otherwise cache, but it
+    // shouldn't really be used frequently
+
+    struct utsname name;
+    if (uname(&name)) {
+        log_errno("uname");
+        dev_error("uname failed");
+    }
+
+    write_blob(b, "-", 1);
+    add_blob(b, B(name.sysname));
+    write_blob(b, "-", 1);
+    add_blob(b, B(name.machine));
+}
+
 
 // get the directory of the AppImage AppDir for accessing resource files, etc
 // in the AppImage
 blob_t *
-new_app_dir_fu(void)
+new_app_dir_app(void)
 {
     blob_t * dir = stk_blob(256);
 
@@ -362,7 +388,7 @@ init_app_fu(const char * state_dir, void (* flush_log_f)(void))
 
     app.name = blob(32);
 
-    app.dir = new_app_dir_fu();
+    app.dir = new_app_dir_app();
     if (!app.dir) {
         error_log("unable to access app.dir", "app", 2);
         return -1;
