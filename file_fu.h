@@ -379,21 +379,33 @@ save_file(const blob_t * path, const blob_t * data)
 
 
 // NOTE(jason): https://stackoverflow.com/questions/799679/programmatically-retrieving-the-absolute-path-of-an-os-x-command-line-app
-blob_t *
-new_executable_path_file_fu()
+int
+executable_path_file_fu(blob_t * path)
 {
-    void * pmain = dlsym(RTLD_DEFAULT, "main");
-    if (!pmain) {
-        debugf("dlsym: %s", dlerror());
-        return NULL;
+    char exe[256];
+    ssize_t len = readlink("/proc/self/exe", exe, 256);
+    if (len == -1) {
+        // not linux
+        void * pmain = dlsym(RTLD_DEFAULT, "main");
+        if (!pmain) {
+            debugf("dlsym: %s", dlerror());
+            return -1;
+        }
+
+        Dl_info info;
+        if (dladdr(pmain, &info) == 0) {
+            debugf("error: dladdr: %s", dlerror());
+            return -1;
+        }
+
+        add_cstr_blob(path, info.dli_fname);
+    }
+    else {
+        write_blob(path, exe, len);
     }
 
-    Dl_info info;
-    if (dladdr(pmain, &info) == 0) {
-        debugf("error: dladdr: %s", dlerror());
-        return NULL;
-    }
+//    debug_blob(path);
 
-    return const_blob(info.dli_fname);
+    return 0;
 }
 

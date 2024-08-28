@@ -57,26 +57,32 @@ add_platform_suffix_app(blob_t * b)
 
 // get the directory of the AppImage AppDir for accessing resource files, etc
 // in the AppImage
-blob_t *
-new_app_dir_app(void)
+int
+app_dir_app(blob_t * path)
 {
     blob_t * dir = stk_blob(256);
+    blob_t * app_dir = stk_blob(256);
+    blob_t * exe_path = stk_blob(256);
 
-    blob_t * exe_path = new_executable_path_file_fu();
+    executable_path_file_fu(exe_path);
     if (dirname_file_fu(exe_path, dir)) {
-        return NULL;
+        return -1;
     }
 
-    blob_t * app_dir = new_path_file_fu(dir, B("AppDir"));
-    app_dir->constant = true;
+    if (path_file_fu(app_dir, dir, B("AppDir"))) {
+        return -1;
+    }
 
     if (read_access_file_fu(app_dir)) {
-        log_errno(cstr_blob(app_dir));
-        free_blob(app_dir);
-        return NULL;
+        // appimage assumed because AppDir doesn't exist
+//        log_errno(cstr_blob(app_dir));
+        add_blob(path, dir);
+    }
+    else {
+        add_blob(path, app_dir);
     }
 
-    return app_dir;
+    return 0;
 }
 
 blob_t *
@@ -388,8 +394,8 @@ init_app_fu(const char * state_dir, void (* flush_log_f)(void))
 
     app.name = blob(32);
 
-    app.dir = new_app_dir_app();
-    if (!app.dir) {
+    app.dir = blob(256);
+    if (app_dir_app(app.dir)) {
         error_log("unable to access app.dir", "app", 2);
         return -1;
     }
