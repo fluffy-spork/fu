@@ -23,6 +23,8 @@ src_file='main.c'
 binary_file='main'
 app_image_file="$name-$(uname -m).AppImage"
 
+default_run_cmd='run-appimage'
+
 CFLAGS="-Wall -Wextra -Werror -rdynamic -D_GNU_SOURCE $CFLAGS"
 
 if [ -f jcc.env ]; then
@@ -32,7 +34,7 @@ fi
 cmd="$1"
 if [ -z "$cmd" ]; then
     #cmd='run'
-    cmd='run-appimage'
+    cmd="$default_run_cmd"
 fi
 
 log() {
@@ -61,6 +63,8 @@ profile() {
 }
 
 run() {
+    export FU_DEV="$USER"
+
     log 'run'
     build '-Og' && ./"$binary_file" $run_args
 }
