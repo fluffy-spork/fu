@@ -1654,8 +1654,13 @@ resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
 
     char cmd[MAX_CMD_WEB];
 
+    // TODO(jason): revisit stripping exif data to verify
     if (width > 0) {
+#ifdef __APPLE__
+        char * fmt_cmd = "sips --resampleWidth %d %s --out %s";
+#else
         char * fmt_cmd = "convert-im6 -auto-orient +profile exif -resize %dx %s %s";
+#endif
 
         if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, width, cstr_blob(input), cstr_blob(output)) < 0) {
             log_errno("imagemagick convert cmd format failed");
@@ -1666,7 +1671,14 @@ resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
         // NOTE(jason): this is for the width == 0 case mainly.  still want to
         // process the image and not just send out the uploaded version so that
         // eventually the exif data, etc is stripped.
+#ifdef __APPLE__
+        // sips doesn't do anything in this case
+        //char * fmt_cmd = "sips %s --out %s";
+        //still should strip exif
+        char * fmt_cmd = "cp %s %s";
+#else
         char * fmt_cmd = "convert-im6 -auto-orient +profile exif %s %s";
+#endif
 
         if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(input), cstr_blob(output)) < 0) {
             log_errno("imagemagick convert cmd format failed");
@@ -2029,13 +2041,14 @@ files_upload_handler(endpoint_t * ep, request_t * req)
 
         req->after_task = process_media_task_web;
         //req->id_task = file_id;
-        // NOTE(jason): need to set keep_alive before response headers are sent
-        // so connection: close is sent.  without connection close, the browser
-        // still hangs assuming it can make another request on the connection.
-        // chrome wouldn't open a new connection which seems a little weird.
-        // doesn't matter.
-        req->keep_alive = false;
     }
+
+    // NOTE(jason): need to set keep_alive before response headers are sent
+    // so connection: close is sent.  without connection close, the browser
+    // still hangs assuming it can make another request on the connection.
+    // chrome wouldn't open a new connection which seems a little weird.
+    // doesn't matter.
+    req->keep_alive = false;
 
     blob_t * location = stk_blob(255);
     add_s64_blob(location, file_id);
