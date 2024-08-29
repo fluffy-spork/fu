@@ -378,13 +378,13 @@ save_file(const blob_t * path, const blob_t * data)
 }
 
 
-// NOTE(jason): https://stackoverflow.com/questions/799679/programmatically-retrieving-the-absolute-path-of-an-os-x-command-line-app
 int
 executable_path_file_fu(blob_t * path)
 {
     char exe[256];
     ssize_t len = readlink("/proc/self/exe", exe, 256);
     if (len == -1) {
+        // NOTE(jason): https://stackoverflow.com/questions/799679/programmatically-retrieving-the-absolute-path-of-an-os-x-command-line-app
         // not linux
         void * pmain = dlsym(RTLD_DEFAULT, "main");
         if (!pmain) {
