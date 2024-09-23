@@ -719,7 +719,7 @@ reuse_request(request_t * req)
     req->cache_control = NO_STORE_CACHE_CONTROL;
     req->request_content_type = none_content_type;
     req->request_content_length = 0;
-    req->keep_alive = true;
+    req->keep_alive = false;
     req->expect_continue = false;
 
     req->session_id = 0;
@@ -2348,7 +2348,8 @@ handle_request:
             }
         }
 
-        bool keep_alive = rc != -1 && req->keep_alive;
+        // NOTE(jason): due to no timeouts taking up connections and generally not that useful
+        bool keep_alive = false; //rc != -1 && req->keep_alive;
         //debug_s64(keep_alive);
 
         // NOTE(jason): overwrite the request data so it can't be used
