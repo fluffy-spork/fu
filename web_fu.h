@@ -11,7 +11,9 @@
 #define MAX_REQUEST_BODY 4096
 #define MAX_RESPONSE_BODY 256*1024
 
-#define MIN_RESOLUTION 640
+#define MIN_RESOLUTION 480
+#define X2_RESOLUTION (2*MIN_RESOLUTION)
+#define X4_RESOLUTION (4*MIN_RESOLUTION) 
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
 
 #define OK_FILE_STATUS 0
@@ -1760,18 +1762,18 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width, cons
         crf = 18;
         maxrate = 8192;
     }
-    else if (width == 640) {
-        crf = 23;
-        maxrate = 365;
+    else if (width == MIN_RESOLUTION) {
+        crf = 28;
+        maxrate = 200;
         fpsmax = 30;
         watermark = true;
     }
-    else if (width == 1280) {
+    else if (width == X2_RESOLUTION) {
         crf = 23;
         maxrate = 3000;
         fpsmax = 30;
     }
-    else if (width == 1920) {
+    else if (width == X4_RESOLUTION) {
         crf = 23;
         maxrate = 6000;
     }
@@ -1915,7 +1917,7 @@ full_process_media_web(s64 id)
     add_s64_blob(file_id.value, id);
 
     if (fast_process_media_web(&file_id)
-            || process_media_web(&file_id, 2*MIN_RESOLUTION, none_content_type)
+            || process_media_web(&file_id, X2_RESOLUTION, none_content_type)
             || process_media_web(&file_id, 0, none_content_type))
     {
         return -1;
@@ -1937,7 +1939,6 @@ next_process_media_web(s64 * file_id)
 int
 process_media_task_web(request_t * req)
 {
-    // TODO(jason): this probably should flush the long in the loop as otherwise it just keeps building up
     // TODO(jason): give priority to request uploaded file if not processing
     // backlog.  really just need to process faster in general.
     UNUSED(req);
@@ -1963,6 +1964,8 @@ process_media_task_web(request_t * req)
             log_error_db(app.db, "failure setting file to 0 status");
             return -1;
         }
+
+        flush_log();
     }
 
     return 0;
