@@ -1594,18 +1594,29 @@ path_upload_web(blob_t * path, const blob_t * name)
 int
 _ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * filter)
 {
-    char * fmt_cmd = "%s -hide_banner -loglevel error -nostdin -i %s %s %s";
+//    char * fmt_cmd = "%s -hide_banner -loglevel error -nostdin -i %s %s %s";
 
+    blob_t * cmd = stk_blob(2048);
+    add_blob(cmd, ffmpeg_path_web);
+    add_cstr_blob(cmd, " -hide_banner -loglevel error -nostdin -i ");
+    add_blob(cmd, input);
+    write_blob(cmd, " ", 1);
+    add_blob(cmd, filter);
+    write_blob(cmd, " ", 1);
+    add_blob(cmd, output);
+
+    /*
     char cmd[MAX_CMD_WEB];
     if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(ffmpeg_path_web), cstr_blob(input), cstr_blob(filter), cstr_blob(output)) < 0) {
         log_errno("ffmpeg cmd format failed");
         return -1;
     }
+    */
 
     // NOTE(jason): excessive logging
     //info_log(cmd);
 
-    int rc = system(cmd);
+    int rc = system(cstr_blob(cmd));
     if (rc) {
         log_errno("failed to process media file");
         return -1;
@@ -1733,13 +1744,14 @@ extract_poster_web(const blob_t * input, const blob_t * output, s64 width)
 }
 
 int
-transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
+transcode_video_web(const blob_t * input, const blob_t * output, s64 width, const blob_t * watermark_file)
 {
     blob_t * filter = stk_blob(1024);
 
     s64 crf = 23;
     s64 maxrate = 1024;
     s64 fpsmax = 0;
+    bool watermark = false;
 
     // NOTE(jason): some of these values are from apple's author guide for HLS
     // https://developer.apple.com/documentation/http_live_streaming/http_live_streaming_hls_authoring_specification_for_apple_devices
@@ -1752,6 +1764,7 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
         crf = 23;
         maxrate = 365;
         fpsmax = 30;
+        watermark = true;
     }
     else if (width == 1280) {
         crf = 23;
@@ -1765,10 +1778,19 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width)
 
     s64 bufsize = maxrate;
 
-    add_blob(filter, B(" -y -vf \""));
+    if (watermark) {
+        add_blob(filter, B(" -i "));
+        add_blob(filter, watermark_file);
+    }
+
+    add_blob(filter, B(" -y -filter_complex \""));
     add_blob(filter, B("scale="));
     add_s64_blob(filter, width);
-    add_blob(filter, B(":-1\""));
+    add_blob(filter, B(":-1"));
+    if (watermark) {
+        add_blob(filter, B(",overlay=(W-w)/2:(H-h)/2"));
+    }
+    add_blob(filter, B("\""));
 
     // remove audio from video uploads
     // TODO(jason): probably make this a config option
@@ -1848,8 +1870,12 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
                 log_errno("failed to generate video poster");
             }
 
+            blob_t * watermark_file = stk_blob(1024);
+            path_file_fu(watermark_file, res_dir_web, B("/res/watermark.png"));
+
+
             //debug("XXXXX transcode video XXXX");
-            return transcode_video_web(input, output, width);
+            return transcode_video_web(input, output, width, watermark_file);
         }
     }
     else if (gif_content_type == type) {
