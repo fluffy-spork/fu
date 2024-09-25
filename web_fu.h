@@ -1764,7 +1764,7 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width, cons
     }
     else if (width == MIN_RESOLUTION) {
         crf = 28;
-        maxrate = 200;
+        maxrate = 300;
         fpsmax = 30;
         watermark = true;
     }
