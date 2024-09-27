@@ -1790,7 +1790,7 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width, cons
     add_s64_blob(filter, width);
     add_blob(filter, B(":-1"));
     if (watermark) {
-        add_blob(filter, B(",overlay=(W-w)/2:((H-h)/2 - (h/2))"));
+        add_blob(filter, B(",overlay=(W-w)/2:((H-h)/2)"));
     }
     add_blob(filter, B("\""));
 
