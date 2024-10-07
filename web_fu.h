@@ -123,6 +123,8 @@ struct request_s {
     s64 user_id;
     blob_t * user_alias;
 
+    s64 cart_id;
+
     // TODO(jason): maybe anonymize/mask the ip
     // for right now, any IP blocking, etc can be done in haproxy since it's
     // being used for https
@@ -728,6 +730,8 @@ reuse_request(request_t * req)
     req->session_supported = false;
     req->user_id = 0;
     erase_blob(req->user_alias);
+
+    req->cart_id = 0;
 
     req->status = 0;
 
@@ -1369,7 +1373,7 @@ redirect_next_endpoint(request_t * req, endpoint_t * ep, endpoint_t * default_ep
 // TODO(jason): is another random value cookie needed that's only sent to the
 // login path or something that helps security?  i'm not sure what i'm talking about.
 int
-require_session_web(request_t * req, bool create)
+_session_web(request_t * req, bool create)
 {
     if (req->session_id) return 0;
 
@@ -1452,7 +1456,19 @@ require_session_web(request_t * req, bool create)
         header(req->head, res_web.set_cookie, c);
     }
 
-    return 0;
+    return (req->session_id > 0) ? 0 : -1;
+}
+
+int
+require_session_web(request_t * req)
+{
+    return _session_web(req, true);
+}
+
+int
+optional_session_web(request_t * req)
+{
+    return _session_web(req, false);
 }
 
 int
@@ -1468,11 +1484,18 @@ end_session_web(request_t * req)
 }
 
 int
+_set_redirect_url_web(request_t * req)
+{
+    dev_error(req->session_id == 0);
+
+    return exec_s64_pbi_db(app.db, B("update session_web set redirect_url = ?, modified = unixepoch() where session_id = ?"),
+            NULL, req->uri, req->session_id);
+}
+
+int
 require_user_web(request_t * req, const endpoint_t * auth)
 {
-    if (require_session_web(req, false)) return -1;
-
-    //log_var_s64(req->user_id);
+    if (require_session_web(req)) return -1;
 
     if (req->user_id) return 0;
 
@@ -1481,18 +1504,7 @@ require_user_web(request_t * req, const endpoint_t * auth)
         return -1;
     }
 
-    sqlite3_stmt * stmt;
-    if (prepare_db(app.db, &stmt, B("update session_web set redirect_url = ?, modified = unixepoch() where session_id = ?"))) {
-        internal_server_error_response(req);
-        return -1;
-    }
-
-//    log_var_s64(req->session_id);
-
-    text_bind_db(stmt, 1, req->uri);
-    s64_bind_db(stmt, 2, req->session_id);
-    sqlite3_step(stmt);
-    if (finalize_db(stmt)) {
+    if (_set_redirect_url_web(req)) {
         internal_server_error_response(req);
     }
     else {
@@ -1505,7 +1517,15 @@ require_user_web(request_t * req, const endpoint_t * auth)
 int
 optional_user_web(request_t * req)
 {
-    return require_session_web(req, false);
+    if (require_session_web(req)) return -1;
+
+    if (req->user_id) return 0;
+
+    if (_set_redirect_url_web(req)) {
+        return internal_server_error_response(req);
+    }
+
+    return 0;
 }
 
 // return a file from the AppDir/res directory with cache-control header set
