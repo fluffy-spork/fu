@@ -1293,6 +1293,22 @@ set_s64_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
     return value;
 }
 
+// TODO(jason): doesn't seem like the greatest solution since there's no way to
+// return an error.  probably doesn't matter as the onl possible error is the
+// param not existing.
+// what should return be?
+s64
+set_s64_optional_param_endpoint(endpoint_t * ep, field_id_t field_id, s64 value)
+{
+    param_t * p = param_endpoint(ep, field_id);
+    if (p) {
+        set_s64_blob(p->value, value);
+        return value;
+    }
+
+    return value;
+}
+
 // Sets the param value if it's empty
 // TODO(jason): this does weird things if called before the params have been
 // parsed.  it may be that the solution is to always parse params before
