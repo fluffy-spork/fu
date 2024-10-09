@@ -358,6 +358,18 @@ max_s64(s64 a, s64 b)
     return a > b ? a : b;
 }
 
+int
+min_int(int a, int b)
+{
+    return a < b ? a : b;
+}
+
+int
+max_int(int a, int b)
+{
+    return a > b ? a : b;
+}
+
 ssize_t
 random_fu(void * buf, size_t size_buf)
 {
