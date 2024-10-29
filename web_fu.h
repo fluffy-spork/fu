@@ -1472,13 +1472,14 @@ _session_web(request_t * req, bool create)
         header(req->head, res_web.set_cookie, c);
     }
 
-    return (req->session_id > 0) ? 0 : -1;
+    return 0;
 }
 
 int
 require_session_web(request_t * req)
 {
-    return _session_web(req, true);
+    int ret = _session_web(req, true);
+    return (ret == 0 && req->session_id > 0) ? 0 : -1;
 }
 
 int
