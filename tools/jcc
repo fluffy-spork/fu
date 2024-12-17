@@ -47,8 +47,8 @@ build() {
 
     log 'build'
 #    time -f 'compile: %e seconds' gcc $CFLAGS $extra_flags -o "$binary_file" "$src_file" $lib_flags
-    log 'compile time'
-    time gcc $CFLAGS $extra_flags -o "$binary_file" "$src_file" $lib_flags
+    echo 'compile time'
+    time -p gcc $CFLAGS $extra_flags -o "$binary_file" "$src_file" $lib_flags
 }
 
 debug() {
