@@ -4,7 +4,7 @@
 // needed.
 
 // sqlite strict types: integer, real, text, blob, any
-#define FIELD_TYPE_TABLE(var, E) \
+#define TYPE_FIELD_TABLE(var, E) \
     E(unknown, "unknown", var) \
     E(text, "text", var) \
     E(integer, "integer", var) \
@@ -15,7 +15,7 @@
     E(select_integer, "select_integer", var) \
     E(file_multiple, "file_multiple", var) \
 
-ENUM_BLOB(field_type, FIELD_TYPE_TABLE)
+ENUM_BLOB(type_field, TYPE_FIELD_TABLE)
 
 #define EXTRACT_AS_ENUM_FIELD(name, ...) name##_field,
 #define EXTRACT_AS_STRUCT_FIELD(name, ...) field_t * name;
@@ -34,7 +34,7 @@ typedef enum {
 
 typedef struct {
     field_id_t id;
-    field_type_t type;
+    type_field_t type;
     blob_t * name;
     blob_t * label;
     s32 min_size;
@@ -42,38 +42,38 @@ typedef struct {
 } field_t;
 
 s32
-max_size_field_type(field_type_t type, s32 req_size)
+max_size_type_field(type_field_t type, s32 req_size)
 {
     // verify req_size isn't above max size
     if (req_size) return req_size;
 
     switch (type) {
-        case select_integer_field_type:
-        case timestamp_field_type:
-        case file_field_type:
+        case select_integer_type_field:
+        case timestamp_type_field:
+        case file_type_field:
             return 20;
-        case integer_field_type:
+        case integer_type_field:
             return 19 + 1 + 6; // 1 for '-', 6 for separators
-        case file_multiple_field_type:
+        case file_multiple_type_field:
             return req_size;
-        case text_field_type:
-        case hidden_field_type:
-        case password_field_type:
+        case text_type_field:
+        case hidden_type_field:
+        case password_type_field:
             return req_size;
-        case unknown_field_type:
+        case unknown_type_field:
             return 0;
         default:
-            debugf("missing max size for field_type: %d", type);
+            debugf("missing max size for type_field: %d", type);
             assert(false);
     }
 }
 
 field_t *
-field(field_id_t id, blob_t * name, blob_t * label, field_type_t type, s32 req_min_size, s32 req_max_size)
+field(field_id_t id, blob_t * name, blob_t * label, type_field_t type, s32 req_min_size, s32 req_max_size)
 {
     field_t * field = malloc(sizeof(field_t));
     if (field) {
-        s32 max_size = max_size_field_type(type, req_max_size);
+        s32 max_size = max_size_type_field(type, req_max_size);
         s32 min_size = max_s32(req_min_size, 0);
 
         *field = (field_t){
@@ -99,7 +99,7 @@ struct {
 void
 init_fields(void)
 {
-    init_field_type();
+    init_type_field();
 
     FIELD_TABLE(EXTRACT_AS_INIT_FIELD)
 

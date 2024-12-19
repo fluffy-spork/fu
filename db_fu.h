@@ -776,7 +776,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
         //debug_s64(params[i].value->capacity);
 
         switch (f->type) {
-            case text_field_type:
+            case text_type_field:
                 {
                     blob_t * value = va_arg(args, blob_t *);
                     //debug_blob(value);
@@ -784,7 +784,7 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
                     add_blob(params[i].value, value);
                 }
                 break;
-            case integer_field_type:
+            case integer_type_field:
                 {
                     s64 s64_value = va_arg(args, s64);
                     //debug_s64(s64_value);
@@ -1025,9 +1025,9 @@ int
 sql_type_param(const param_t * p)
 {
     switch (p->field->type) {
-        case integer_field_type:
-        case timestamp_field_type:
-        case select_integer_field_type:
+        case integer_type_field:
+        case timestamp_type_field:
+        case select_integer_type_field:
             return SQLITE_INTEGER;
         default:
             return SQLITE_TEXT;
