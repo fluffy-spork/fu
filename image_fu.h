@@ -35,6 +35,13 @@ typedef struct {
     u8 alpha;
 } color_t;
 
+const color_t TRANSPARENT = {
+    .red = 0,
+    .green = 0,
+    .blue = 0,
+    .alpha = 0 
+};
+
 const color_t WHITE = {
     .red = 255,
     .green = 255,
@@ -90,6 +97,14 @@ const color_t YELLOW = {
     .blue = 0,
     .alpha = 255
 };
+
+
+color_t
+rgba_color(int red, int green, int blue, int alpha)
+{
+    return (color_t){ .red = red, .green = green, .blue = blue, .alpha = alpha };
+}
+
 
 // TODO(jason): add size to struct and remove n_pixels
 ssize_t
@@ -651,6 +666,12 @@ void
 paste_center_image(image_t * src, image_t * dest)
 {
     paste_image(src, dest, abs(dest->width - src->width)/2, abs(dest->height - src->height)/2); 
+}
+
+void
+blend_image(const image_t * src, image_t * dest)
+{
+    copy_image(src, dest);
 }
 
 // copy a region of interest from larger image
@@ -2905,5 +2926,92 @@ error:
     close(fd);
 
 	return rc;
+}
+
+
+// this is not really an atlas texture.  there should be one image and offsets into
+// the image.  could potentially have multiple images referencing the same
+// source atlas image
+
+typedef struct {
+    int width;
+    int height;
+    image_t * images[256];
+} image_atlas_t;
+
+
+image_atlas_t *
+new_image_atlas(int width, int height)
+{
+    image_atlas_t * atlas = malloc(sizeof(*atlas));
+    atlas->width = width;
+    atlas->height = height;
+
+    return atlas;
+}
+
+
+void
+free_image_atlas(image_atlas_t * atlas)
+{
+    for_i(256) {
+        if (atlas->images[i]) {
+            free_image(atlas->images[i]);
+        }
+    }
+
+    free(atlas);
+}
+
+/*
+// handle newline
+int
+text_atlas_image(image_atlas_t * atlas, image_t * img, int x, int y, blob_t * text)
+{
+    return 0;
+}
+
+// draw one line of images until no more fit
+int
+line_atlas_image(image_atlas_t * atlas, image_t * img, int x, int y, blob_t * indices)
+{
+    return 0;
+}
+*/
+
+int
+flow_image_atlas(image_atlas_t * atlas, image_t * img, int x, int y, int spacing, blob_t * indices)
+{
+    int y_incr = 0;
+
+    int x_start = x;
+    for_i_size(indices->size) {
+        image_t * glyph = atlas->images[indices->data[i]];
+        dev_error(glyph == NULL);
+
+        if ((x + glyph->width) > img->width) {
+            if ((y + y_incr) < img->height) {
+                y = y + y_incr + spacing;
+            }
+            else {
+                return -1;
+            }
+
+            x = x_start;
+            y_incr = 0;
+        }
+
+        if (y + spacing + glyph->height > img->height) {
+            return -1;
+        }
+
+        // TODO(jason): need something that supports alpha blending
+        paste_image(glyph, img, x, y);
+
+        x += glyph->width + spacing;
+        y_incr = max_int(glyph->height, y_incr);
+    }
+
+    return 0;
 }
 
