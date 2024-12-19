@@ -833,13 +833,13 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
 
 #define TEXT_AREA_MIN_SIZE 64
 
-    if (field->type == text_field_type && field->max_size > TEXT_AREA_MIN_SIZE) {
+    if (field->type == text_type_field && field->max_size > TEXT_AREA_MIN_SIZE) {
         start_div_class(res_html.field);
         textarea_html(html, param, autofocus);
         label(field->label, field->name);
         end_div();
     }
-    else if (field->type == select_integer_field_type) {
+    else if (field->type == select_integer_type_field) {
         start_div_class(res_html.field);
 
         select_html(html, param);
@@ -847,7 +847,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         label(field->label, field->name);
         end_div();
     }
-    else if (field->type == file_field_type || field->type == file_multiple_field_type) {
+    else if (field->type == file_type_field || field->type == file_multiple_type_field) {
         start_div_class(res_html.field);
         open_tag_html(html, res_html.input);
         attr_html(html, res_html.type, res_html.file_type);
@@ -858,7 +858,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         // until multipart/form-data is implemented.  most people will have JS
         // anyway
         empty_attr_html(html, res_html.disabled);
-        if (field->type == file_multiple_field_type) empty_attr_html(html, res_html.multiple);
+        if (field->type == file_multiple_type_field) empty_attr_html(html, res_html.multiple);
         // NOTE(jason): file input field itself doesn't have an id or name as
         // it shouldn't send a value directly to the server.
         //attr_html(html, res_html.id, field->name);
@@ -885,7 +885,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         div_class(res_html.uploads_class, NULL);
         end_div();
     }
-    else if (field->type == hidden_field_type) {
+    else if (field->type == hidden_type_field) {
         hidden_input(field->name, value);
     }
     else {
