@@ -52,7 +52,7 @@ new_path_file_fu(const blob_t * dir, const blob_t * file)
     return path;
 }
 
-// what should happen if there's no '/'
+// what should happen if there's no '/'?  likely return empty string and not error
 ssize_t
 dirname_file_fu(const blob_t * path, blob_t * dirname)
 {
@@ -378,6 +378,20 @@ save_file(const blob_t * path, const blob_t * data)
 }
 
 
+// current working directory
+int
+cwd_file_fu(blob_t * path)
+{
+    if (!getcwd((void *)path->data, path->capacity)) {
+        return -1;
+    }
+
+    path->size = strlen((void *)path->data);
+
+    return 0;
+}
+
+
 int
 executable_path_file_fu(blob_t * path)
 {
@@ -386,6 +400,7 @@ executable_path_file_fu(blob_t * path)
     if (len == -1) {
         // NOTE(jason): https://stackoverflow.com/questions/799679/programmatically-retrieving-the-absolute-path-of-an-os-x-command-line-app
         // not linux
+        // only for macos command line apps, not app bundles
         void * pmain = dlsym(RTLD_DEFAULT, "main");
         if (!pmain) {
             debugf("dlsym: %s", dlerror());
