@@ -61,13 +61,38 @@ int
 app_dir_app(blob_t * path)
 {
     blob_t * dir = stk_blob(256);
-    blob_t * app_dir = stk_blob(256);
-    blob_t * exe_path = stk_blob(256);
 
-    executable_path_file_fu(exe_path);
-    if (dirname_file_fu(exe_path, dir)) {
+    char * appdir_env = getenv("APPDIR");
+    if (appdir_env) {
+        add_cstr_blob(dir, appdir_env);
+
+        if (read_access_file_fu(dir)) {
+            log_errno(cstr_blob(dir));
+            return -1;
+        }
+        else {
+            add_blob(path, dir);
+        }
+
+        return 0;
+    }
+
+    blob_t * app_dir = stk_blob(256);
+    //blob_t * exe_path = stk_blob(256);
+
+    if (cwd_file_fu(dir)) {
         return -1;
     }
+
+    debug_blob(dir);
+
+    /*
+    if (executable_path_file_fu(exe_path)) {
+    }
+    else if (dirname_file_fu(exe_path, dir)) {
+        return -1;
+    }
+    */
 
     if (path_file_fu(app_dir, dir, B("AppDir"))) {
         return -1;
