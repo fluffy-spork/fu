@@ -154,12 +154,15 @@ offset_blob(const blob_t * b, size_t offset)
 }
 
 // returns -1 if the offset is larger than the current size
+//
+// TODO(jason): how should this update size.  the previous behavior on return
+// b->size++ can't possibly be used anywhere.
 ssize_t
 set_offset_blob(blob_t * b, size_t offset, u8 value)
 {
     if (offset >= b->size) return -1;
     b->data[offset] = value;
-    return b->size++;
+    return b->size;
 }
 
 // TODO(jason): is this weird and should just convert to an integer?
