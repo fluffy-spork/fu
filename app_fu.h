@@ -51,7 +51,10 @@ add_platform_suffix_app(blob_t * b)
     write_blob(b, "-", 1);
     add_blob(b, B(name.sysname));
     write_blob(b, "-", 1);
-    add_blob(b, B(name.machine));
+    // always use the x86_64 for arm since no prebuilt ffmpeg binaries for arm
+    // and x86_64 works fine
+    add_blob(b, B("x86_64"));
+//    add_blob(b, B(name.machine));
 }
 
 
