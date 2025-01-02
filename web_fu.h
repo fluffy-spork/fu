@@ -321,6 +321,10 @@ const blob_t * ffmpeg_path_web;
     E(content_length,"content-length", var) \
     E(content_disposition,"content-disposition", var) \
     E(content_disposition_value_prefix,"attachment; filename=", var) \
+    E(content_encoding,"content-encoding", var) \
+    E(content_encoding_gzip,"gzip", var) \
+    E(content_encoding_brotli,"br", var) \
+    E(content_encoding_identity,"identity", var) \
     E(cookie,"cookie", var) \
     E(set_cookie,"set-cookie", var) \
     E(location,"location", var) \
@@ -363,7 +367,9 @@ const blob_t * ffmpeg_path_web;
     E(dot_mpg,".mpg", var) \
     E(dot_mov,".mov", var) \
 
+
 ENUM_BLOB(res_web, RES_WEB)
+
 
 u8
 hex_char(u8 c)
@@ -382,7 +388,7 @@ insert_access_log_web(request_t * req)
     return insert_fields_db(app.db, res_web.access_log_table, NULL
             , request_method_field, req->method
             , request_path_field, req->path
-            , http_status_field, req->status
+            , http_status_field, (s64)req->status
             , session_id_field, req->session_id
             , user_id_field, req->user_id
             , received_field, received
@@ -795,6 +801,8 @@ u64_header(blob_t * b, const blob_t *name, const u64 value)
 
 // Makes the response download potentially with save as dialog
 //Content-Disposition: attachment; filename="cool.html"
+//
+// TODO(jason): why doesn't this take a request_t?
 void
 add_content_disposition_header(blob_t * b, const blob_t * filename)
 {
@@ -802,6 +810,21 @@ add_content_disposition_header(blob_t * b, const blob_t * filename)
     vadd_blob(v, res_web.content_disposition_value_prefix, filename);
     header(b, res_web.content_disposition, v);
 }
+
+
+void
+gzip_content_encoding_web(request_t * req)
+{
+    header(req->head, res_web.content_encoding, res_web.content_encoding_gzip);
+}
+
+
+void
+static_cache_control_web(request_t * req)
+{
+    req->cache_control = STATIC_ASSET_CACHE_CONTROL;
+}
+
 
 // TODO(jason): this probably shouldn't be "require"
 int
@@ -1023,6 +1046,21 @@ json_response(request_t * req)
 {
     return ok_response(req, json_content_type);
 }
+
+
+int
+css_response(request_t * req)
+{
+    return ok_response(req, css_content_type);
+}
+
+
+int
+javascript_response(request_t * req)
+{
+    return ok_response(req, javascript_content_type);
+}
+
 
 // generate an error response that formats a body with html about the error 
 // TODO(jason): make a macro to pass file and line of caller
@@ -1555,6 +1593,420 @@ res_handler(endpoint_t * ep, request_t * req)
 
     return file_response(req, res_dir_web, req->path, 0, 0);
 }
+
+
+void
+css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_highlight, const blob_t * bg_highlight)
+{
+    const blob_t * error_color = B("#c00");
+    const blob_t * disabled_color = B("#666");
+    const blob_t * none = B("none");
+    const blob_t * zero = B("0");
+    const blob_t * center = B("center");
+
+    reset_css(css);
+
+    begin_css(css, B("body"));
+    {
+        background_color_css(css, bg);
+        color_css(css, fg);
+        font_family_css(css, B("monospace"));
+        font_size_css(css, B("16px"));
+        font_weight_css(css, B("bold"));
+    }
+    end_css(css);
+
+    begin_css(css, B("::selection"));
+    {
+        background_color_css(css, fg_highlight);
+        color_css(css, bg_highlight);
+        text_shadow_css(css, none);
+    }
+    end_css(css);
+
+    begin_css(css, B("table"));
+    {
+        margin_css(css, B("1em auto"));
+    }
+    end_css(css);
+
+    begin_css(css, B("tr:nth-child(even)"));
+    {
+        // TODO(jason): configurable?
+        background_color_css(css, B("#222"));
+    }
+    end_css(css);
+
+    begin_css(css, B("th, td"));
+    {
+        padding_css(css, B("4px 8px"));
+        text_wrap_css(css, B("nowrap"));
+    }
+    end_css(css);
+
+    begin_css(css, B("option:hover, option:focus"));
+    {
+        background_color_css(css, bg_highlight);
+        color_css(css, fg_highlight);
+    }
+    end_css(css);
+
+    begin_css(css, B("h1"));
+    {
+        margin_css(css, B("1em 0"));
+        text_align_css(css, center);
+        font_size_css(css, B("24px"));
+    }
+    end_css(css);
+
+    begin_css(css, B("video"));
+    {
+        cursor_css(css, B("pointer"));
+        display_css(css, B("block"));
+        // for safari overlays
+        transform_css(css, B("translateZ(0)"));
+        prop_css(css, B("-webkit-tap-highlight-color"), B("rgba(0, 255, 0, 0.25)"));
+    }
+    end_css(css);
+
+    link_css(css, fg_highlight, bg_highlight);
+
+    begin_css(css, B("form"));
+    {
+        text_align_css(css, center);
+    }
+    end_css(css);
+
+    begin_css(css, B("input"));
+    {
+        display_css(css, B("inline-block"));
+        appearance_css(css, none);
+        font_size_css(css, B("18px"));
+        font_family_css(css, B("monospace"));
+        padding_css(css, B("0.5em"));
+    }
+    end_css(css);
+
+    begin_css(css, B("textarea, select, input[type=text]"));
+    {
+        outline_css(css, none);
+        display_css(css, B("block"));
+        appearance_css(css, none);
+        width_css(css, B("100%"));
+        box_sizing_css(css, B("border-box"));
+        border_css(css, B("2px solid #000"));
+        background_color_css(css, B("#000"));
+        padding_css(css, B("0.5em"));
+        overflow_css(css, B("clip"));
+        color_css(css, fg_highlight);
+        font_size_css(css, B("18px"));
+        font_family_css(css, B("monospace"));
+        font_weight_css(css, B("bold"));
+    }
+    end_css(css);
+
+    begin_css(css, B("textarea"));
+    {
+        font_size_css(css, B("20px"));
+    }
+    end_css(css);
+
+    begin_css(css, B("textarea:focus, textarea:hover, input:focus, input:hover, select:focus, select:hover"));
+    {
+        border_css(css, B("2px dashed"));
+        border_color_css(css, fg_highlight);
+    }
+    end_css(css);
+
+    class_css(css, B("notice"));
+    {
+        background_color_css(css, error_color);
+    }
+    end_css(css);
+
+    class_css(css, B("field"));
+    {
+        margin_bottom_css(css, B("16px"));
+        padding_css(css, B("8px 0 0 8px"));
+        border_css(css, none);
+        border_left_css(css, B("2px solid"));
+        border_top_css(css, B("2px solid"));
+        border_color_css(css, fg_highlight);
+        text_align_css(css, B("left"));
+    }
+    end_css(css);
+
+    class_css(css, B("field > label"));
+    {
+        font_size_css(css, B("12px"));
+        font_weight_css(css, B("normal"));
+    }
+    end_css(css);
+
+    id_css(css, B("header"));
+    {
+        background_color_css(css, bg);
+        text_align_css(css, center);
+    }
+    end_css(css);
+
+    id_css(css, B("user"));
+    {
+        margin_css(css, B("32px"));
+        text_align_css(css, center);
+    }
+    end_css(css);
+
+    id_css(css, B("main"));
+    {
+        margin_css(css, B("1em auto 0 auto"));
+        padding_css(css, B("0 0 128px 0"));
+        background_color_css(css, bg);
+
+        width_css(css, B("100%"));
+        min_width_css(css, B("256px"));
+        max_width_css(css, B("640px"));
+        min_height_css(css, B("256px"));
+    }
+    end_css(css);
+
+    class_css(css, center);
+    {
+        text_align_css(css, center);
+    }
+    end_css(css);
+
+    id_css(css, B("error"));
+    {
+        background_color_css(css, error_color);
+        padding_css(css, B("2px"));
+    }
+    end_css(css);
+
+    id_css(css, B("errors"));
+    {
+        text_align_css(css, B("start"));
+    }
+    end_css(css);
+
+    class_css(css, B("action-bar"));
+    {
+        position_css(css, B("sticky"));
+        z_index_css(css, B("1000"));
+        top_css(css, zero);
+        margin_css(css, B("1em 0"));
+        text_align_css(css, B("right"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".action-bar .button-bar"));
+    {
+        box_shadow_css(css, B("0 0 2px 0 #000"));
+        background_color_css(css, B("rgba(0,0,0,0.4)"));
+    }
+    end_css(css);
+
+    begin_css(css, B("form"));
+    {
+        text_align_css(css, center);
+    }
+    end_css(css);
+
+    media_css(css, B("screen and (min-width: 720px)"));
+    {
+        class_css(css, B("action-bar"));
+        {
+            position_css(css, B("fixed"));
+            top_css(css, zero);
+            right_css(css, zero);
+        }
+        end_css(css);
+
+        begin_css(css, B(".action-bar > .button-bar"));
+        {
+            border_bottom_left_radius_css(css, B("12px"));
+            flex_direction_css(css, B("column"));
+        }
+        end_css(css);
+
+        begin_css(css, B(".action-bar > .button-bar > *"));
+        {
+            margin_css(css, B("8px"));
+        }
+        end_css(css);
+    }
+    end_media_css(css);
+
+    class_css(css, B("button-bar"));
+    {
+        pointer_events_css(css, none);
+        display_css(css, B("flex"));
+        flex_wrap_css(css, B("wrap"));
+        padding_css(css, zero);
+        justify_content_css(css, center);
+    }
+    end_css(css);
+
+    begin_css(css, B("table.tri"));
+    {
+        margin_css(css, zero);
+        width_css(css, B("100%"));
+        border_spacing_css(css, zero);
+        border_collapse_css(css, B("collapse"));
+    }
+    end_css(css);
+
+    begin_css(css, B("table.tri td"));
+    {
+        display_css(css, B("table-cell"));
+        padding_css(css, zero);
+        width_css(css, B("33%"));
+        text_align_css(css, center);
+        vertical_align_css(css, B("middle"));
+        white_space_css(css, B("nowrap"));
+    }
+    end_css(css);
+
+    begin_css(css, B("table.tri td:first-child"));
+    {
+        text_align_css(css, B("left"));
+    }
+    end_css(css);
+
+    begin_css(css, B("table.tri td:last-child"));
+    {
+        text_align_css(css, B("right"));
+    }
+    end_css(css);
+
+    begin_css(css, B("input[type=submit], button, .button-bar a"));
+    {
+        cursor_css(css, B("pointer"));
+        user_select_css(css, none);
+        display_css(css, B("inline-block"));
+        outline_css(css, none);
+        margin_css(css, B("8px"));
+        padding_css(css, B("8px"));
+        border_css(css, B("2px solid"));
+        border_color_css(css, fg_highlight);
+        border_radius_css(css, B("8px"));
+        background_color_css(css, B("rgba(0,0,0,0.4)"));
+        color_css(css, fg_highlight);
+        font_size_css(css, B("18px"));
+        font_weight_css(css, B("bold"));
+        text_shadow_css(css, B("0 0 2px #000"));
+        box_shadow_css(css, B("0 0 2px 0 #000"));
+    }
+    end_css(css);
+
+    begin_css(css, B("input[type=submit]:focus, input[type=submit]:hover, button:focus, button:hover, .button-bar a:focus, .button-bar a:hover"));
+    {
+        border_style_css(css, B("dashed"));
+        text_decoration_css(css, none);
+    }
+    end_css(css);
+
+    begin_css(css, B("input[type=submit]:active, button:active, .button-bar a:active"));
+    {
+        background_color_css(css, fg_highlight);
+        border_style_css(css, B("solid"));
+        color_css(css, bg);
+        text_shadow_css(css, none);
+    }
+    end_css(css);
+
+    begin_css(css, B("input[type=submit]:disabled, button:disabled, .button-bar a:disabled"));
+    {
+        background_color_css(css, bg);
+        border_color_css(css, disabled_color);
+        color_css(css, disabled_color);
+    }
+    end_css(css);
+
+    begin_css(css, B(".button-bar form, .user form"));
+    {
+        display_css(css, B("inline-block"));
+    }
+    end_css(css);
+
+    begin_css(css, B("form > .button-bar"));
+    {
+        position_css(css, B("sticky"));
+        top_css(css, zero);
+        flex_wrap_css(css, B("nowrap"));
+        margin_bottom_css(css, B("1em"));
+        box_shadow_css(css, B("0 0 2px 0 #000"));
+        background_color_css(css, B("rgba(0,0,0,0.4)"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".button-bar .status"));
+    {
+        flex_grow_css(css, B("1"));
+        padding_css(css, B("8px"));
+        line_height_css(css, B("200%"));
+        x_overflow_css(css, B("clip"));
+        text_overflow_css(css, B("ellipsis"));
+        white_space_css(css, B("nowrap"));
+    }
+    end_css(css);
+
+    class_css(css, B("primary-action"));
+    {
+        pointer_events_css(css, none);
+        position_css(css, B("absolute"));
+        top_css(css, zero);
+        left_css(css, zero);
+        right_css(css, zero);
+        text_align_css(css, B("right"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".primary-action input[type=submit]"));
+    {
+        pointer_events_css(css, B("auto"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".primary-action form"));
+    {
+        display_css(css, B("inline-block"));
+        margin_css(css, B("4px 8px"));
+    }
+    end_css(css);
+
+    begin_css(css, B("#home-login input[name=email]"));
+    {
+        margin_css(css, B("3em auto"));
+        //padding_css(css, zero);
+        text_align_css(css, center);
+        width_css(css, B("32ex"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".big, .amount"));
+    {
+        margin_css(css, B("0 0 1em 0"));
+        text_align_css(css, center);
+        font_size_css(css, B("24px"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".big > .button-bar"));
+    {
+        flex_wrap_css(css, B("wrap"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".item-list > *"));
+    {
+        display_css(css, B("block"));
+        margin_css(css, B("0.25em 0"));
+        font_size_css(css, B("32px"));
+    }
+    end_css(css);
+}
+
 
 // TODO(jason): this works.  ultimately, I think it's unfortunately required to
 // have something at /favicon.ico

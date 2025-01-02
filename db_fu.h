@@ -749,6 +749,8 @@ insert_sql_db(blob_t * sql, const blob_t * table, param_t * params, int n_params
 
 // NOTE(jason): probably won't work with without rowid tables due to
 // "returning rowid" clause
+// TODO(jason): downside is varargs have to be the correct size of field.  ran
+// into bug where enum size is 32-bit instead of 64-bit.  possibly ARM related
 int
 _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
 {
@@ -787,7 +789,6 @@ _insert_fields_db(db_t * db, const blob_t * table, s64 * rowid, ...)
             case integer_type_field:
                 {
                     s64 s64_value = va_arg(args, s64);
-                    //debug_s64(s64_value);
                     add_s64_blob(params[i].value, s64_value);
                 }
                 break;

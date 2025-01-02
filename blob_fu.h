@@ -1188,6 +1188,9 @@ alpha_numeric_hyphen_blob(const blob_t * b)
 }
 
 
+// TODO(jason): enums can have different sizes on different platforms so maybe
+// do a struct with id field or something instead.  I had a bug because x86_64
+// used 64-bit and arm is only 32-bit
 // TODO(jason): would be good if var_name didn't have to be passed around when
 // defining enum table
 
