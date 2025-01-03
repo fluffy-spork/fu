@@ -14,7 +14,7 @@
     E(border_radius, "border-radius", var) \
     E(border_spacing, "border-spacing", var) \
     E(border_style, "border-style", var) \
-    E(bottom, "border-bottom", var) \
+    E(bottom, "bottom", var) \
     E(box_shadow, "box-shadow", var) \
     E(box_sizing, "box-sizing", var) \
     E(clip, "clip", var) \
