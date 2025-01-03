@@ -1569,6 +1569,7 @@ require_user_web(request_t * req, const endpoint_t * auth)
     return 1;
 }
 
+// requires a session and if no user sets redirect url for after login
 int
 optional_user_web(request_t * req)
 {
