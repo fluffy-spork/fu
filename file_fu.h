@@ -238,15 +238,15 @@ copy_fd_file_fu(int out_fd, int in_fd, size_t len)
 }
 
 ssize_t
-copy_file_fu(const blob_t * out, const blob_t * in)
+copy_file_fu(const blob_t * out_path, const blob_t * in_path)
 {
-    int out_fd = open_read_write_file_fu(out);
+    int out_fd = open_read_write_file_fu(out_path);
     if (out_fd == -1) {
         return -1;
     }
 
-    debug_blob(in);
-    int in_fd = open_read_file_fu(in);
+    debug_blob(in_path);
+    int in_fd = open_read_file_fu(in_path);
     if (in_fd == -1) {
         return -1;
     }
