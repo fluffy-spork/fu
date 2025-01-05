@@ -6,6 +6,8 @@
 #include <sys/uio.h>
 #include <sys/wait.h>
 
+#include <netinet/tcp.h>
+
 #include "file_fu.h"
 
 #define MAX_REQUEST_BODY 4096
@@ -1229,6 +1231,13 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
 
     const blob_t * status = blob_http_status(req->status);
 
+    // NOTE(jason):  TCP_CORK supposedly helps wait to send everything with
+    // full packets or something when there are headers and sendfile.  man sendfile
+    // maybe that's important to avoid sending a few byte packet with the
+    // status or headers before the whole file is sent
+    int cork = 1;
+    setsockopt(req->fd, SOL_TCP, TCP_CORK, &cork, sizeof(cork));
+
     if (write_file_fu(req->fd, status) == -1) {
         internal_server_error_response(req);
         return log_errno("write_file_fu status");
@@ -1239,9 +1248,12 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
         return log_errno("write_file_fu head");
     }
 
-    if (copy_fd_file_fu(req->fd, fd, len) == -1) {
-        return log_errno("copy_fd_file_fu");
+    if (send_file(req->fd, fd, len) == -1) {
+        return log_errno("send_file");
     }
+
+    cork = 0;
+    setsockopt(req->fd, SOL_TCP, TCP_CORK, &cork, sizeof(cork));
 
     return req->content_length;
 }
