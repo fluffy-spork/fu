@@ -2,7 +2,9 @@
 
 #include <dlfcn.h> // dladdr, ..
 #include <fcntl.h>
+#ifdef __linux__
 #include <sys/sendfile.h>
+#endif
 #include <sys/stat.h>
 
 
@@ -268,11 +270,14 @@ copy_file_fu(const blob_t * out_path, const blob_t * in_path)
 
 
 ssize_t
-send_file(int out_fd, int in_fd , size_t count)
+send_file(int out_fd, int in_fd, size_t len)
 {
-    return sendfile(out_fd, in_fd, NULL, count);
+#ifdef __linux__
+    return sendfile(out_fd, in_fd, NULL, len);
+#else
+    return copy_fd_file_fu(out_fd, in_fd, len);
+#endif
 }
-
 
 /* none of this is tested and may be unused
 int
