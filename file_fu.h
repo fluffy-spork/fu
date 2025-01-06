@@ -4,6 +4,8 @@
 #include <fcntl.h>
 #ifdef __linux__
 #include <sys/sendfile.h>
+#include <sys/socket.h>
+#include <netinet/tcp.h>
 #endif
 #include <sys/stat.h>
 
@@ -269,6 +271,16 @@ copy_file_fu(const blob_t * out_path, const blob_t * in_path)
 }
 
 
+int
+set_tcp_cork_file(int fd, int cork)
+{
+#ifdef __linux__
+    return setsockopt(fd, SOL_TCP, TCP_CORK, &cork, sizeof(cork));
+#endif
+}
+
+// TODO(jason): possibly better to make this interface more like Apple sendfile
+// with header and trailer iovec.  Could wrap with TCP_CORK on linux too.
 ssize_t
 send_file(int out_fd, int in_fd, size_t len)
 {

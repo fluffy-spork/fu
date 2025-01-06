@@ -1235,8 +1235,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
     // full packets or something when there are headers and sendfile.  man sendfile
     // maybe that's important to avoid sending a few byte packet with the
     // status or headers before the whole file is sent
-    int cork = 1;
-    setsockopt(req->fd, SOL_TCP, TCP_CORK, &cork, sizeof(cork));
+    set_tcp_cork_file(req->fd, 1);
 
     if (write_file_fu(req->fd, status) == -1) {
         internal_server_error_response(req);
@@ -1252,8 +1251,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
         return log_errno("send_file");
     }
 
-    cork = 0;
-    setsockopt(req->fd, SOL_TCP, TCP_CORK, &cork, sizeof(cork));
+    set_tcp_cork_file(req->fd, 0);
 
     return req->content_length;
 }
