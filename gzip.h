@@ -1,25 +1,33 @@
 #pragma once
 
-// sudo apt install libdeflate-dev
-// add $(pkgconf --cflags --libs libdeflate) to jcc.env lib_flags
-//
-// TODO(jason): replace with an internal implementation
+// add '-lz' to jcc.env lib_flags
 
-#include <libdeflate.h>
+
+#include <zlib.h>
 
 
 int
 gzip_fu(blob_t * dest, const blob_t * src)
 {
-    struct libdeflate_compressor * comp = libdeflate_alloc_compressor(12);
-    if (!comp) return -1;
+    // https://stackoverflow.com/a/57699371
+    z_stream zs;
+    zs.zalloc = Z_NULL;
+    zs.zfree = Z_NULL;
+    zs.opaque = Z_NULL;
+    zs.avail_in = src->size;
+    zs.next_in = src->data;
+    zs.avail_out = dest->capacity;
+    zs.next_out = dest->data;
 
-    size_t size = libdeflate_gzip_compress(comp, src->data, src->size, dest->data, available_blob(dest));
-    if (size == 0) return -1;
+    // hard to believe they don't have a macro for gzip encoding, "Add 16" is
+    // the best thing zlib can do: "Add 16 to windowBits to write a simple gzip
+    // header and trailer around the compressed data instead of a zlib wrapper"
+    deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8, Z_DEFAULT_STRATEGY);
+    deflate(&zs, Z_FINISH);
+    deflateEnd(&zs);
+    //return zs.total_out;
 
-    set_size_blob(dest, size);
-
-    libdeflate_free_compressor(comp);
+    set_size_blob(dest, zs.total_out);
 
     return 0;
 }
