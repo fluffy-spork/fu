@@ -6,8 +6,9 @@
 #include <zlib.h>
 
 
+// NOTE(jason): overwrites src at the beginning
 int
-gzip_fu(blob_t * dest, const blob_t * src)
+encode_gzip(blob_t * dest, const blob_t * src)
 {
     // https://stackoverflow.com/a/57699371
     z_stream zs;
