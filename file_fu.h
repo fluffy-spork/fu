@@ -5,6 +5,7 @@
 #ifdef __linux__
 #include <sys/sendfile.h>
 #include <sys/socket.h>
+#include <netinet/in.h>
 #include <netinet/tcp.h>
 #endif
 #include <sys/stat.h>
@@ -275,7 +276,7 @@ int
 set_tcp_cork_file(int fd, int cork)
 {
 #ifdef __linux__
-    return setsockopt(fd, SOL_TCP, TCP_CORK, &cork, sizeof(cork));
+    return setsockopt(fd, IPPROTO_TCP, TCP_CORK, &cork, sizeof(cork));
 #else
     UNUSED(fd);
     UNUSED(cork);
