@@ -23,12 +23,14 @@ gzip_fu(blob_t * dest, const blob_t * src)
     // the best thing zlib can do: "Add 16 to windowBits to write a simple gzip
     // header and trailer around the compressed data instead of a zlib wrapper"
     deflateInit2(&zs, Z_DEFAULT_COMPRESSION, Z_DEFLATED, 15 | 16, 8, Z_DEFAULT_STRATEGY);
-    deflate(&zs, Z_FINISH);
+    int ret = deflate(&zs, Z_FINISH);
     deflateEnd(&zs);
-    //return zs.total_out;
+
+    if (Z_STREAM_END != ret) {
+        return -1;
+    }
 
     set_size_blob(dest, zs.total_out);
-
     return 0;
 }
 
