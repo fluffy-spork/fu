@@ -23,7 +23,7 @@
 #define log_var_blob(var) log_blob(var, #var)
 #define error_log_blob(var) error_log(#var, "error_log_blob", var->error)
 // TODO(jason): needs to handle 0 bytes within string and be able to print hex
-#define debug_blob(var) debugf("%s: %s", #var, cstr_blob(var))
+#define debug_blob(var) debugf("%s(%lld/%lld): %s", #var, (s64)var->size, (s64)var->capacity, cstr_blob(var))
 
 #define for_i_blob(b) for_i_size(b->size)
 #define for_j_blob(b) for_j_size(b->size)
@@ -51,6 +51,14 @@ typedef struct {
 // TODO(jason): good idea?  for convenience
 #define AB(a, b) add_blob(a, B(b))
 
+// TODO(jason): good idea?  removes accidental use of B() with a variable.  why
+// should double quote be string identifier.  definitely know it's a string
+// constant for array_size_fu
+//  EX: SB(foo bar baz) instead of B("foo bar baz")
+//  SB for stack blob, so B() should really be malloc/heap?
+#define SB(text) \
+    ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)#text , array_size_fu(#text), -1, true); })
+
 // GCC specific syntax for multiple statements as an expression
 // wrap_blob should be a function to wrap an existing array with a specified
 // size/len and B() should directly do this behavior
@@ -60,7 +68,6 @@ typedef struct {
     ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)array, array_size_fu(array), -1, true); })
 #define wrap_size_blob(array, size) \
     ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)array, size, -1, true); })
-
 
 #define cstr_blob(blob) \
     ({ size_t size = blob->size + 1; char * c = alloca(size); _cstr_blob(blob, c, size); })
