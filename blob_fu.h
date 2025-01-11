@@ -56,8 +56,9 @@ typedef struct {
 // constant for array_size_fu
 //  EX: SB(foo bar baz) instead of B("foo bar baz")
 //  SB for stack blob, so B() should really be malloc/heap?
+//  XXX(jason): doesn't actually seem to work correctly in some cases
 #define SB(text) \
-    ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)#text , array_size_fu(#text), -1, true); })
+    ({ blob_t * b = alloca(sizeof(blob_t)); _init_blob(b, (u8 *)#text , array_size_fu(#text) - 1, -1, true); })
 
 // GCC specific syntax for multiple statements as an expression
 // wrap_blob should be a function to wrap an existing array with a specified
@@ -316,36 +317,6 @@ overwrite_blob(blob_t * b, const void * buf, const size_t count)
     return write_blob(b, buf, count);
 }
 
-// similar to read syscall
-// copy the bytes into the buffer up to count and ensure null terminated.
-// returns an error if buf too small
-// maybe add an offset to copy a subset
-// maybe should be read_cstr_blob and read_blob as separate functions with
-// latter not nul terminating
-ssize_t
-read_blob(const blob_t * b, void *buf, size_t count)
-{
-    if (b->size + 1 > count) return -1;
-
-    memcpy(buf, b->data, b->size);
-
-    ((u8 *)buf)[b->size] = '\0';
-
-    return b->size;
-}
-
-char *
-_cstr_blob(const blob_t * blob, char * cstr, size_t size_cstr)
-{
-    assert(blob != NULL);
-
-    ssize_t result = read_blob(blob, cstr, size_cstr);
-    // NOTE(jason): this shouldn't ever return an error
-    assert(result != -1);
-
-    return cstr;
-}
-
 // TODO(jason): maybe this should be different like cstr_blob() or something
 // should this return a "const blob_t *" or similar?
 blob_t *
@@ -448,14 +419,78 @@ add_cstr_blob(blob_t * b, const char * cstr)
     return write_blob(b, cstr, strlen(cstr));
 }
 
+
 // I keep confusing this for available_blob, but really shouldn't since I don't
 // have an offset in those cases.
 ssize_t
 remaining_blob(const blob_t * src, ssize_t offset)
 {
-    // TODO(jason): this should probably do something about -1 offset
-    return src->size - offset;
+    if (offset < 0) return -1;
+
+    return max_ssize(src->size - offset, 0);
 }
+
+
+ssize_t
+read_blob(const blob_t * b, ssize_t offset, void *buf, size_t count)
+{
+    if (offset < 0) return -1;
+
+    size_t len = min_size(remaining_blob(b, offset), count);
+
+    if (len < 1) return 0;
+
+    memcpy(buf, &b->data[offset], len);
+
+    return len;
+}
+
+
+ssize_t
+read_cstr_blob(const blob_t * b, ssize_t offset, void *buf, size_t count)
+{
+    ssize_t len = read_blob(b, offset, buf, count);
+    if (len < 0) return len;
+
+    ssize_t end = min_ssize(len + 1, count - 1);
+    ((u8 *)buf)[end] = '\0';
+
+    return len;
+}
+
+
+// similar to read syscall
+// copy the bytes into the buffer up to count and ensure null terminated.
+// returns an error if buf too small
+// maybe add an offset to copy a subset
+// maybe should be read_cstr_blob and read_blob as separate functions with
+// latter not nul terminating
+// XXX(jason): deprecated
+ssize_t
+____read_blob(const blob_t * b, void *buf, size_t count)
+{
+    if (b->size + 1 > count) return -1;
+
+    memcpy(buf, b->data, b->size);
+
+    ((u8 *)buf)[b->size] = '\0';
+
+    return b->size;
+}
+
+
+char *
+_cstr_blob(const blob_t * blob, char * cstr, size_t size_cstr)
+{
+    assert(blob != NULL);
+
+    ssize_t result = read_cstr_blob(blob, 0, cstr, size_cstr);
+    // NOTE(jason): this shouldn't ever return an error
+    assert(result != -1);
+
+    return cstr;
+}
+
 
 bool
 begins_with_char_blob(blob_t * b, char c)
