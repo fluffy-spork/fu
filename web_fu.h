@@ -1195,10 +1195,8 @@ payload_too_large_response(request_t * req)
 int
 file_response(request_t * req, const blob_t * dir, const blob_t * path, content_type_t content_type, s64 user_id)
 {
-    blob_t * file_path = stk_blob(255);
+    blob_t * file_path = stk_blob(4096);
     path_file_fu(file_path, dir, path);
-
-    //debug_blob(file_path);
 
     int fd = open_read_file_fu(file_path);
     if (fd == -1) {
@@ -1248,6 +1246,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
     }
 
     if (send_file(req->fd, fd, len) == -1) {
+        internal_server_error_response(req);
         return log_errno("send_file");
     }
 
@@ -2079,7 +2078,7 @@ delete_file_web(db_t * db, s64 file_id)
 }
 
 int
-file_info(db_t * db, param_t * file_id, param_t * path, param_t * content_type)
+file_info_web(db_t * db, param_t * file_id, param_t * path, param_t * content_type)
 {
     return by_id_db(db, B("select path, content_type from file_web where file_id = ?"), s64_blob(file_id->value, 0), path, content_type);
 }
@@ -2335,7 +2334,7 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
     def_param(path);
     def_param(content_type);
 
-    if (file_info(app.db, file_id, &path, &content_type)) {
+    if (file_info_web(app.db, file_id, &path, &content_type)) {
         log_error_db(app.db, "failed to get file info");
         return -1;
     }
@@ -2606,7 +2605,7 @@ files_handler(endpoint_t * ep, request_t * req)
     def_param(path);
     def_param(content_type);
 
-    if (file_info(app.db, file_id, &path, &content_type)) {
+    if (file_info_web(app.db, file_id, &path, &content_type)) {
         not_found_response(req);
         return -1;
     }
