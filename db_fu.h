@@ -1284,6 +1284,7 @@ rows_ids_db(db_t * db, const blob_t * sql, row_handler_db_t * handler, s64 * ids
     return finalize_db(stmt);
 }
 
+// var param_t
 #define by_id_db(db, ...) _by_id_db(db, __VA_ARGS__, NULL)
 
 int
