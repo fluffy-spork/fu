@@ -1,3 +1,6 @@
+// NOTE(jason): not currently used for anything.  probably should be removed
+
+
 /* Dictionary for integer-word translations */
 char words_otp[2048][4] = { "A", "ABE", "ACE", "ACT", "AD", "ADA", "ADD",
 "AGO", "AID", "AIM", "AIR", "ALL", "ALP", "AM", "AMY", "AN", "ANA",
