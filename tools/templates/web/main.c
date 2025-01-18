@@ -4,7 +4,8 @@
 #include "endpoints.h"
 
 #include "fu/app_fu.h"
-
+#include "fu/css.h"
+#include "fu/gzip.h"
 #include "fu/html_fu.h"
 #include "fu/web_fu.h"
 
@@ -13,7 +14,7 @@
 int
 home_handler(endpoint_t * ep, request_t * req)
 {
-    if (require_session_web(req, true)) return 0;
+    if (require_session_web(req)) return 0;
 
     blob_t * html = req->body;
 
@@ -35,6 +36,7 @@ home_handler(endpoint_t * ep, request_t * req)
     return 0;
 }
 
+
 int
 hello_handler(endpoint_t * ep, request_t * req)
 {
@@ -53,7 +55,7 @@ hello_handler(endpoint_t * ep, request_t * req)
             return bad_request_response(req);
         }
 
-        redirect_endpoint(req, ep, NULL); 
+        redirect_endpoint(req, ep, NULL);
 
         return 0;
     }
@@ -104,6 +106,52 @@ hello_handler(endpoint_t * ep, request_t * req)
     return 0;
 }
 
+
+int
+gen_css(blob_t * css)
+{
+    blob_t * fg = B("#fff");
+    blob_t * bg = B("#000");
+    blob_t * fg_highlight = B("#c0c");
+    blob_t * bg_highlight = B("#000");
+
+    css_web(css, fg, bg, fg_highlight, bg_highlight);
+
+    // insert app css
+
+    return 0;
+}
+
+int
+css_handler(endpoint_t * ep, request_t * req)
+{
+    UNUSED(ep);
+
+    static blob_t * cache = NULL;
+
+    // XXX(jason): cache!!!!
+    // shared memory between processes? write files to /dev/shm?
+    // generate css at startup
+    // push blobs into web_fu cache at an endpoint?
+    // should response with static cache control just be cached in web_fu?
+    css_response(req);
+    static_cache_control_web(req);
+    gzip_content_encoding_web(req);
+
+    if (cache) {
+        set_blob(req->body, cache);
+    }
+    else {
+        blob_t * css = stk_blob(16384);
+        gen_css(css);
+        if (css->error) return -1;
+        encode_gzip(req->body, css);
+        cache = copy_blob(req->body);
+    }
+    return 0;
+}
+
+
 int
 worker_after_fork()
 {
@@ -123,7 +171,7 @@ upgrade(const blob_t * db_file)
 int
 main(int argc, char *argv[])
 {
-    if (init_app_fu(argc, argv, stderr_flush_log)) {
+    if (init_argv_app_fu(argc, argv, stderr_flush_log)) {
         error_log("failed to init app", "app", 1);
         exit(EXIT_FAILURE);
     }

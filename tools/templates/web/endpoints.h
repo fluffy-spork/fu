@@ -12,6 +12,7 @@
     E("/unknown", unknown, "unknown", method_not_implemented_handler, NULL) \
     E("/", home, "home", home_handler, NULL) \
     E("/res/*", res, "resources", res_handler, NULL) \
+    E("/res/main.css", css, "css", css_handler, NULL) \
     E("/favicon.ico", favicon, "favicon", favicon_handler, NULL) \
     E("/hello", hello, "hello", hello_handler, fields.msg) \
 
