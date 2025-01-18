@@ -727,7 +727,7 @@ reuse_request(request_t * req)
     req->fd = -1;
     req->method = none_method;
     req->content_type = none_content_type;
-    req->content_length = 0;
+    req->content_length = -1;
     req->cache_control = NO_STORE_CACHE_CONTROL;
     req->request_content_type = none_content_type;
     req->request_content_length = 0;
@@ -983,7 +983,7 @@ add_response_headers(request_t *req)
     // NOTE(jason): content length is always required because of persistent
     // connections/keep alive.  this was a problem with webkit and redirects
     // would hang
-    if (req->content_length > 0) {
+    if (req->content_length != -1) {
         u64_header(t, res_web.content_length, req->content_length);
     }
     else if (req->body->size > 0) {
@@ -1213,12 +1213,11 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
     }
 
     size_t len = st.st_size;
+    //debug_s64(len);
 
     if (content_type == 0) {
         content_type = content_type_path(file_path);
     }
-
-    //debug_s64(len);
 
     // TODO(jason): need to look at the actual data for content type
     ok_response(req, content_type);
@@ -1252,7 +1251,7 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
 
     set_tcp_cork_file(req->fd, 0);
 
-    return req->content_length;
+    return 1;
 }
 
 int
@@ -2971,6 +2970,9 @@ init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpe
 #define DEV_WORKERS_WEB 10
 
 // doesn't return.  calls exit() on failure
+// TODO(jason): is param of init_func(config_web_t) pointer a better option for
+// doing config?
+// load settings directly from app main db?
 int
 main_web(config_web_t * config)
 {
