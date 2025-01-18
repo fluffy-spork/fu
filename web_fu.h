@@ -1703,11 +1703,14 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
         appearance_css(css, none);
         width_css(css, B("100%"));
         box_sizing_css(css, B("border-box"));
-        border_css(css, B("2px solid #000"));
-        background_color_css(css, B("#000"));
+        border_css(css, B("2px solid"));
+        border_color_css(css, bg);
         padding_css(css, B("0.5em"));
         overflow_css(css, B("clip"));
-        color_css(css, fg_highlight);
+        background_color_css(css, bg);
+        // NOTE(jason): the input text as fg (white) seems better.  should
+        // there be a specific input color?
+        color_css(css, fg);
         font_size_css(css, B("18px"));
         font_family_css(css, B("monospace"));
         font_weight_css(css, B("bold"));
@@ -1749,6 +1752,7 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
     {
         font_size_css(css, B("12px"));
         font_weight_css(css, B("normal"));
+        color_css(css, fg_highlight);
     }
     end_css(css);
 
