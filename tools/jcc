@@ -82,7 +82,7 @@ gpush()
 init_web()
 {
     echo init web app
-    cp -avn fu/tools/templates/web/. ./
+    cp -av --update=none fu/tools/templates/web/. ./
     exit
 }
 
