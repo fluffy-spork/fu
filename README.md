@@ -17,6 +17,8 @@ git init
 git submodule add https://github.com/fluffy-spork/fu
 # basic hello world
 ./fu/tools/jcc init-web
+# add all to get before any transient files are generated
+git add .
 # builds appimage and runs in dev mode
 ./jcc
 

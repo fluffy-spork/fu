@@ -23,7 +23,7 @@ src_file='main.c'
 binary_file='main'
 app_image_file="$name-$(uname -m).AppImage"
 
-default_run_cmd='run-appimage'
+default_run_cmd='run'
 
 CFLAGS="-Wall -Wextra -Werror -rdynamic -D_GNU_SOURCE $CFLAGS"
 
