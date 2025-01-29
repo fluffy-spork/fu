@@ -1912,6 +1912,12 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
     }
     end_css(css);
 
+    begin_css(css, B(".button-bar input, .button-bar button, .button-bar a"));
+    {
+        pointer_events_css(css, B("auto"));
+    }
+    end_css(css);
+
     begin_css(css, B("input[type=submit]:focus, input[type=submit]:hover, button:focus, button:hover, .button-bar a:focus, .button-bar a:hover"));
     {
         border_style_css(css, B("dashed"));
