@@ -22,11 +22,18 @@
 
 #define log_var_blob(var) log_blob(var, #var)
 #define error_log_blob(var) error_log(#var, "error_log_blob", var->error)
-// TODO(jason): needs to handle 0 bytes within string and be able to print hex
-#define debug_blob(var) debugf("%s(%lld/%lld): %s", #var, (s64)var->size, (s64)var->capacity, cstr_blob(var))
+
+#ifdef NDEBUG
+#define debug_blob(ignore)((void)0)
+#else
+#define debug_blob(var) _debug_blob(#var, (var), __FILE__, __func__, __LINE__)
+#endif
+
 
 #define for_i_blob(b) for_i_size(b->size)
 #define for_j_blob(b) for_j_size(b->size)
+#define for_i_offset_blob(b, offset) for_i_offset_size(b->size, offset)
+#define for_j_offset_blob(b, offset) for_j_offset_size(b->size, offset)
 
 typedef struct {
     // XXX maybe make this flags?  could track error, pooled, etc
@@ -84,6 +91,7 @@ _init_blob(blob_t * b, u8 * data, size_t capacity, ssize_t size, bool constant)
 
     return b;
 }
+
 
 blob_t *
 blob(size_t capacity)
@@ -492,6 +500,21 @@ _cstr_blob(const blob_t * blob, char * cstr, size_t size_cstr)
 }
 
 
+void
+_debug_blob(const char * var_name, const blob_t * b, const char * file, const char * function, int line)
+{
+    // TODO(jason): needs to handle 0 bytes within string and be able to print hex
+
+    // XXX: bad, the file and line will be wrong for debugf so need to be passed as parameters
+    if (b) {
+        fprintf(stderr, "D   %s:%s:%d %s(%lld/%lld): %s\n", file, function, line, var_name, (s64)b->size, (s64)b->capacity, cstr_blob(b));
+    }
+    else {
+        fprintf(stderr, "D   %s:%s:%d %s:NULL\n", file, function, line, var_name);
+    }
+}
+
+
 bool
 begins_with_char_blob(blob_t * b, char c)
 {
@@ -786,10 +809,7 @@ scan_delim_blob(blob_t * dest, const blob_t * src, blob_t * delim, ssize_t * pof
 ssize_t
 scan_whitespace_blob(blob_t * dest, const blob_t * src, ssize_t * poffset)
 {
-    // TODO(jason): improve to check isspace
-    // need a scan_delimiter_blob that takes a blob of single char delimiters
-    return scan_delim_blob(dest, src, B(" \n\r\t"), poffset);
-    //return scan_blob(dest, src, ' ', poffset);
+    return scan_delim_blob(dest, src, B(" \n\r\t\v"), poffset);
 }
 
 ssize_t
@@ -860,11 +880,19 @@ skip_u8_blob(const blob_t * b, u8 c, ssize_t * poffset)
     return size;
 }
 
+
+bool
+whitespace_blob(u8 c)
+{
+    return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\v';
+}
+
+
 ssize_t
 skip_whitespace_blob(const blob_t * b, ssize_t * poffset)
 {
     for (ssize_t i = *poffset; i < (ssize_t)b->size; i++) {
-        if (!isspace(b->data[i])) {
+        if (!whitespace_blob(b->data[i])) {
             *poffset = i;
             return 0;
         }
