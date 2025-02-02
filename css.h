@@ -205,6 +205,13 @@ relative_position_css(blob_t * css)
 
 
 void
+block_display_css(blob_t * css)
+{
+    display_css(css, B("block"));
+}
+
+
+void
 init_css(void)
 {
     init_property_css_e();
