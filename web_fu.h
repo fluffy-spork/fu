@@ -731,7 +731,7 @@ reuse_request(request_t * req)
     req->cache_control = NO_STORE_CACHE_CONTROL;
     req->request_content_type = none_content_type;
     req->request_content_length = 0;
-    req->keep_alive = false;
+    req->keep_alive = true;
     req->expect_continue = false;
 
     req->session_id = 0;
@@ -986,7 +986,7 @@ add_response_headers(request_t *req)
     if (req->content_length != -1) {
         u64_header(t, res_web.content_length, req->content_length);
     }
-    else if (req->body->size > 0) {
+    else {
         req->content_length = req->body->size;
         u64_header(t, res_web.content_length, (u64)req->body->size);
     }
@@ -2675,7 +2675,9 @@ handle_request(request_t *req)
     // all as there are currently many "empty request" log messages.
     ssize_t n = read_file_fu(req->fd, input);
     if (n == -1) {
-        log_errno("read request head");
+        if (errno != EAGAIN) { // not timeout
+            log_errno("read request head");
+        }
         return -1;
     } else if (n == 0) {
         // TODO(Jason): seems like this is happening way more than desirable.
@@ -2872,6 +2874,17 @@ fork_worker_web(int srv_fd, int (* after_fork_f)())
             continue;
         }
 
+        struct timeval timeout;      
+        timeout.tv_sec = 2;
+        timeout.tv_usec = 0;
+
+        if (setsockopt (client_fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout))
+            || setsockopt (client_fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout)))
+        {
+            log_errno("setsockopt");
+            exit(EXIT_FAILURE);
+        }
+
         int rc;
 handle_request:
         req->fd = client_fd;
@@ -2886,7 +2899,7 @@ handle_request:
         }
 
         // NOTE(jason): due to no timeouts taking up connections and generally not that useful
-        bool keep_alive = false; //rc != -1 && req->keep_alive;
+        bool keep_alive = rc != -1 && req->keep_alive;
         //debug_s64(keep_alive);
 
         // NOTE(jason): overwrite the request data so it can't be used
