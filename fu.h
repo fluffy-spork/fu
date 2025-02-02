@@ -53,6 +53,8 @@ typedef double f64;
 // TODO(jason): I think I want to stop using size_t
 #define for_i_size(n) for (size_t i = 0; i < (size_t)n; i++)
 #define for_j_size(n) for (size_t j = 0; j < (size_t)n; j++)
+#define for_i_offset_size(n, offset) for (size_t i = offset; i < (size_t)n; i++)
+#define for_j_offset_size(n, offset) for (size_t j = offset; j < (size_t)n; j++)
 
 typedef enum {
     U8_DATA_TYPE,
@@ -103,7 +105,7 @@ typedef enum {
     do { fprintf(stderr, "D   %s:%s:%d %s\n", __FILE__, __func__, __LINE__, msg); } while (0)
 #endif
 
-#define debug_u8(var) debugf("%s: %u", #var, (u8)var);
+#define debug_u8(var) debugf("%s: %u/%c", #var, (u8)var, (u8)var);
 
 #define debug_s64(var) debugf("%s: %lld", #var, (s64)var);
 #define debug_u64(var) debugf("%s: %llu", #var, (u64)var);
