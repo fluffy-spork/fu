@@ -25,6 +25,8 @@ app_image_file="$name-$(uname -m).AppImage"
 
 default_run_cmd='run'
 
+DOCKER=docker
+
 CFLAGS="-Wall -Wextra -Werror -rdynamic -D_GNU_SOURCE $CFLAGS"
 
 if [ -f jcc.env ]; then
@@ -50,6 +52,14 @@ build() {
     echo 'compile time'
     time -p gcc $CFLAGS $extra_flags -o "$binary_file" "$src_file" $lib_flags
 }
+
+
+container() {
+    log 'container'
+
+    build && $DOCKER build -t "$name" .
+}
+
 
 debug() {
     log 'debug'
@@ -142,6 +152,8 @@ fi
 
 if [ "$cmd" = 'build' ]; then
     build
+elif [ "$cmd" = 'container' ]; then
+    container
 elif [ "$cmd" = 'appimage' ]; then
     appimage
 elif [ "$cmd" = 'run-appimage' ]; then
