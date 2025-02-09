@@ -126,7 +126,7 @@ typedef enum {
 bool
 dev_mode(void)
 {
-    return getenv("FU_DEV") != NULL;
+    return getenv("DEV_MODE_FU") != NULL;
 }
 
 /* timespec stuff is included for crude performance timing */

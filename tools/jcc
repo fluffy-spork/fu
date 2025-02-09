@@ -73,7 +73,7 @@ profile() {
 }
 
 run() {
-    export FU_DEV="$USER"
+    export DEV_MODE_FU="$USER"
 
     log 'run'
     build '-Og' && ./"$binary_file" $run_args
@@ -108,7 +108,7 @@ appimage() {
 }
 
 run_appimage() {
-    export FU_DEV="$USER"
+    export DEV_MODE_FU="$USER"
 
     log 'run_appimage'
     appimage && ./"$app_image_file" $run_args
