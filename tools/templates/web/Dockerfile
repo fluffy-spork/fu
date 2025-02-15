@@ -35,5 +35,5 @@ EXPOSE 8080
 
 ENV APPDIR=/AppDir
 
-ENTRYPOINT ["/main", "/data" ]
+CMD ["/main", "/data" ]
 
