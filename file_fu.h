@@ -23,17 +23,21 @@ size_file_fu(int fd, size_t * size)
     return 0;
 }
 
+
 int
 add_path_file_fu(blob_t * path, const blob_t * name)
 {
     assert_not_null(path);
     assert_not_null(name);
 
-    write_blob(path, "/", 1);
+    if (!begins_u8_blob(name, '/') && !ends_u8_blob(path, '/')) {
+        write_blob(path, "/", 1);
+    }
     add_blob(path, name);
 
     return path->error;
 }
+
 
 int
 path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
@@ -45,6 +49,20 @@ path_file_fu(blob_t * path, const blob_t * dir, const blob_t * file)
     add_blob(path, dir);
     return add_path_file_fu(path, file);
 }
+
+
+int
+id_path_file(blob_t * path, const blob_t * dir, const s64 id)
+{
+    assert_not_null(path);
+    assert_not_null(dir);
+
+    add_blob(path, dir);
+    write_blob(path, "/", 1);
+    add_s64_blob(path, id);
+    return path->error;
+}
+
 
 blob_t *
 new_path_file_fu(const blob_t * dir, const blob_t * file)
@@ -311,7 +329,7 @@ tmp_file_fu()
     debugf("generated filename was: %s\n", template);
     // Name disappears immediately, but the file
     // is removed only after close()
-    unlink(template); 
+    unlink(template);
 
     return fd;
 }
