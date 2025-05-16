@@ -4,6 +4,15 @@
 
 #define MAX_SIZE_URL 1024
 
+#define METHOD_HTTP(var, E) \
+    E(none, "NONE", var) \
+    E(get, "GET", var) \
+    E(post, "POST", var) \
+    E(head, "HEAD", var) \
+    E(put, "PUT", var) \
+
+ENUM_BLOB(method_http, METHOD_HTTP)
+
 // just ignore threading as this should only be used by a single thread in a
 // process.  It probably doesn't matter if the token changes anyway.  Worst
 // case seems like a partially modified value which would fail and be retried.
@@ -15,7 +24,17 @@ void
 init_http()
 {
     curl_global_init(CURL_GLOBAL_ALL);
+
+    init_method_http();
 }
+
+
+bool
+ok_http(s64 response_code)
+{
+    return response_code >= 200 && response_code < 300;
+}
+
 
 size_t
 write_blob_http(void *buf, size_t size, size_t nmemb, void *userp)
@@ -27,11 +46,11 @@ write_blob_http(void *buf, size_t size, size_t nmemb, void *userp)
     if (available_blob(response) < nmemb) {
         // need a better error for this as curl error is something like "Failed
         // writing body (0 != 297)"  maybe it's better if it just truncates?
-        return 0;
+        return CURL_WRITEFUNC_ERROR;
     }
 
     ssize_t written = write_blob(response, buf, nmemb);
-    return (written == -1) ? 0 : (size_t)written;
+    return (written == -1) ? CURL_WRITEFUNC_ERROR : (size_t)written;
 }
 
 unsigned int
@@ -40,6 +59,7 @@ exponential_backoff(unsigned int min_s)
     // TODO(jason): implement;)
     return min_s;
 }
+
 
 long
 post_json_http(const blob_t * url, blob_t * response, blob_t * body, blob_t * access_token, access_token_refresh_fn token_refresh)
@@ -50,11 +70,9 @@ post_json_http(const blob_t * url, blob_t * response, blob_t * body, blob_t * ac
 
     CURL * curl = curl_easy_init();
     if (curl) {
-        char s[MAX_SIZE_URL];
-        read_cstr_blob(url, 0, s, MAX_SIZE_URL);
-        curl_easy_setopt(curl, CURLOPT_URL, s);
+        curl_easy_setopt(curl, CURLOPT_URL, cstr_blob(url));
 
-        //curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+//        curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
         if (response) {
             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_blob_http);
@@ -65,6 +83,7 @@ post_json_http(const blob_t * url, blob_t * response, blob_t * body, blob_t * ac
         curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
 
         struct curl_slist * headers = NULL;
+        // TODO(jason): is this accept header necessary?
         headers = curl_slist_append(headers, "accept: application/json");
         headers = curl_slist_append(headers, "content-type: application/json");
 
@@ -136,29 +155,239 @@ post_json_http(const blob_t * url, blob_t * response, blob_t * body, blob_t * ac
     return response_code;
 }
 
-void
+
+error_t
+head_http(const blob_t * url, long * status_code)
+{
+    assert(url->size < MAX_SIZE_URL);
+
+    CURL * curl = curl_easy_init();
+
+    if (!curl) return -1;
+
+    curl_easy_setopt(curl, CURLOPT_URL, cstr_blob(url));
+    curl_easy_setopt(curl,  CURLOPT_NOBODY, 1L);
+
+    char error[CURL_ERROR_SIZE];
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
+
+    long response_code = -1;
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res) {
+        error_log(error, "http", res);
+    }
+    else {
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+        if (status_code) {
+            *status_code = response_code;
+        }
+    }
+
+    curl_easy_cleanup(curl);
+
+    return ok_http(response_code) ? 0 : response_code;
+}
+
+
+int
 get_http(const blob_t * url, blob_t * response)
 {
     assert(url->size < MAX_SIZE_URL);
 
     CURL * curl = curl_easy_init();
-    if (curl) {
-        char s[MAX_SIZE_URL];
-        CURLcode res;
-        read_cstr_blob(url, 0, s, MAX_SIZE_URL);
-        curl_easy_setopt(curl, CURLOPT_URL, s);
-        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_blob_http);
-        curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
 
-        char error[CURL_ERROR_SIZE];
-        curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
+    if (!curl) return -1;
 
-        res = curl_easy_perform(curl);
+    int rc = 0;
+
+    curl_easy_setopt(curl, CURLOPT_URL, cstr_blob(url));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_blob_http);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, response);
+
+    char error[CURL_ERROR_SIZE];
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res) {
+        error_log(error, "http", res);
+        rc = -1;
+    }
+
+    curl_easy_cleanup(curl);
+
+    return rc;
+}
+
+
+/*
+int
+get_fd_http(const blob_t * url, int output_fd, long * response_code)
+{
+    return 0;
+}
+
+
+int
+put_fd_http(const blob_t * url, int input_fd, long * response_code)
+{
+    return 0;
+}
+*/
+
+size_t
+read_fd_http(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
+    int fd = *((int *)userdata);
+//    debug_s64(fd);
+
+    ssize_t size_read = read(fd, ptr, size*nmemb);
+    return (size_read == -1) ? CURL_READFUNC_ABORT : (size_t)size_read;
+}
+
+
+size_t
+write_fd_http(void *buf, size_t size, size_t nmemb, void *userdata)
+{
+    assert(size == 1);
+
+    int fd = *((int *)userdata);
+    ssize_t size_write = write(fd, buf, nmemb);
+    return (size_write == -1) ? CURL_WRITEFUNC_ERROR : (size_t)size_write;
+}
+
+
+int
+put_file_http(const blob_t * url, const blob_t * path, const blob_t * content_type, long * status_code)
+{
+    debug_blob(url);
+    debug_blob(path);
+
+    dev_error(content_type == NULL);
+
+    int fd = open_read_file_fu(path);
+    if (fd == -1) return -1;
+
+    size_t size_fd = 0;
+    if (size_file_fu(fd, &size_fd)) return -1;
+
+    debug_s64(size_fd);
+
+    CURL * curl = curl_easy_init();
+    if (!curl) {
+        error_log("curl_easy_init failed", "http", 1);
+        return -1;
+    }
+
+//    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
+    curl_easy_setopt(curl, CURLOPT_UPLOAD_BUFFERSIZE, 1024*1024L);
+
+    curl_easy_setopt(curl, CURLOPT_URL, cstr_blob(url));
+
+    char error[CURL_ERROR_SIZE];
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
+
+    curl_easy_setopt(curl, CURLOPT_UPLOAD, 1L);
+    curl_easy_setopt(curl, CURLOPT_READFUNCTION, read_fd_http);
+    curl_easy_setopt(curl, CURLOPT_READDATA, &fd);
+    curl_easy_setopt(curl, CURLOPT_INFILESIZE_LARGE, (curl_off_t)size_fd);
+
+    struct curl_slist * headers = NULL;
+    // TODO(jason): is this accept header necessary?
+//    headers = curl_slist_append(headers, "accept: application/json");
+    blob_t * content_type_header = stk_blob(255);
+    vadd_blob(content_type_header, B("content-type:"), content_type);
+    headers = curl_slist_append(headers, cstr_blob(content_type_header));
+    headers = curl_slist_append(headers, "if-none-match:*");
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+
+    // TODO(jason): how should the file be reset between attempts?
+
+    int attempts = 2;
+    unsigned int sleep_s = 0;
+    long response_code = 0;
+    do {
+        if (sleep_s) sleep(sleep_s);
+
+        CURLcode res = curl_easy_perform(curl);
         if (res) {
-            error_log(error, "curl_easy_perform", res);
+            error_log(error, "http", res);
+            break;
         }
 
-        curl_easy_cleanup(curl);
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+
+        // auth failure doesn't count as an attempt
+        if (response_code == 429) {
+            // google rec exp back min 30s
+            sleep_s = exponential_backoff(30);
+            attempts--;
+        }
+        else if (response_code == 503) {
+            // google rec exp back min 1s
+            sleep_s = exponential_backoff(1);
+            attempts--;
+        }
+        else {
+            attempts = 0;
+        }
+    } while (attempts);
+
+    curl_slist_free_all(headers);
+
+    if (status_code) {
+        *status_code = response_code;
     }
+
+    close(fd);
+
+    debug_s64(response_code);
+
+    return ok_http(response_code) ? 0 : response_code;
+}
+
+
+error_t
+get_file_http(const blob_t * url, const blob_t * path, long * status_code)
+{
+    assert(url->size < MAX_SIZE_URL);
+
+    CURL * curl = curl_easy_init();
+
+    if (!curl) return -1;
+
+    int fd = open_write_file_fu(path);
+    if (fd == -1) return -1;
+
+//    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+
+    curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 1024*1024L);
+
+    curl_easy_setopt(curl, CURLOPT_URL, cstr_blob(url));
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_fd_http);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &fd);
+
+    char error[CURL_ERROR_SIZE];
+    curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
+
+    long response_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+
+    CURLcode res = curl_easy_perform(curl);
+    if (res) {
+        error_log(error, "http", res);
+    }
+
+    curl_easy_cleanup(curl);
+
+    if (status_code) {
+        *status_code = response_code;
+    }
+
+    close(fd);
+
+    return ok_http(response_code) ? 0 : response_code;
 }
 
