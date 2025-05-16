@@ -460,7 +460,7 @@ read_cstr_blob(const blob_t * b, ssize_t offset, void *buf, size_t count)
     ssize_t len = read_blob(b, offset, buf, count);
     if (len < 0) return len;
 
-    ssize_t end = min_ssize(len + 1, count - 1);
+    ssize_t end = min_ssize(len, count - 1);
     ((u8 *)buf)[end] = '\0';
 
     return len;
@@ -516,25 +516,25 @@ _debug_blob(const char * var_name, const blob_t * b, const char * file, const ch
 
 
 bool
-begins_with_char_blob(blob_t * b, char c)
+begins_with_char_blob(const blob_t * b, char c)
 {
     return b->data[0] == c;
 }
 
 bool
-ends_with_char_blob(blob_t * b, char c)
+ends_with_char_blob(const blob_t * b, char c)
 {
     return b->data[b->size - 1] == c;
 }
 
 bool
-begins_u8_blob(blob_t * b, u8 v)
+begins_u8_blob(const blob_t * b, u8 v)
 {
     return b->data[0] == v;
 }
 
 bool
-ends_u8_blob(blob_t * b, u8 v)
+ends_u8_blob(const blob_t * b, u8 v)
 {
     return b->data[b->size - 1] == v;
 }
@@ -1319,5 +1319,69 @@ sad_blob(blob_t * b1, blob_t * b2)
     }
 
     return sad;
+}
+
+
+int
+blob_env_fu(const blob_t * name, blob_t * value, const blob_t * default_value)
+{
+    char * v = getenv(cstr_blob(name));
+    if (v) {
+        add_cstr_blob(value, v);
+    }
+    else if (default_value) {
+        add_blob(value, default_value);
+    }
+
+    return 0;
+}
+
+
+int
+s64_env_fu(const blob_t * name, s64 * value, const s64 default_value)
+{
+    blob_t * b = stk_blob(32);
+
+    if (blob_env_fu(name, b, NULL)) {
+        return -1;
+    }
+
+    if (empty_blob(b)) {
+        *value = default_value;
+    }
+    else {
+        *value = s64_blob(b, 0);
+    }
+
+    return 0;
+}
+
+
+error_t
+newline_blob(blob_t * b)
+{
+    write_blob(b, "\n", 1);
+    return b->error;
+}
+
+
+error_t
+add_line_blob(blob_t * b, const blob_t * line)
+{
+    add_blob(b, line);
+    newline_blob(b);
+    return b->error;
+}
+
+
+error_t
+quote_add_blob(blob_t * dest, const blob_t * src)
+{
+    write_blob(dest, "'", 1);
+//    add_blob(dest, src);
+    escape_blob(dest, src, '\'', B("'\\''"));
+    write_blob(dest, "'", 1);
+
+    return dest->error;
 }
 
