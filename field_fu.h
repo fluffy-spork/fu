@@ -49,13 +49,14 @@ max_size_type_field(type_field_t type, s32 req_size)
 
     switch (type) {
         case select_integer_type_field:
+            return 20;
         case timestamp_type_field:
-        case file_type_field:
             return 20;
         case integer_type_field:
             return 19 + 1 + 6; // 1 for '-', 6 for separators
+        case file_type_field:
         case file_multiple_type_field:
-            return req_size;
+            return max_s32(req_size, 255);
         case text_type_field:
         case hidden_type_field:
         case password_type_field:
