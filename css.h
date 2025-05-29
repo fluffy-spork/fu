@@ -1,6 +1,7 @@
 #pragma once
 
 #define PROPERTY_ENUM_CSS(var, E) \
+    E(align_items, "align-items", var) \
     E(appearance, "appearance", var) \
     E(background_color, "background-color", var) \
     E(border, "border", var) \
