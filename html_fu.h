@@ -23,6 +23,7 @@
 #define param_input(...) param_input_html(html, __VA_ARGS__)
 #define text_input(...) input_html(html, res_html.text_type, __VA_ARGS__)
 #define hidden_input(...) input_html(html, res_html.hidden_type, __VA_ARGS__)
+#define hidden_class_input(...) input_class_html(html, res_html.hidden_type, __VA_ARGS__)
 #define numeric_input(...) numeric_input_html(html, __VA_ARGS__)
 #define submit_input(...) input_html(html, res_html.submit_type, __VA_ARGS__)
 #define button(...) button_html(html, __VA_ARGS__)
@@ -142,6 +143,9 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(file_type, "file", var) \
     E(file_class, "file", var) \
     E(file_input_class, "file visually-hidden", var) \
+    E(file_url_class, "file-url", var) \
+    E(content_type, "content-type", var) \
+    E(content_type_class, "content-type", var) \
     E(uploads_class, "uploads hidden", var) \
     E(multiple, "multiple", var) \
     E(data_max_size_upload, "data-max-size-upload", var) \
@@ -687,10 +691,11 @@ label_html(blob_t * html, blob_t * content, blob_t * for_id)
 }
 
 void
-input_html(blob_t * html, const blob_t * type, const blob_t * name, const blob_t * value)
+input_class_html(blob_t * html, const blob_t * type, const blob_t * name, const blob_t * value, const blob_t * class_name)
 {
     open_tag_html(html, res_html.input);
     attr_html(html, res_html.type, type);
+    if (class_name) attr_html(html, res_html.class_name, class_name);
     // NOTE(jason): can't set the id by default as you don't know it will be
     // unique.  IDK if that still matters.  Hopefully only 1 form per page in
     // most cases.
@@ -700,6 +705,14 @@ input_html(blob_t * html, const blob_t * type, const blob_t * name, const blob_t
     if (valid_blob(value)) attr_html(html, res_html.value, value);
     close_tag_html(html);
 }
+
+
+void
+input_html(blob_t * html, const blob_t * type, const blob_t * name, const blob_t * value)
+{
+    input_class_html(html, type, name, value, NULL);
+}
+
 
 void
 single_input_post_form_html(blob_t * html, blob_t * action, field_t * field, autocomplete_t autocomplete)
@@ -879,7 +892,7 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         //label(field->label, NULL);
         //div_class(res_html.file_preview_class, res_html.no_files_selected);
 
-        hidden_input(field->name, res_html.zero);
+        hidden_class_input(field->name, res_html.zero, res_html.file_url_class);
         div_class(res_html.error, NULL);
         button(res_html.file_class, field->label, true);
         div_class(res_html.uploads_class, NULL);
