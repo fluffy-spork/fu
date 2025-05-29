@@ -123,6 +123,14 @@ typedef enum {
 #define megabytes(n_bytes) round((double)n_bytes/1024/1024)
 #define gigabytes(n_bytes) round((double)n_bytes/1024/1024)
 
+// TODO(jason): seems better than comments, but my initial use seemd off
+// putting.  possibly because it looks like code and doesn't have any syntax
+// highlighting.  would require custom highlighting
+#define NOTE(user, msg)
+#define TODO(user, msg)
+#define XXX(user, msg)
+
+
 bool
 dev_mode(void)
 {
