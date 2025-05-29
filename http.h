@@ -1,5 +1,7 @@
 #pragma once
 
+// TODO(jason): add a method for common curl option setting
+
 #include <curl/curl.h>
 
 #define MAX_SIZE_URL 1024
@@ -12,6 +14,14 @@
     E(put, "PUT", var) \
 
 ENUM_BLOB(method_http, METHOD_HTTP)
+
+#define CACHE_CONTROL_HTTP(var, E) \
+    E(unknown, "unknown", var) \
+    E(no_store, "no-store", var) \
+    E(public_immutable, "public,max-age=604800,immutable", var) \
+    E(user_immutable, "private,max-age=604800,immutable", var) \
+
+ENUM_BLOB(cache_control_http, CACHE_CONTROL_HTTP)
 
 // just ignore threading as this should only be used by a single thread in a
 // process.  It probably doesn't matter if the token changes anyway.  Worst
@@ -26,6 +36,7 @@ init_http()
     curl_global_init(CURL_GLOBAL_ALL);
 
     init_method_http();
+    init_cache_control_http();
 }
 
 
@@ -258,10 +269,10 @@ write_fd_http(void *buf, size_t size, size_t nmemb, void *userdata)
 
 
 int
-put_file_http(const blob_t * url, const blob_t * path, const blob_t * content_type, long * status_code)
+put_file_http(const blob_t * url, const blob_t * path, const blob_t * content_type, cache_control_http_t cache_control, long * status_code)
 {
-    debug_blob(url);
-    debug_blob(path);
+//    debug_blob(url);
+//    debug_blob(path);
 
     dev_error(content_type == NULL);
 
@@ -271,7 +282,7 @@ put_file_http(const blob_t * url, const blob_t * path, const blob_t * content_ty
     size_t size_fd = 0;
     if (size_file_fu(fd, &size_fd)) return -1;
 
-    debug_s64(size_fd);
+//    debug_s64(size_fd);
 
     CURL * curl = curl_easy_init();
     if (!curl) {
@@ -300,6 +311,12 @@ put_file_http(const blob_t * url, const blob_t * path, const blob_t * content_ty
     blob_t * content_type_header = stk_blob(255);
     vadd_blob(content_type_header, B("content-type:"), content_type);
     headers = curl_slist_append(headers, cstr_blob(content_type_header));
+    // TODO(jason): make optional?  probably
+    if (cache_control != unknown_cache_control_http) {
+        blob_t * cc = stk_blob(255);
+        vadd_blob(cc, B("cache-control:"), blob_cache_control_http(cache_control));
+        headers = curl_slist_append(headers, cstr_blob(cc));
+    }
     headers = curl_slist_append(headers, "if-none-match:*");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
@@ -343,7 +360,7 @@ put_file_http(const blob_t * url, const blob_t * path, const blob_t * content_ty
 
     close(fd);
 
-    debug_s64(response_code);
+//    debug_s64(response_code);
 
     return ok_http(response_code) ? 0 : response_code;
 }
@@ -363,6 +380,9 @@ get_file_http(const blob_t * url, const blob_t * path, long * status_code)
 
 //    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
 
+    curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
+
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_1_1);
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 1024*1024L);
 
     curl_easy_setopt(curl, CURLOPT_URL, cstr_blob(url));
@@ -376,8 +396,12 @@ get_file_http(const blob_t * url, const blob_t * path, long * status_code)
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
 
     CURLcode res = curl_easy_perform(curl);
+    close(fd);
+
     if (res) {
         error_log(error, "http", res);
+        // NOTE(jason): allows commenting out the delete for debugging
+        delete_file(path);
     }
 
     curl_easy_cleanup(curl);
@@ -385,8 +409,6 @@ get_file_http(const blob_t * url, const blob_t * path, long * status_code)
     if (status_code) {
         *status_code = response_code;
     }
-
-    close(fd);
 
     return ok_http(response_code) ? 0 : response_code;
 }
