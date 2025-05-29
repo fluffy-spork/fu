@@ -15,7 +15,7 @@
 
 #define MIN_RESOLUTION 480
 #define X2_RESOLUTION (2*MIN_RESOLUTION)
-#define X4_RESOLUTION (4*MIN_RESOLUTION) 
+#define X4_RESOLUTION (4*MIN_RESOLUTION)
 #define MAX_SIZE_FILE_UPLOAD 100*1024*1024
 
 #define OK_FILE_STATUS 0
@@ -23,6 +23,9 @@
 #define PROCESSING_FILE_STATUS 2
 #define ENCODE_ERROR_FILE_STATUS 3
 #define DELETE_FILE_STATUS 4
+// NOTE(jason): maybe should be renamed.  the file row has been created,
+// waiting for the file to be uploaded
+#define NEW_FILE_STATUS 5
 
 // TODO(jason): possibly should call this http_server (seems too long), httpd
 // (daemon?), or something.  doesn't really matter and "web" is short.
@@ -36,6 +39,7 @@
     E(get, "GET", var) \
     E(post, "POST", var) \
     E(head, "HEAD", var) \
+    E(put, "PUT", var) \
 
 ENUM_BLOB(method, METHOD)
 
@@ -100,6 +104,7 @@ typedef struct {
     s64 port;
     blob_t * res_dir;
     blob_t * upload_dir;
+    s3_t * s3;
     blob_t * ffmpeg_path;
     int n_workers;
     int n_dev_workers;
@@ -297,6 +302,9 @@ log_endpoint(endpoint_t * ep)
 const blob_t * res_dir_web;
 // where file uploads are stored defaults to "uploads" with "uploads/<randomid>"
 const blob_t * upload_dir_web;
+const s3_t * s3_web;
+
+const blob_t * content_security_policy_web;
 
 const blob_t * ffmpeg_path_web;
 
@@ -333,7 +341,6 @@ const blob_t * ffmpeg_path_web;
     E(x_frame_options,"x-frame-options", var) \
     E(deny_x_frame_options,"DENY", var) \
     E(content_security_policy,"content-security-policy", var) \
-    E(self_default_content_security_policy,"default-src 'self' blob:", var) \
     E(transfer_encoding,"transfer-encoding", var) \
     E(chunked_transfer_encoding,"chunked", var) \
     E(end_chunk_transfer_encoding,"0\r\n\r\n", var) \
@@ -346,12 +353,13 @@ const blob_t * ffmpeg_path_web;
     E(payment_required, "payment required", var) \
     E(cache_control,"cache-control", var) \
     E(no_store,"no-store", var) \
-    E(static_asset_cache_control,"public, max-age=2592000, immutable", var) \
-    E(user_file_cache_control,"private, max-age=2592000, immutable", var) \
+    E(static_asset_cache_control,"public,max-age=2592000,immutable", var) \
+    E(user_file_cache_control,"private,max-age=2592000,immutable", var) \
     E(res_path,"/res/", var) \
     E(res_path_suffix,"?v=", var) \
     E(favicon_path, "/res/logo.png", var) \
     E(file_table,"file_web", var) \
+    E(files_dir,"files", var) \
     E(poster_kind,"poster", var) \
     E(dot_txt,".txt", var) \
     E(dot_html,".html", var) \
@@ -396,7 +404,7 @@ insert_access_log_web(request_t * req)
             , received_field, received
             , elapsed_ns_field, elapsed
             , request_content_length_field, req->request_content_length
-            , response_content_length_field, req->content_length 
+            , response_content_length_field, req->content_length
             );
 
 }
@@ -643,21 +651,21 @@ const blob_t *
 suffix_content_type(content_type_t type)
 {
     switch (type) {
-        case jpeg_content_type: 
+        case jpeg_content_type:
             return res_web.dot_jpg;
-        case mp4_content_type: 
+        case mp4_content_type:
             return res_web.dot_mp4;
         case mov_content_type:
             return res_web.dot_mov;
-        case webp_content_type: 
+        case webp_content_type:
             return res_web.dot_webp;
-        case png_content_type: 
+        case png_content_type:
             return res_web.dot_png;
-        case gif_content_type: 
+        case gif_content_type:
             return res_web.dot_gif;
-        case m3u8_content_type: 
+        case m3u8_content_type:
             return res_web.dot_m3u8;
-        case ts_content_type: 
+        case ts_content_type:
             return res_web.dot_ts;
         default:
             log_var_s64(type);
@@ -791,6 +799,25 @@ header(blob_t * t, const blob_t *name, const blob_t *value)
 {
     vadd_blob(t, name, res_web.header_sep, value, res_web.crlf);
 }
+
+
+void
+header_request_web(request_t * req, const blob_t * name, const blob_t * value)
+{
+    header(req->head, name, value);
+}
+
+
+void
+s64_header_request_web(request_t * req, const blob_t * name, const s64 value)
+{
+    blob_t * b = req->head;
+
+    vadd_blob(b, name, res_web.header_sep);
+    add_s64_blob(b, value);
+    add_blob(b, res_web.crlf);
+}
+
 
 // TODO(jason): probably remove and add s64_header
 void
@@ -1008,7 +1035,7 @@ add_response_headers(request_t *req)
     // NOTE(jason): it's fucking stupid that deny isn't the default and every
     // request is required to have this.
     header(t, res_web.x_frame_options, res_web.deny_x_frame_options);
-    header(t, res_web.content_security_policy, res_web.self_default_content_security_policy);
+    header(t, res_web.content_security_policy, content_security_policy_web);
 
     // NOTE(jason): this is the blank line to indicate the headers are over and
     // the body should be next
@@ -1042,6 +1069,13 @@ html_response(request_t * req)
     return ok_response(req, html_content_type);
 }
 
+int
+text_response(request_t * req)
+{
+    return ok_response(req, text_content_type);
+}
+
+
 // TODO(jason): maybe this should be a macro that sets the blob_t * html.
 int
 json_response(request_t * req)
@@ -1064,7 +1098,7 @@ javascript_response(request_t * req)
 }
 
 
-// generate an error response that formats a body with html about the error 
+// generate an error response that formats a body with html about the error
 // TODO(jason): make a macro to pass file and line of caller
 int
 error_response(request_t * req, http_status_t status, blob_t * reason)
@@ -1113,6 +1147,7 @@ redirect_web(request_t * req, const blob_t * url)
 
     return 0;
 }
+
 
 // 301
 // used with /favicon.ico to allow caching of the redirect
@@ -2061,15 +2096,20 @@ health_handler(endpoint_t * ep, request_t * req)
     return 0;
 }
 
+
 int
-insert_file(db_t * db, s64 * file_id, s64 user_id, blob_t * path, s64 size, s64 content_type)
+insert_file_web(db_t * db, s64 * file_id, s64 user_id, blob_t * path, s64 size, s64 content_type)
 {
+    // TODO(jason): is NEW_FILE_STATUS a good name?  this is called before the
+    // file has actually been uploaded
     return insert_fields_db(db, res_web.file_table, file_id,
             user_id_field, user_id,
             path_field, path,
             size_field, size,
-            content_type_field, content_type);
+            content_type_field, content_type,
+            status_field, (s64)NEW_FILE_STATUS);
 }
+
 
 int
 set_status_file(db_t * db, s64 file_id, int file_status)
@@ -2109,11 +2149,11 @@ _ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * fil
     blob_t * cmd = stk_blob(2048);
     add_blob(cmd, ffmpeg_path_web);
     add_cstr_blob(cmd, " -hide_banner -loglevel error -nostdin -i ");
-    add_blob(cmd, input);
+    quote_add_blob(cmd, input);
     write_blob(cmd, " ", 1);
     add_blob(cmd, filter);
     write_blob(cmd, " ", 1);
-    add_blob(cmd, output);
+    quote_add_blob(cmd, output);
 
     /*
     char cmd[MAX_CMD_WEB];
@@ -2126,6 +2166,9 @@ _ffmpeg_call_web(const blob_t * input, const blob_t * output, const blob_t * fil
     // NOTE(jason): excessive logging
     //info_log(cmd);
 
+//    debug_blob(cmd);
+
+    // TODO(jason): XXX really need to stop use system and a shell
     int rc = system(cstr_blob(cmd));
     if (rc) {
         log_errno("failed to process media file");
@@ -2196,9 +2239,10 @@ resize_jpeg_web(const blob_t * input, const blob_t * output, s64 width)
         // sips doesn't do anything in this case
         //char * fmt_cmd = "sips %s --out %s";
         //still should strip exif
-        char * fmt_cmd = "cp %s %s";
+        char * fmt_cmd = "cp '%s' '%s'";
 #else
-        char * fmt_cmd = "convert-im6 -auto-orient +profile exif %s %s";
+        // TODO(jason): single quote in the filenames aren't escaped
+        char * fmt_cmd = "convert-im6 -auto-orient +profile exif \'%s\' \'%s\'";
 #endif
 
         if (snprintf(cmd, MAX_CMD_WEB, fmt_cmd, cstr_blob(input), cstr_blob(output)) < 0) {
@@ -2322,7 +2366,8 @@ transcode_video_web(const blob_t * input, const blob_t * output, s64 width, cons
     return _ffmpeg_call_web(input, output, filter);
 }
 
-int
+
+error_t
 media_path_web(blob_t * path, s64 width, const blob_t * name, content_type_t type)
 {
     add_s64_blob(path, width);
@@ -2331,6 +2376,7 @@ media_path_web(blob_t * path, s64 width, const blob_t * name, content_type_t typ
 
     return path->error;
 }
+
 
 // NOTE(jason): currently assuming
 // std_width = 640
@@ -2353,8 +2399,30 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
         target_type = preferred_image_type(type);
     }
 
-    blob_t * input = stk_blob(255);
-    path_upload_web(input, path.value);
+    blob_t * local_input = stk_blob(255);
+    path_upload_web(local_input, path.value);
+//    debug_blob(local_input);
+
+    blob_t * s3_path = stk_blob(255);
+    path_file_fu(s3_path, res_web.files_dir, path.value);
+//    debug_blob(s3_path);
+
+    if (read_access_file_fu(local_input)) {
+        if (get_file_s3(s3_path, local_input, s3_web)) {
+            error_log("s3 source download failed", "web", 1);
+            // goto error;
+            return -1;
+        }
+    }
+    else if (head_s3(s3_path, s3_web)) {
+//        debug("upload local file to s3");
+        if (put_file_s3(s3_path, local_input, blob_content_type(type), user_immutable_cache_control_http, s3_web)) {
+            error_log("s3 source upload failed", "web", 1);
+        }
+    }
+    else {
+        debug("file already exists in s3");
+    }
 
     // TODO(jason): this path building seems a little wonky
     blob_t * media_path = stk_blob(255);
@@ -2370,10 +2438,12 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
     //debug_blob(input);
     //debug_blob(output);
 
+    int rc = 0;
+
     if (video_content_type(type)) {
         if (target_type == jpeg_content_type) {
             //debug("XXXXX extract poster XXXX");
-            return extract_poster_web(input, output, width);
+            rc = extract_poster_web(local_input, output, width);
         }
         else {
             if (process_media_web(file_id, width, jpeg_content_type)) {
@@ -2383,32 +2453,41 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
             blob_t * watermark_file = stk_blob(1024);
             path_file_fu(watermark_file, res_dir_web, B("/res/watermark.png"));
 
-
             //debug("XXXXX transcode video XXXX");
-            return transcode_video_web(input, output, width, watermark_file);
+            rc = transcode_video_web(local_input, output, width, watermark_file);
         }
     }
     else if (gif_content_type == type) {
         //debug("XXXXX resize gif XXXX");
-        return resize_gif_web(input, output, width);
+        rc = resize_gif_web(local_input, output, width);
     }
     else if (png_content_type == type) {
         //debug("XXXXX resize png XXXX");
-        return resize_png_web(input, output, width);
+        rc = resize_png_web(local_input, output, width);
     }
     else if (jpeg_content_type == type) {
         //debug("XXXXX resize jpg XXXX");
         // remove exif and other identifying info
-        return resize_jpeg_web(input, output, width);
+        rc = resize_jpeg_web(local_input, output, width);
     }
     else if (webp_content_type == type) {
-        //debug("XXXXX resize jpg XXXX");
+        //debug("XXXXX resize webp XXXX");
         // remove exif and other identifying info
-        return resize_webp_web(input, output, width);
+        rc = resize_webp_web(local_input, output, width);
+    }
+
+    if (rc) return rc;
+
+    blob_t * output_s3_path = stk_blob(255);
+    path_file_fu(output_s3_path, res_web.files_dir, media_path);
+    if (put_file_s3(output_s3_path, output, blob_content_type(target_type), user_immutable_cache_control_http, s3_web)) {
+        error_log("s3 file upload failed", "web", 1);
+        return -1;
     }
 
     return 0;
 }
+
 
 // minimal processing to fast as possible for during response
 // full processing is done in the background
@@ -2549,8 +2628,8 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     path_upload_web(path, file_key);
 
     s64 file_id;
-    if (insert_file(app.db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
-        log_error_db(app.db, "insert_file");
+    if (insert_file_web(app.db, &file_id, req->user_id, file_key, req->request_content_length, type)) {
+        log_error_db(app.db, "insert_file web");
         internal_server_error_response(req);
         return -1;
     }
@@ -2805,6 +2884,11 @@ respond:
         internal_server_error_response(req);
     }
 
+    if (req->after_task) {
+        // NOTE(jason): browser will hang until the after task is done if keep alive not disabled
+        req->keep_alive = false;
+    }
+
     // TODO(jason): handler should've set the status line by this point
     add_response_headers(req);
 
@@ -2874,7 +2958,7 @@ fork_worker_web(int srv_fd, int (* after_fork_f)())
             continue;
         }
 
-        struct timeval timeout;      
+        struct timeval timeout;
         timeout.tv_sec = 2;
         timeout.tv_usec = 0;
 
@@ -2928,6 +3012,7 @@ upgrade_db_web(const blob_t * db_file)
         { 1, "create table session_web (session_id integer primary key, user_id integer, expires integer not null, cookie text, redirect_url text, created integer not null default (unixepoch()), modified integer not null default (unixepoch())) strict" }
         , { 2, "create table file_web (file_id integer primary key autoincrement, path text not null unique, size integer not null, content_type integer not null default 1, md5 blob, user_id integer not null, created integer not null default (unixepoch()), modified integer not null default (unixepoch()), status integer not null default 0) strict" }
         , { 3, "create table access_log_web (access_log_id integer primary key autoincrement, created integer not null default (unixepoch()), request_method integer not null , request_path text not null, http_status integer not null, session_id integer not null, user_id integer not null, received integer not null, elapsed_ns integer not null, request_content_length integer not null, response_content_length integer not null)" }
+//        , { 4, "alter table file_web add column s3_url text null" }
     };
 
     return upgrade_db(db_file, versions);
@@ -2961,10 +3046,25 @@ url_dev_web(blob_t * url, const blob_t * hostname, const s64 port, const blob_t 
 }
 
 int
-init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpeg_path)
+init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpeg_path, const s3_t * s3)
 {
     res_dir_web = res_dir;
+
     upload_dir_web = upload_dir;
+
+    // TODO(jason): if s3 is NULL, use local implementation
+    if (!s3) {
+        error_log("missing s3 config", "web", 1);
+        return -1;
+    }
+
+    s3_web = s3;
+
+    blob_t * csp = blob(255);
+    add_blob(csp, B("default-src 'self' blob: "));
+    add_blob(csp, s3->host);
+    content_security_policy_web = csp;
+
     ffmpeg_path_web = ffmpeg_path ? ffmpeg_path : const_blob("ffmpeg");
 
     if (ensure_dir_file_fu(upload_dir_web, S_IRWXU)) {
@@ -3015,7 +3115,7 @@ main_web(config_web_t * config)
 
     const int n_workers = dev_mode() ? config->n_dev_workers : config->n_workers;
 
-    if (init_web(config->res_dir, config->upload_dir, config->ffmpeg_path)) {
+    if (init_web(config->res_dir, config->upload_dir, config->ffmpeg_path, config->s3)) {
         exit(EXIT_FAILURE);
     }
 
@@ -3053,7 +3153,7 @@ main_web(config_web_t * config)
         }
 
         int reuseaddr = 1;
-        struct timeval timeout;      
+        struct timeval timeout;
         // NOTE(jason): setting tv_sec to 10 causes a bunch of accept errors.
         // maybe something to look into later.
         timeout.tv_sec = 0;
@@ -3094,7 +3194,7 @@ main_web(config_web_t * config)
 
     // XXX(jason): for unknown reason these lines don't get printed.  if
     // they're below the flush_logs() call the print out in every worker????
-    //log_var_u64(enum_res_web(wrap_blob("service unavailable"), 0)); 
+    //log_var_u64(enum_res_web(wrap_blob("service unavailable"), 0));
     //log_var_blob(res_web.service_unavailable);
 
     for (int i = 0; i < n_workers; i++)
