@@ -178,6 +178,19 @@ close_file_fu(int fd)
     return rc;
 }
 
+
+error_t
+delete_file(const blob_t * path)
+{
+    const char * cpath = cstr_blob(path);
+    if (unlink(cpath)) {
+        return log_errno(cpath);
+    }
+
+    return 0;
+}
+
+
 ssize_t
 read_max_file_fu(int fd, blob_t * b, size_t max)
 {
