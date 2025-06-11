@@ -2421,7 +2421,7 @@ process_media_web(param_t * file_id, s64 width, content_type_t target_type)
         }
     }
     else {
-        debug("file already exists in s3");
+//        debug("file already exists in s3");
     }
 
     // TODO(jason): this path building seems a little wonky
@@ -2532,9 +2532,9 @@ process_media_task_web(request_t * req)
 
     // process files as long as more to process and no other threads processing
     s64 file_id = 0;
-    debug("process media task");
+//    debug("process media task");
     while (next_process_media_web(&file_id)) {
-        debug_s64(file_id);
+//        debug_s64(file_id);
 
         if (full_process_media_web(file_id)) {
             if (set_status_file(app.db, file_id, ENCODE_ERROR_FILE_STATUS)) {
