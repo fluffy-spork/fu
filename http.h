@@ -264,7 +264,7 @@ write_fd_http(void *buf, size_t size, size_t nmemb, void *userdata)
 
     int fd = *((int *)userdata);
     ssize_t size_write = write(fd, buf, nmemb);
-    return (size_write == -1) ? CURL_WRITEFUNC_ERROR : (size_t)size_write;
+    return (size_write == -1) ? 0 : (size_t)size_write;
 }
 
 
