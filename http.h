@@ -57,11 +57,11 @@ write_blob_http(void *buf, size_t size, size_t nmemb, void *userp)
     if (available_blob(response) < nmemb) {
         // need a better error for this as curl error is something like "Failed
         // writing body (0 != 297)"  maybe it's better if it just truncates?
-        return CURL_WRITEFUNC_ERROR;
+        return 0;
     }
 
     ssize_t written = write_blob(response, buf, nmemb);
-    return (written == -1) ? CURL_WRITEFUNC_ERROR : (size_t)written;
+    return (written == -1) ? 0 : (size_t)written;
 }
 
 unsigned int
