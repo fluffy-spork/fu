@@ -135,7 +135,7 @@ clean() {
 edit() {
     log 'vim'
 
-    exec vim -u fu/tools/fu.vim main.c
+    exec vim -u fu/tools/fu.vim main.c -c 'vert term'
 }
 
 
