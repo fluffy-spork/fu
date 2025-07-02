@@ -34,6 +34,7 @@
     E(justify_content, "justify-content", var) \
     E(left, "left", var) \
     E(line_height, "line-height", var) \
+    E(list_style_type, "list-style-type", var) \
     E(margin, "margin", var) \
     E(margin_top, "margin-top", var) \
     E(margin_right, "margin-right", var) \

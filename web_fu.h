@@ -1824,15 +1824,18 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
     }
     end_css(css);
 
-    id_css(css, B("error"));
+    class_css(css, B("error"));
     {
         background_color_css(css, error_color);
-        padding_css(css, B("2px"));
+        padding_css(css, B("8px"));
+        list_style_type_css(css, none);
+        border_radius_css(css, B("8px"));
     }
     end_css(css);
 
-    id_css(css, B("errors"));
+    class_css(css, B("errors"));
     {
+        margin_css(css, B("16px"));
         text_align_css(css, B("start"));
     }
     end_css(css);

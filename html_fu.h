@@ -67,6 +67,7 @@
 #define start_list() start_list_html(html)
 #define end_list() end_list_html(html)
 #define list_item(...) list_item_html(html, __VA_ARGS__)
+#define list_item_class(...) list_item_class_html(html, __VA_ARGS__)
 #define script(...) script_html(html, __VA_ARGS__)
 #define res_script(...) res_script_html(html, __VA_ARGS__)
 
@@ -1024,5 +1025,11 @@ void
 list_item_html(blob_t * html, blob_t * content)
 {
     element_html(html, res_html.li, content);
+}
+
+void
+list_item_class_html(blob_t * html, const blob_t * class_name, const blob_t * content)
+{
+    element_id_class_html(html, res_html.li, NULL, class_name, content);
 }
 
