@@ -1642,7 +1642,8 @@ res_handler(endpoint_t * ep, request_t * req)
 void
 css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_highlight, const blob_t * bg_highlight)
 {
-    const blob_t * error_color = B("#c00");
+    const blob_t * bg_error_color = B("#c00");
+    const blob_t * fg_error_color = B("#fff");
     const blob_t * disabled_color = B("#666");
     const blob_t * none = B("none");
     const blob_t * zero = B("0");
@@ -1767,7 +1768,8 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
 
     class_css(css, B("notice"));
     {
-        background_color_css(css, error_color);
+        background_color_css(css, bg_error_color);
+        color_css(css, fg_error_color);
     }
     end_css(css);
 
@@ -1826,10 +1828,8 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
 
     class_css(css, B("error"));
     {
-        background_color_css(css, error_color);
-        padding_css(css, B("8px"));
-        list_style_type_css(css, none);
-        border_radius_css(css, B("8px"));
+        background_color_css(css, bg_error_color);
+        color_css(css, fg_error_color);
     }
     end_css(css);
 
@@ -1837,6 +1837,13 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
     {
         margin_css(css, B("16px"));
         text_align_css(css, B("start"));
+    }
+    end_css(css);
+
+    begin_css(css, B(".errors > .error"));
+    {
+        padding_css(css, B("8px"));
+        border_radius_css(css, B("8px"));
     }
     end_css(css);
 

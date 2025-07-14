@@ -894,7 +894,6 @@ param_input_html(blob_t * html, param_t * param, bool autofocus)
         //div_class(res_html.file_preview_class, res_html.no_files_selected);
 
         hidden_class_input(field->name, res_html.zero, res_html.file_url_class);
-        div_class(res_html.error, NULL);
         button(res_html.file_class, field->label, true);
         div_class(res_html.uploads_class, NULL);
         end_div();
