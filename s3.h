@@ -30,6 +30,7 @@ new_s3(const blob_t * url)
     ssize_t offset = 0;
     offset = index_blob_blob(url, B("://"), offset);
     offset += 3;
+    // NOTE(jason): host should include a port if supplied
     scan_delim_blob(s3->host, url, B("/?"), &offset);
     if (offset_blob(url, offset - 1) == '/') {
         sub_blob(s3->base_path, url, offset - 1, -1);
