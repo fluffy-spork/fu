@@ -64,6 +64,7 @@ ENUM_BLOB(method, METHOD)
     E(webp, "image/webp", var) \
     E(json, "application/json", var) \
     E(mpg, "video/mpeg", var) \
+    E(sqlite, "application/vnd.sqlite3", var) \
 
 ENUM_BLOB(content_type, CONTENT_TYPE)
 
@@ -2581,6 +2582,33 @@ files_process_media_task_handler(endpoint_t * ep, request_t * req)
 
     return 0;
 }
+
+
+int
+backup_db_task_web(request_t * req)
+{
+    // TODO(jason): give priority to request uploaded file if not processing
+    // backlog.  really just need to process faster in general.
+    UNUSED(req);
+
+    return backup_main_db_app();
+}
+
+
+int
+task_backup_db_handler(endpoint_t * ep, request_t * req)
+{
+    UNUSED(ep);
+
+    html_response(req);
+    add_blob(req->body, B("ok"));
+
+    req->after_task = backup_db_task_web;
+    req->keep_alive = false;
+
+    return 0;
+}
+
 
 // TODO(jason): can still upload a file of an invalid/unknown file type
 int

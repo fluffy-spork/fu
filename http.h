@@ -35,6 +35,8 @@ init_http()
 {
     curl_global_init(CURL_GLOBAL_ALL);
 
+//    debug(curl_version());
+
     init_method_http();
     init_cache_control_http();
 }
@@ -317,7 +319,9 @@ put_file_http(const blob_t * url, const blob_t * path, const blob_t * content_ty
         vadd_blob(cc, B("cache-control:"), blob_cache_control_http(cache_control));
         headers = curl_slist_append(headers, cstr_blob(cc));
     }
-    headers = curl_slist_append(headers, "if-none-match:*");
+    // TODO(jason): maybe add later as an option.  with versioning, it seems
+    // unlikely to matter.
+//    headers = curl_slist_append(headers, "if-none-match:*");
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
     // TODO(jason): how should the file be reset between attempts?
@@ -392,24 +396,26 @@ get_file_http(const blob_t * url, const blob_t * path, long * status_code)
     char error[CURL_ERROR_SIZE];
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, error);
 
-    long response_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
-
     CURLcode res = curl_easy_perform(curl);
     close(fd);
 
+    long response_code = 0;
+    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &response_code);
+//    debug_s64(response_code);
+    if (status_code) {
+        *status_code = response_code;
+    }
+
+//    debug_s64(res);
     if (res) {
         error_log(error, "http", res);
         // NOTE(jason): allows commenting out the delete for debugging
+        // NOTE(jason): delete since file can be an XML response or other error page
         delete_file(path);
     }
 
     curl_easy_cleanup(curl);
 
-    if (status_code) {
-        *status_code = response_code;
-    }
-
-    return ok_http(response_code) ? 0 : response_code;
+    return res ? -1 : 0;
 }
 

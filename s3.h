@@ -17,6 +17,7 @@ s3_t *
 new_s3(const blob_t * url)
 {
     s3_t * s3 = malloc(sizeof(*s3));
+    if (!s3) return NULL;
 
     s3->url = blob(1024);
     s3->base_path = blob(1024);
@@ -48,6 +49,7 @@ new_default_s3(void)
     blob_env_fu(B("S3_URL"), url, NULL);
 
     s3_t * s3 = new_s3(url);
+    if (!s3) return NULL;
 
     // XXX: error checking
     blob_env_fu(B("S3_REGION"), s3->region, NULL);
@@ -350,18 +352,26 @@ put_file_s3(const blob_t * s3_path, const blob_t * local_path, const blob_t * co
 }
 
 
-error_t
-get_file_s3(const blob_t * s3_path, const blob_t * local_path, const s3_t * s3)
+int
+get_file_status_code_s3(const blob_t * s3_path, const blob_t * local_path, long * status_code, const s3_t * s3)
 {
     blob_t * signed_url = stk_blob(2048);
     sign_url_s3(signed_url, s3_path, get_method_http, 3600, -1, s3);
 
-    if (get_file_http(signed_url, local_path, NULL)) {
+    int rc = get_file_http(signed_url, local_path, status_code);
+    if (rc) {
         error_log("s3 file download failed", "web", 1);
-        return -1;
+        return rc;
     }
 
     return 0;
+}
+
+
+error_t
+get_file_s3(const blob_t * s3_path, const blob_t * local_path, const s3_t * s3)
+{
+    return get_file_status_code_s3(s3_path, local_path, NULL, s3);
 }
 
 

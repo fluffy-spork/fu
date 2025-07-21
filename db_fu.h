@@ -1468,3 +1468,10 @@ error:
     return rc;
 }
 
+
+int
+vacuum_into_file_db(db_t * db, blob_t * filename)
+{
+    return exec_s64_pb_db(db, B("vacuum into ?1"), NULL, filename);
+}
+

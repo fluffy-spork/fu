@@ -7,10 +7,15 @@
 #include "field_fu.h"
 #include "db_fu.h"
 
+#include "http.h"
+#include "s3.h"
+
 #include <sys/wait.h>
 #include <sys/utsname.h>
 
-#define MAIN_DB_FILE_APP "main.sqlite"
+#define MAIN_SQLITE_APP "main.sqlite"
+#define BACKUPS_DIR_APP "backups"
+#define BACKUPS_MAIN_SQLITE_APP BACKUPS_DIR_APP"/"MAIN_SQLITE_APP
 
 typedef struct {
     blob_t * name;
@@ -20,6 +25,8 @@ typedef struct {
 
     blob_t * main_db_file;
     db_t * db;
+
+    s3_t * s3;
 } app_fu_t;
 
 app_fu_t app = {};
@@ -113,6 +120,7 @@ app_dir_app(blob_t * path)
     return 0;
 }
 
+// TODO(jason): "state" should probably be "data" because that's the default directory name
 blob_t *
 new_state_path_app(const blob_t * subpath)
 {
@@ -172,6 +180,93 @@ open_main_db_app(void)
     return open_db(app.main_db_file, &app.db);
 }
 
+
+int
+backup_main_db_app(void)
+{
+    // TODO(jason):  gzip backup
+
+    // TODO(jason): on-write or periodic backups
+    // periodic backup with incremental diff backups on writes?
+    // restore more complicated but just base.sqlite and main.sqlite.diff or something
+    // So with infrequent writes the diff should be small
+
+    db_t * db;
+    if (open_db(app.main_db_file, &db)) {
+        return log_errno("open db for backup");
+    }
+
+    int rc = 0;
+
+    blob_t * backup_dir = stk_blob(1024);
+    state_path_app(backup_dir, B(BACKUPS_DIR_APP));
+
+    blob_t * backup_file = stk_blob(1024);
+    state_path_app(backup_file, B(BACKUPS_MAIN_SQLITE_APP));
+
+    if (ensure_dir_file_fu(backup_dir, S_IRWXU)) {
+        rc = log_errno("unable to make backup dir");
+        goto cleanup;
+    }
+
+    // NOTE(jason): vacuum into won't work if a file already exists
+    // If the file exists a backup is already in progress or crashed.  this might prevent multiple 
+    if (exists_file(backup_file)) {
+//        delete_file(backup_file);
+        rc = log_errno("skipping backup, file exists");
+        goto cleanup;
+    }
+
+    info_log("backup main db begin");
+
+    // vacuum into backup file
+    rc = vacuum_into_file_db(db, backup_file);
+    if (rc) {
+        log_error_db(db, "db backup failed");
+        goto cleanup;
+    }
+
+    rc = put_file_s3(B(BACKUPS_MAIN_SQLITE_APP), backup_file, B("application/vnd.sqlite3"), no_store_cache_control_http, app.s3);
+
+cleanup:
+    delete_file(backup_file);
+
+    close_db(db);
+
+    info_log("backup main db end");
+
+    return rc;
+}
+
+
+int
+restore_main_db_app (s3_t * s3)
+{
+    if (exists_file(app.main_db_file)) {
+        info_log("using existing main.sqlite");
+        return 0;
+    }
+
+    // TODO(jason): print progress to log? mostly small dbs so is almost
+    // instantaneous anyway
+
+    long status_code = 0;
+    if (get_file_status_code_s3(B(BACKUPS_MAIN_SQLITE_APP), app.main_db_file, &status_code, s3)) {
+        if (status_code == 404) {
+            info_log("no backup available");
+        }
+        else {
+            return log_errno("failed to download backup database");
+        }
+    }
+    else {
+        info_log("main.sqlite downloaded from backup");
+    }
+
+    return 0;
+}
+
+
 int
 save_state_file_app(const blob_t * subpath, const blob_t * data)
 {
@@ -193,7 +288,7 @@ pre_fork_app_fu(void)
     return 0;
 }
 
-// called after fork() for parent and child
+// called after fork() in child
 // open sqlite, etc
 int
 post_fork_app_fu(pid_t pid)
@@ -418,26 +513,31 @@ exit_callback_app(void)
 int
 init_app_fu(const char * state_dir, void (* flush_log_f)(void))
 {
+    // NOTE(jason): this is only called when exit is called or main returns,
+    // not signals.  probably shouldn't use.
     atexit(exit_callback_app);
+
+    // NOTE(jason): has to be before any log calls
+    init_log(flush_log_f);
+
+    int rc = 0;
 
     app.name = blob(32);
 
     app.dir = blob(256);
     if (app_dir_app(app.dir)) {
         error_log("unable to access app.dir", "app", 2);
-        return -1;
+        rc = -1;
+        goto cleanup;
     }
 
     app.state_dir = const_blob(state_dir);
-    app.main_db_file = new_path_file_fu(app.state_dir, B(MAIN_DB_FILE_APP));
+    app.main_db_file = new_path_file_fu(app.state_dir, B(MAIN_SQLITE_APP));
 
-    // NOTE(jason): has to be before any log calls
-    init_log(flush_log_f);
-
-    if (read_access_file_fu(app.state_dir)) {
+    if (readwrite_access_file_fu(app.state_dir)) {
         log_var_blob(app.state_dir);
-        log_errno("cannot access state dir");
-        return -1;
+        rc = log_errno("cannot access state dir");
+        goto cleanup;
     }
 
     if (dev_mode()) {
@@ -448,23 +548,35 @@ init_app_fu(const char * state_dir, void (* flush_log_f)(void))
     setbuf(stderr, NULL);
 
     if (set_default_sigaction_handlers()) {
-        log_errno("failed to set default sigaction handlers");
-        return -1;
+        rc = log_errno("failed to set default sigaction handlers");
+        goto cleanup;
     }
 
     init_res_app();
 
     init_db();
 
-    if (upgrade_db_app(app.main_db_file)) {
-        error_log("db upgrade failed", "app", 1);
-        return -1;
+    init_http();
+
+    app.s3 = new_default_s3();
+
+    if (restore_main_db_app(app.s3)) {
+        rc = log_errno("db restore failed");
+        goto cleanup;
     }
 
+    if (upgrade_db_app(app.main_db_file)) {
+        error_log("db upgrade failed", "app", 1);
+        rc = -1;
+        goto cleanup;
+    }
+
+cleanup:
     flush_log();
 
-    return 0;
+    return rc;
 }
+
 
 int
 init_argv_app_fu(int argc, char *argv[], void (* flush_log_f)(void))

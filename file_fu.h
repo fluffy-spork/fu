@@ -101,10 +101,38 @@ basename_file_fu(const blob_t * path, blob_t * basename)
 }
 
 
+bool
+exists_file(const blob_t * path)
+{
+    return access(cstr_blob(path), F_OK) == 0;
+}
+
+
 int
 read_access_file_fu(const blob_t * path)
 {
     return access(cstr_blob(path), R_OK);
+}
+
+
+int
+write_access_file_fu(const blob_t * path)
+{
+    return access(cstr_blob(path), W_OK);
+}
+
+
+int
+readwrite_access_file_fu(const blob_t * path)
+{
+    return access(cstr_blob(path), R_OK|W_OK);
+}
+
+
+int
+execute_access_file_fu(const blob_t * path)
+{
+    return access(cstr_blob(path), X_OK);
 }
 
 
@@ -118,6 +146,8 @@ mkdir_file_fu(const blob_t * path, mode_t mode)
     return 0;
 }
 
+// TODO(jason): could probably use a version without a mode as it seems to be
+// S_IRWXU in current uses
 int
 ensure_dir_file_fu(const blob_t * path, mode_t mode)
 {

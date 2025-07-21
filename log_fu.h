@@ -52,6 +52,9 @@ typedef struct {
     char * file;
     char * function;
     s64 line;
+
+    pid_t pid;
+    pid_t ppid;
 } log_entry_t;
 
 typedef struct {
@@ -113,6 +116,9 @@ _log(log_t * log, const void * msg, size_t size_msg, const char * label, size_t 
         entry->file = (char *)file;
         entry->function = (char *)function;
         entry->line = line;
+
+        entry->pid = getpid();
+        entry->ppid = getppid();
     }
 
     log->size++;
@@ -182,11 +188,11 @@ write_log(log_t * log, int fd)
         log_entry_t * entry = &log->entries[i];
         size_t size;
         if (entry->label[0]) {
-            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%lld %s: %s\n",
-                    entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->label, entry->msg);
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld [%d/%d] %s:%s:%lld %s: %s\n",
+                    entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->pid, entry->ppid, entry->file, entry->function, entry->line, entry->label, entry->msg);
         } else {
-            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld %s:%s:%lld %s\n",
-                    entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->file, entry->function, entry->line, entry->msg);
+            size = snprintf(msg, max_msg, "%.4d %lld.%.9ld [%d/%d] %s:%s:%lld %s\n",
+                    entry->error, (long long)entry->timestamp.tv_sec, entry->timestamp.tv_nsec, entry->pid, entry->ppid, entry->file, entry->function, entry->line, entry->msg);
         }
         ssize_t written = write(fd, msg, size);
         assert(written != -1);
