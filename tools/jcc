@@ -150,7 +150,7 @@ clean() {
     exit 0
 }
 
-edit() {
+vim_edit() {
     log 'vim'
 
     exec vim -u fu/tools/fu.vim main.c -c 'vert term'
@@ -190,8 +190,8 @@ elif [ "$cmd" = 'gup' ]; then
     gup
 elif [ "$cmd" = 'gpush' ]; then
     gpush
-elif [ "$cmd" = 'edit' ]; then
-    edit
+elif [ "$cmd" = 'vim' ]; then
+    vim_edit
 elif [ "$cmd" = 'update-sqlite' ]; then
     update_sqlite
 else
