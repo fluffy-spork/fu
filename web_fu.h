@@ -1952,6 +1952,7 @@ css_web(blob_t * css, const blob_t * fg, const blob_t * bg, const blob_t * fg_hi
         background_color_css(css, B("rgba(0,0,0,0.4)"));
         color_css(css, fg_highlight);
         font_size_css(css, B("18px"));
+        font_family_css(css, B("monospace"));
         font_weight_css(css, B("bold"));
         text_shadow_css(css, B("0 0 2px #000"));
         box_shadow_css(css, B("0 0 2px 0 #000"));
