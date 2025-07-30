@@ -16,6 +16,11 @@ typedef struct {
 s3_t *
 new_s3(const blob_t * url)
 {
+    if (empty_blob(url)) {
+        error_log("missing s3 url", "s3", 1);
+        return NULL;
+    }
+
     s3_t * s3 = malloc(sizeof(*s3));
     if (!s3) return NULL;
 

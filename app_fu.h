@@ -559,6 +559,10 @@ init_app_fu(const char * state_dir, void (* flush_log_f)(void))
     init_http();
 
     app.s3 = new_default_s3();
+    if (!app.s3) {
+        rc = -1;
+        goto cleanup;
+    }
 
     if (restore_main_db_app(app.s3)) {
         rc = log_errno("db restore failed");
