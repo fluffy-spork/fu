@@ -94,7 +94,7 @@ app_dir_app(blob_t * path)
         return -1;
     }
 
-    debug_blob(dir);
+//    debug_blob(dir);
 
     /*
     if (executable_path_file_fu(exe_path)) {
