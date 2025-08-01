@@ -51,7 +51,7 @@ s3_t *
 new_default_s3(void)
 {
     blob_t * url = stk_blob(255);
-    blob_env_fu(B("S3_URL"), url, NULL);
+    blob_env_fu(B("S3_BUCKET_URL"), url, NULL);
 
     s3_t * s3 = new_s3(url);
     if (!s3) return NULL;
