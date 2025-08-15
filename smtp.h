@@ -107,7 +107,7 @@ send_smtp(const blob_t * email, const blob_t * subject, const blob_t * body)
     /* Since the traffic is encrypted, it is useful to turn on debug
      * information within libcurl to see what is happening during the
      * transfer */
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
 
     res = curl_easy_perform(curl);
     if (res != CURLE_OK) {
