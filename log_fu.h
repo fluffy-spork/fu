@@ -8,6 +8,11 @@
 #define error_log(msg, label, error) \
     _log(plog, msg, strlen(msg), label, strlen(label), error, __FILE__, __func__, __LINE__);
 
+#define FAIL_ERROR_CODE_LOG 1
+
+#define fail_log(msg) \
+    _log(plog, msg, strlen(msg), NULL, 0, FAIL_ERROR_CODE_LOG, __FILE__, __func__, __LINE__);
+
 #define info_log(msg) \
     _log(plog, msg, strlen(msg), NULL, 0, 0, __FILE__, __func__, __LINE__);
 

@@ -8,6 +8,7 @@
 
 #include <netinet/tcp.h>
 
+#include "tls.h"
 #include "file_fu.h"
 
 #define MAX_REQUEST_BODY 4096
@@ -119,6 +120,7 @@ typedef int (* request_task_f)(request_t *);
 
 struct request_s {
     int fd;
+    tls_t * tls;
 
     struct timespec received;
 
@@ -734,6 +736,7 @@ void
 reuse_request(request_t * req)
 {
     req->fd = -1;
+
     req->method = none_method;
     req->content_type = none_content_type;
     req->content_length = -1;
@@ -768,6 +771,7 @@ reuse_request(request_t * req)
     req->endpoint = NULL;
 }
 
+
 request_t *
 new_request()
 {
@@ -790,10 +794,72 @@ new_request()
     req->head = blob(1024);
     req->body = blob(MAX_RESPONSE_BODY);
 
+    req->tls = new_server_tls();
+
     reuse_request(req);
 
     return req;
 }
+
+
+ssize_t
+read_net_web(request_t * req, blob_t * buf)
+{
+    return read_tls(req->tls, buf);
+    //return read_file_fu(req->fd, buf);
+}
+
+
+ssize_t
+write_net_web(request_t * req, const blob_t * buf)
+{
+    return write_tls(req->tls, buf);
+    //return write_file_fu(req->fd, buf);
+}
+
+
+error_t
+receive_file_web(const blob_t * path, request_t * req, const size_t count, const blob_t * prefix)
+{
+    dev_error("not implemented");
+
+    UNUSED(path);
+    UNUSED(req);
+    UNUSED(count);
+    UNUSED(prefix);
+
+//    return write_prefix_file_fu(path, prefix, req->fd, count);
+    return -1;
+}
+
+
+ssize_t
+send_file_web(request_t * req, int fd, size_t len)
+{
+//    return send_file_tls(req->tls, fd, len);
+
+    // send_file_tls
+    blob_t * buf = stk_blob(8192);
+
+    ssize_t ret = 0;
+
+    while (len) {
+        reset_blob(buf);
+
+        ssize_t read = read_file_fu(fd, buf);
+        if (read == 0) break;
+        if (read == -1) return log_errno("copy read");
+
+        ssize_t written = write_net_web(req, buf);
+        if (written == -1) return log_errno("copy write");
+
+        len -= written;
+        ret += written;
+    }
+
+    return ret;
+}
+
 
 void
 header(blob_t * t, const blob_t *name, const blob_t *value)
@@ -938,7 +1004,7 @@ require_request_body_web(request_t * req)
         // TODO(jason): this should be better and check that the full
         // content-length can be read.  although, the general case should be
         // that it fits in request_body unless it's a file upload
-        read_file_fu(req->fd, req->request_body);
+        read_net_web(req, req->request_body);
     }
 
     return 0;
@@ -1270,19 +1336,19 @@ file_response(request_t * req, const blob_t * dir, const blob_t * path, content_
     // status or headers before the whole file is sent
     set_tcp_cork_file(req->fd, 1);
 
-    if (write_file_fu(req->fd, status) == -1) {
+    if (write_net_web(req, status) == -1) {
         internal_server_error_response(req);
-        return log_errno("write_file_fu status");
+        return log_errno("write_net_web status");
     }
 
-    if (write_file_fu(req->fd, req->head) == -1) {
+    if (write_net_web(req, req->head) == -1) {
         internal_server_error_response(req);
-        return log_errno("write_file_fu head");
+        return log_errno("write_net_web head");
     }
 
-    if (send_file(req->fd, fd, len) == -1) {
+    if (send_file_web(req, fd, len) == -1) {
         internal_server_error_response(req);
-        return log_errno("send_file");
+        return log_errno("send_file_web");
     }
 
     set_tcp_cork_file(req->fd, 0);
@@ -2634,7 +2700,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     // should check user permissions before sending 100 continue
     if (req->expect_continue) {
         // TODO(jason): what to do if this write fails?
-        if (write_file_fu(req->fd, http_status.expect_continue) == -1) {
+        if (write_net_web(req, http_status.expect_continue) == -1) {
             // NOTE(jason): will this even work if it's failed.  probably not
             // as the only real failure scenario is the socket won't write.
             return internal_server_error_response(req);
@@ -2643,7 +2709,7 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     }
 
     if (empty_blob(req->request_body)) {
-        if (read_file_fu(req->fd, req->request_body) == -1) {
+        if (read_net_web(req, req->request_body) == -1) {
             log_errno("read initial request body");
             return bad_request_response(req);
         }
@@ -2677,8 +2743,8 @@ files_upload_handler(endpoint_t * ep, request_t * req)
     // filename to avoid duplicate uploads.
     // could potentially avoid uploads if the digest header is used with
     // requests or some other method to avoid even uploading dupes.
-    if (write_prefix_file_fu(path, req->request_body, req->fd, req->request_content_length) == -1) {
-        log_error_db(app.db, "write_prefix_file");
+    if (receive_file_web(path, req, req->request_content_length, req->request_body) == -1) {
+        log_error_db(app.db, "receive_file_web");
         internal_server_error_response(req);
         return -1;
     }
@@ -2768,12 +2834,10 @@ files_handler(endpoint_t * ep, request_t * req)
 int
 handle_request(request_t *req)
 {
-    ssize_t result = 0;
-    const size_t n_iov = 3;
-    struct iovec iov[n_iov];
-
     // TODO(jason): adjust this size so the entire request is read one shot in
     // non-file upload cases.
+    // TODO(jason): this input allocation even though on the stack seems
+    // somewhat questionable
     blob_t * input = stk_blob(MAX_REQUEST_BODY/2);
     blob_t * tmp = stk_blob(1024);
 
@@ -2791,17 +2855,11 @@ handle_request(request_t *req)
     // I think not waiting for data is actually causing http keep alive to only
     // work when the request has already been sent.  may not be happening at
     // all as there are currently many "empty request" log messages.
-    ssize_t n = read_file_fu(req->fd, input);
-    if (n == -1) {
-        if (errno != EAGAIN) { // not timeout
-            log_errno("read request head");
-        }
-        return -1;
-    } else if (n == 0) {
-        // TODO(Jason): seems like this is happening way more than desirable.
-        // although I guess it always has to happened for all requests that do
-        // keep alive?  maybe it's just stupid to log.
-        info_log("empty request");
+    ssize_t n = read_net_web(req, input);
+//    debug_blob(input);
+    if (n <= 0) {
+        // TODO(jaso): openssl errors when 0 bytes read which isn't really an error.
+        if (n == -1) debug("read failed");
         return -1;
     }
 
@@ -2938,16 +2996,27 @@ respond:
 
     // write headers and body that should be in request_t
     // TODO(jason): maybe this should be done in the caller?
-    iov[0].iov_base = status->data;
-    iov[0].iov_len = status->size;
-    iov[1].iov_base = req->head->data;
-    iov[1].iov_len = req->head->size;
-    iov[2].iov_base = req->body->data;
-    iov[2].iov_len = req->body->size;
-    result = writev(req->fd, iov, n_iov);
+//    ssize_t result = 0;
+//    const size_t n_iov = 3;
+//    struct iovec iov[n_iov];
+
+//    iov[0].iov_base = status->data;
+//    iov[0].iov_len = status->size;
+//    iov[1].iov_base = req->head->data;
+//    iov[1].iov_len = req->head->size;
+//    iov[2].iov_base = req->body->data;
+//    iov[2].iov_len = req->body->size;
+//    result = writev(req->fd, iov, n_iov);
+
+    if (write_net_web(req, status) == -1
+        || write_net_web(req, req->head) == -1
+        || write_net_web(req, req->body) == -1)
+    {
+        log_errno("write response");
+    }
 
     //debug_s64(result);
-    if (result == -1) log_errno("write response");
+//    if (result == -1) log_errno("write response");
 
     // XXX: this shouldn't be here
     if (app.db && !sqlite3_get_autocommit(app.db)) {
@@ -3008,6 +3077,12 @@ fork_worker_web(int srv_fd, int (* after_fork_f)())
             exit(EXIT_FAILURE);
         }
 
+        // SSL_accept, do handshake or anything necessary to prepare for sending app data
+        if (accept_tls(req->tls, client_fd)) {
+            close(client_fd);
+            continue;
+        }
+
         int rc;
 handle_request:
         req->fd = client_fd;
@@ -3027,6 +3102,7 @@ handle_request:
 
         // NOTE(jason): overwrite the request data so it can't be used
         // across requests to different clients.
+        // TODO(jason): revisit request reuse post keepalive
         reuse_request(req);
 
         // write log after request is finished
@@ -3036,7 +3112,9 @@ handle_request:
         if (keep_alive) {
             goto handle_request;
         } else {
+            shutdown_tls(req->tls);
             close(client_fd);
+            // TODO(jason): likely doesn't need to clear these here as it's done in reuse_request
             req->fd = -1;
         }
     }
@@ -3085,31 +3163,32 @@ url_dev_web(blob_t * url, const blob_t * hostname, const s64 port, const blob_t 
 }
 
 int
-init_web(const blob_t * res_dir, const blob_t * upload_dir, const blob_t * ffmpeg_path, const s3_t * s3)
+init_web(config_web_t * config)
 {
-    res_dir_web = res_dir;
-
-    upload_dir_web = upload_dir;
+    res_dir_web = config->res_dir;
+    upload_dir_web = config->upload_dir;
 
     // TODO(jason): if s3 is NULL, use local implementation
-    if (!s3) {
+    if (!config->s3) {
         error_log("missing s3 config", "web", 1);
         return -1;
     }
 
-    s3_web = s3;
+    s3_web = config->s3;
 
     blob_t * csp = blob(255);
     add_blob(csp, B("default-src 'self' blob: "));
-    add_blob(csp, s3->host);
+    add_blob(csp, config->s3->host);
     content_security_policy_web = csp;
 
-    ffmpeg_path_web = ffmpeg_path ? ffmpeg_path : const_blob("ffmpeg");
+    ffmpeg_path_web = config->ffmpeg_path ? config->ffmpeg_path : const_blob("ffmpeg");
 
     if (ensure_dir_file_fu(upload_dir_web, S_IRWXU)) {
         log_errno("make upload dir");
         exit(EXIT_FAILURE);
     }
+
+    init_tls(config->hostname);
 
     init_res_web();
 
@@ -3154,7 +3233,7 @@ main_web(config_web_t * config)
 
     const int n_workers = dev_mode() ? config->n_dev_workers : config->n_workers;
 
-    if (init_web(config->res_dir, config->upload_dir, config->ffmpeg_path, config->s3)) {
+    if (init_web(config)) {
         exit(EXIT_FAILURE);
     }
 
@@ -3300,7 +3379,7 @@ main_web(config_web_t * config)
     return 0;
 }
 
-int
+ssize_t
 save_request(request_t * req, const blob_t * path)
 {
     if (require_request_body_web(req)) return -1;
@@ -3320,8 +3399,7 @@ read_request_body(request_t * req, blob_t * body)
 
     add_blob(body, req->request_body);
     // TODO(jason): add read_full_file
-    if (read_file_fu(req->fd, body) == -1) return -1;
+    if (read_net_web(req, body) == -1) return -1;
 
     return 0;
 }
-

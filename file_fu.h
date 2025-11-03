@@ -269,6 +269,8 @@ write_full_file_fu(int fd, const blob_t * b)
 
     while (n) {
         ssize_t written = write(fd, b->data + ret, n);
+        // TODO(jason): probably wrong.  needs to check for EINTR or other
+        // non-fatal reasons for return with partial write
         if (written == -1) return log_errno("write full failed");
 
         n -= written;
@@ -277,6 +279,7 @@ write_full_file_fu(int fd, const blob_t * b)
 
     return ret;
 }
+
 
 ssize_t
 copy_fd_file_fu(int out_fd, int in_fd, size_t len)

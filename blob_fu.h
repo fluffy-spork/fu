@@ -349,6 +349,7 @@ add_blob(blob_t * dest, const blob_t * src)
     return write_blob(dest, src->data, src->size);
 }
 
+
 ssize_t
 set_blob(blob_t * b, const blob_t * value)
 {
