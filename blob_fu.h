@@ -120,6 +120,44 @@ free_blob(blob_t * blob)
     free(blob);
 }
 
+
+blob_t *
+cl_blob()
+{
+    size_t capacity = 64 - sizeof(blob_t);
+    return blob(capacity);
+}
+
+
+// double (64B) cache line blob
+// should hold 88 bytes + blob_t in 128B
+blob_t *
+dcl_blob()
+{
+    size_t capacity = 2*64 - sizeof(blob_t);
+    return blob(capacity);
+}
+
+
+// quad cache line (256B)
+blob_t *
+qcl_blob()
+{
+    size_t capacity = 4*64 - sizeof(blob_t);
+    return blob(capacity);
+}
+
+
+// page size
+blob_t *
+page_blob()
+{
+    size_t capacity = 4096 - sizeof(blob_t);
+    debug_u64(capacity);
+    return blob(capacity);
+}
+
+
 // NOTE(jason): sets full capacity to 0 to wipe memory.  use reset_blob to just
 // abandon data.
 void
@@ -978,6 +1016,25 @@ add_u8_blob(blob_t * b, u8 c)
 }
 */
 
+
+// TODO(jason): good idea?
+error_t
+fmt_int_blob(blob_t * b, const blob_t * format, int value)
+{
+    size_t available = available_blob(b);
+
+    int written = snprintf((char *)&b->data[b->size], available, cstr_blob(format), value);
+
+    if (written == -1) {
+        return -1;
+    }
+
+    b->size += written;
+
+    return 0;
+}
+
+
 // TODO(jason): maybe this should have a way for 0 not be added and make an
 // empty blob
 void
@@ -1028,9 +1085,12 @@ add_u16_zero_pad_blob(blob_t * b, u16 n)
     // TODO(jason): replace with something that doesn't use stdio
     // and direct
     char s[256];
-    int size = snprintf(s, 256, "%06d", n);
+    // TODO(jason): was 'd' instead of 'u', untested fix
+    // probably wasn't ever an issue since it's larger than 16 bit
+    int size = snprintf(s, 256, "%06u", n);
     write_blob(b, s, size);
 }
+
 
 ssize_t
 add_decimal_blob(blob_t * b, s64 num, int divisor, int precision)
