@@ -10,6 +10,9 @@
 #endif
 #include <sys/stat.h>
 
+#include <sys/mman.h>
+
+#include <ftw.h>
 
 int
 size_file_fu(int fd, size_t * size)
@@ -221,6 +224,26 @@ delete_file(const blob_t * path)
 }
 
 
+int
+_delete_dir_ntfw_callback_file(const char *pathname, const struct stat *sbuf, int type, struct FTW *ftwb)
+{
+    UNUSED(sbuf);
+    UNUSED(type);
+    UNUSED(ftwb);
+
+    return remove(pathname);
+}
+
+
+error_t
+delete_dir_file(const blob_t * path)
+{
+    // Delete the directory and its contents by traversing the tree in reverse
+    // order, without crossing mount boundaries and symbolic links
+    return nftw(cstr_blob(path), _delete_dir_ntfw_callback_file, 10, FTW_DEPTH|FTW_MOUNT|FTW_PHYS);
+}
+
+
 ssize_t
 read_max_file_fu(int fd, blob_t * b, size_t max)
 {
@@ -359,7 +382,7 @@ send_file(int out_fd, int in_fd, size_t len)
 
 /* none of this is tested and may be unused
 int
-tmp_file_fu()
+tmp_file_fu(void)
 {
     // NOTE(jason): from Linux Programming Inteface book
     int fd;
@@ -377,6 +400,25 @@ tmp_file_fu()
     return fd;
 }
 */
+
+
+error_t
+tmp_dir_file(blob_t * out)
+{
+    dev_error(out->size != 0);
+
+    blob_t * tmplt = B("/tmp/fu-XXXXXX");
+    dev_error(available_blob(out) < tmplt->size);
+
+    add_blob(out, tmplt);
+
+    if (!mkdtemp((char *)out->data)) {
+        return log_errno("tmp_dir_file");
+    }
+
+    return 0;
+}
+
 
 // count should be prefix->size + <whatever from fd>
 ssize_t
@@ -513,6 +555,57 @@ executable_path_file_fu(blob_t * path)
     }
 
 //    debug_blob(path);
+
+    return 0;
+}
+
+
+// NOTE(jason): if *length is not 0, checked to make sure the file is the
+// required size 
+void *
+mmap_file(const blob_t * path, size_t * length)
+{
+    dev_error(length == NULL);
+
+    size_t req_length = *length;
+
+    void * addr = NULL;
+
+    int fd = open_read_file_fu(path);
+    if (fd == -1) {
+        return NULL;
+    }
+
+    if (size_file_fu(fd, length)) {
+        goto error;
+    }
+
+    if (*length != req_length) {
+        errno = EINVAL;
+        goto error;
+    }
+
+    addr = mmap(NULL, *length, PROT_READ, MAP_PRIVATE, fd, 0);
+    if (!addr) {
+        log_errno("mmap");
+    }
+
+error:
+    close(fd);
+
+    return addr;
+}
+
+
+error_t
+munmap_file(void * addr, size_t length)
+{
+    dev_error(addr == NULL);
+    dev_error(length == 0);
+
+    if (munmap(addr, length)) {
+        return log_errno("munmap");
+    }
 
     return 0;
 }
