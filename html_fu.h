@@ -83,7 +83,10 @@ ENUM_BLOB(autocomplete, AUTOCOMPLETE_ENUM)
     E(space, " ", var) \
     E(zero, "0", var) \
     E(double_quote_ref, "&quot;", var) \
+    E(single_quote_ref, "&#x27", var) \
     E(less_than_ref, "&lt;", var) \
+    E(greater_than_ref, "&gt;", var) \
+    E(ampersand_ref, "&amp;", var) \
     E(error, "error", var) \
     E(errors, "errors", var) \
     E(doctype, "<!doctype html>", var) \
@@ -261,7 +264,14 @@ raw_html(blob_t * html, const blob_t * content)
 ssize_t
 escape_html(blob_t * html, const blob_t * content)
 {
-    return escape_blob(html, content, '<', res_html.less_than_ref);
+    const blob_t * lut[256];
+    lut['<'] = res_html.less_than_ref;
+    lut['>'] = res_html.greater_than_ref;
+    lut['\''] = res_html.single_quote_ref;
+    lut['"'] = res_html.double_quote_ref;
+    lut['&'] = res_html.ampersand_ref;
+
+    return lut_escape_blob(html, content, lut);
 }
 
 ssize_t

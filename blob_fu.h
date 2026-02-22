@@ -1155,9 +1155,30 @@ escape_blob(blob_t * b, const blob_t * value, const u8 c, const blob_t * replace
     return written;
 }
 
+
+ssize_t
+lut_escape_blob(blob_t * out, const blob_t * in, const blob_t * lut[256])
+{
+    ssize_t written = 0;
+    for (size_t i = 0; i < in->size; i++) {
+        u8 c = in->data[i];
+        const blob_t * v = lut[c];
+        if (v) {
+            add_blob(out, v);
+        }
+        else {
+            write_blob(out, &c, 1);
+        }
+    }
+
+    return written;
+}
+
+
 ssize_t
 c_escape_blob(blob_t * b, const blob_t * value)
 {
+    // TODO(jason): redo to use lut_escape_blob
     if (!value) return 0;
 
     char * escape[256] = {};
