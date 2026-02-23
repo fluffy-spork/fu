@@ -274,8 +274,6 @@ escape_html(blob_t * html, const blob_t * content)
         ['&'] = res_html.ampersand_ref
     };
 
-    dev_error(true);
-
     return lut_escape_blob(html, content, lut);
 }
 
