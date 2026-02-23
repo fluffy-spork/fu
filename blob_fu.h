@@ -1181,22 +1181,24 @@ c_escape_blob(blob_t * b, const blob_t * value)
     // TODO(jason): redo to use lut_escape_blob
     if (!value) return 0;
 
-    char * escape[256] = {};
-    escape[0] = "\\0";
-    escape['\\'] = "\\\\";
-    escape['\"'] = "\\\"";
-    escape['\b'] = "\\b";
-    escape['\f'] = "\\f";
-    escape['\n'] = "\\n";
-    escape['\r'] = "\\r";
-    escape['\t'] = "\\t";
+    const int size_esacpe = 2;
+    char * escape[256] = {
+        [0] = "\\0";
+        ['\\'] = "\\\\";
+        ['\"'] = "\\\"";
+        ['\b'] = "\\b";
+        ['\f'] = "\\f";
+        ['\n'] = "\\n";
+        ['\r'] = "\\r";
+        ['\t'] = "\\t";
+    };
 
     ssize_t written = 0;
     for (size_t i = 0; i < value->size; i++) {
         u8 c = value->data[i];
         char * v = escape[c];
         if (v) {
-            write_blob(b, v, 2);
+            write_blob(b, v, size_esacpe);
         }
         else {
             write_blob(b, &c, 1);

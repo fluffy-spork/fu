@@ -264,12 +264,17 @@ raw_html(blob_t * html, const blob_t * content)
 ssize_t
 escape_html(blob_t * html, const blob_t * content)
 {
-    const blob_t * lut[256];
-    lut['<'] = res_html.less_than_ref;
-    lut['>'] = res_html.greater_than_ref;
-    lut['\''] = res_html.single_quote_ref;
-    lut['"'] = res_html.double_quote_ref;
-    lut['&'] = res_html.ampersand_ref;
+    dev_error(res_html.less_than_ref == NULL);
+
+    const blob_t * lut[256] = {
+        ['<'] = res_html.less_than_ref,
+        ['>'] = res_html.greater_than_ref,
+        ['\''] = res_html.single_quote_ref,
+        ['"'] = res_html.double_quote_ref,
+        ['&'] = res_html.ampersand_ref
+    };
+
+    dev_error(true);
 
     return lut_escape_blob(html, content, lut);
 }
